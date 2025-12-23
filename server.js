@@ -1,0 +1,5477 @@
+/**
+ * EHS Management System - Server
+ * Comprehensive Environmental Health & Safety Management Platform
+ * Similar to Intelex/Vector EHS
+ */
+
+require('dotenv').config();
+const express = require('express');
+const mongoose = require('mongoose');
+const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
+const nodemailer = require('nodemailer');
+const multer = require('multer');
+const cors = require('cors');
+const helmet = require('helmet');
+const rateLimit = require('express-rate-limit');
+const compression = require('compression');
+const { v4: uuidv4 } = require('uuid');
+const PDFDocument = require('pdfkit');
+const ExcelJS = require('exceljs');
+const crypto = require('crypto');
+const path = require('path');
+const fs = require('fs');
+
+const app = express();
+
+// =============================================================================
+// CONFIGURATION
+// =============================================================================
+
+const CONFIG = {
+  PORT: process.env.PORT || 3000,
+  MONGODB_URI: process.env.MONGODB_URI || 'mongodb://localhost:27017/ehs_management',
+  JWT_SECRET: process.env.JWT_SECRET || 'default-secret-change-me',
+  JWT_EXPIRES_IN: process.env.JWT_EXPIRES_IN || '7d',
+  SMTP: {
+    host: process.env.SMTP_HOST,
+    port: process.env.SMTP_PORT,
+    user: process.env.SMTP_USER,
+    pass: process.env.SMTP_PASS,
+    from: process.env.EMAIL_FROM
+  },
+  TWILIO: {
+    accountSid: process.env.TWILIO_ACCOUNT_SID,
+    authToken: process.env.TWILIO_AUTH_TOKEN,
+    phoneNumber: process.env.TWILIO_PHONE_NUMBER
+  },
+  APP_URL: process.env.APP_URL || 'http://localhost:3000',
+  ENCRYPTION_KEY: process.env.ENCRYPTION_KEY || 'default-32-char-encryption-key!'
+};
+
+// Subscription Tier Limits
+const SUBSCRIPTION_TIERS = {
+  starter: {
+    name: 'Starter',
+    price: 199,
+    maxUsers: 10,
+    maxIncidents: 100,
+    maxActionItems: 250,
+    maxInspections: 50,
+    maxDocuments: 100,
+    maxRiskAssessments: 25,
+    maxJSAs: 25,
+    maxPermits: 50,
+    maxContractors: 10,
+    features: ['incidents', 'actions', 'dashboard', 'basic_inspections', 'basic_training', 'documents'],
+    oshaLogs: true,
+    customForms: false,
+    apiAccess: false,
+    advancedReporting: false,
+    trainingModule: true,
+    auditModule: true,
+    riskAssessment: false,
+    jsaModule: false,
+    permitToWork: false,
+    contractorManagement: false,
+    chemicalManagement: false,
+    occupationalHealth: false,
+    emergencyResponse: false,
+    ergonomics: false,
+    scheduledReports: false,
+    ssoIntegration: false,
+    webhooks: false
+  },
+  professional: {
+    name: 'Professional',
+    price: 499,
+    maxUsers: 50,
+    maxIncidents: 1000,
+    maxActionItems: 2500,
+    maxInspections: 250,
+    maxDocuments: 1000,
+    maxRiskAssessments: 100,
+    maxJSAs: 100,
+    maxPermits: 200,
+    maxContractors: 50,
+    features: ['all_starter', 'osha_logs', 'risk_assessment', 'jsa', 'permit_to_work', 'contractor_mgmt', 'advanced_reporting', 'scheduled_reports'],
+    oshaLogs: true,
+    customForms: true,
+    apiAccess: true,
+    advancedReporting: true,
+    trainingModule: true,
+    auditModule: true,
+    riskAssessment: true,
+    jsaModule: true,
+    permitToWork: true,
+    contractorManagement: true,
+    chemicalManagement: false,
+    occupationalHealth: false,
+    emergencyResponse: true,
+    ergonomics: false,
+    scheduledReports: true,
+    ssoIntegration: false,
+    webhooks: true
+  },
+  enterprise: {
+    name: 'Enterprise',
+    price: 1299,
+    maxUsers: -1,
+    maxIncidents: -1,
+    maxActionItems: -1,
+    maxInspections: -1,
+    maxDocuments: -1,
+    maxRiskAssessments: -1,
+    maxJSAs: -1,
+    maxPermits: -1,
+    maxContractors: -1,
+    features: ['all'],
+    oshaLogs: true,
+    customForms: true,
+    apiAccess: true,
+    advancedReporting: true,
+    trainingModule: true,
+    auditModule: true,
+    riskAssessment: true,
+    jsaModule: true,
+    permitToWork: true,
+    contractorManagement: true,
+    chemicalManagement: true,
+    occupationalHealth: true,
+    emergencyResponse: true,
+    ergonomics: true,
+    scheduledReports: true,
+    ssoIntegration: true,
+    webhooks: true,
+    customBranding: true,
+    dedicatedSupport: true,
+    dataRetention: true,
+    gdprTools: true
+  }
+};
+
+// =============================================================================
+// MIDDLEWARE SETUP
+// =============================================================================
+
+app.use(helmet({ contentSecurityPolicy: false }));
+app.use(compression());
+app.use(cors());
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 1000
+});
+app.use('/api/', limiter);
+
+// File upload configuration
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const uploadPath = './uploads';
+    if (!fs.existsSync(uploadPath)) fs.mkdirSync(uploadPath, { recursive: true });
+    cb(null, uploadPath);
+  },
+  filename: (req, file, cb) => {
+    cb(null, `${uuidv4()}-${file.originalname}`);
+  }
+});
+const upload = multer({ storage, limits: { fileSize: 10 * 1024 * 1024 } });
+
+// =============================================================================
+// DATABASE MODELS
+// =============================================================================
+
+// Organization Schema
+const organizationSchema = new mongoose.Schema({
+  name: { type: String, required: true },
+  slug: { type: String, unique: true },
+  industry: String,
+  size: String,
+  address: {
+    street: String,
+    city: String,
+    state: String,
+    zip: String,
+    country: String
+  },
+  phone: String,
+  email: String,
+  website: String,
+  subscription: {
+    tier: { type: String, enum: ['free', 'professional', 'enterprise'], default: 'free' },
+    startDate: Date,
+    endDate: Date,
+    status: { type: String, enum: ['active', 'cancelled', 'expired', 'trial'], default: 'trial' }
+  },
+  settings: {
+    timezone: { type: String, default: 'America/New_York' },
+    dateFormat: { type: String, default: 'MM/DD/YYYY' },
+    fiscalYearStart: { type: Number, default: 1 },
+    oshaEstablishmentName: String,
+    oshaEstablishmentAddress: String,
+    naicsCode: String,
+    customBranding: {
+      logo: String,
+      primaryColor: String,
+      secondaryColor: String
+    }
+  },
+  locations: [{
+    name: String,
+    address: String,
+    type: String,
+    isActive: { type: Boolean, default: true }
+  }],
+  departments: [{
+    name: String,
+    manager: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    isActive: { type: Boolean, default: true }
+  }],
+  isActive: { type: Boolean, default: true },
+  createdAt: { type: Date, default: Date.now },
+  updatedAt: { type: Date, default: Date.now }
+});
+
+// User Schema
+const userSchema = new mongoose.Schema({
+  organization: { type: mongoose.Schema.Types.ObjectId, ref: 'Organization', required: true },
+  email: { type: String, required: true },
+  phone: String,
+  password: { type: String, required: true },
+  firstName: { type: String, required: true },
+  lastName: { type: String, required: true },
+  role: { 
+    type: String, 
+    enum: ['superadmin', 'admin', 'manager', 'supervisor', 'user', 'readonly'],
+    default: 'user'
+  },
+  department: String,
+  location: String,
+  jobTitle: String,
+  employeeId: String,
+  hireDate: Date,
+  permissions: {
+    incidents: { view: Boolean, create: Boolean, edit: Boolean, delete: Boolean, approve: Boolean },
+    actionItems: { view: Boolean, create: Boolean, edit: Boolean, delete: Boolean, approve: Boolean },
+    inspections: { view: Boolean, create: Boolean, edit: Boolean, delete: Boolean, approve: Boolean },
+    training: { view: Boolean, create: Boolean, edit: Boolean, delete: Boolean, approve: Boolean },
+    documents: { view: Boolean, create: Boolean, edit: Boolean, delete: Boolean, approve: Boolean },
+    reports: { view: Boolean, create: Boolean, export: Boolean },
+    admin: { users: Boolean, settings: Boolean, billing: Boolean }
+  },
+  verification: {
+    email: { verified: { type: Boolean, default: false }, token: String, expires: Date },
+    phone: { verified: { type: Boolean, default: false }, code: String, expires: Date }
+  },
+  twoFactorAuth: {
+    enabled: { type: Boolean, default: false },
+    secret: String
+  },
+  lastLogin: Date,
+  loginAttempts: { type: Number, default: 0 },
+  lockUntil: Date,
+  isActive: { type: Boolean, default: true },
+  createdAt: { type: Date, default: Date.now },
+  updatedAt: { type: Date, default: Date.now }
+});
+
+userSchema.index({ organization: 1, email: 1 }, { unique: true });
+
+// Incident Schema
+const incidentSchema = new mongoose.Schema({
+  organization: { type: mongoose.Schema.Types.ObjectId, ref: 'Organization', required: true },
+  incidentNumber: { type: String, unique: true },
+  title: { type: String, required: true },
+  description: String,
+  type: {
+    type: String,
+    enum: ['injury', 'illness', 'near_miss', 'property_damage', 'environmental', 'security', 'vehicle', 'other'],
+    required: true
+  },
+  severity: {
+    type: String,
+    enum: ['minor', 'moderate', 'serious', 'severe', 'catastrophic'],
+    default: 'minor'
+  },
+  status: {
+    type: String,
+    enum: ['draft', 'open', 'investigating', 'pending_review', 'closed', 'reopened'],
+    default: 'draft'
+  },
+  dateOccurred: { type: Date, required: true },
+  timeOccurred: String,
+  dateReported: { type: Date, default: Date.now },
+  location: {
+    site: String,
+    department: String,
+    specificLocation: String,
+    coordinates: { lat: Number, lng: Number }
+  },
+  involvedPersons: [{
+    type: { type: String, enum: ['employee', 'contractor', 'visitor', 'other'] },
+    name: String,
+    employeeId: String,
+    department: String,
+    jobTitle: String,
+    injuryType: String,
+    bodyPartAffected: String,
+    treatmentProvided: String,
+    daysAwayFromWork: Number,
+    daysRestrictedDuty: Number,
+    returnToWorkDate: Date
+  }],
+  witnesses: [{
+    name: String,
+    contact: String,
+    statement: String,
+    statementDate: Date
+  }],
+  rootCause: {
+    immediate: [String],
+    underlying: [String],
+    rootCauses: [String],
+    contributingFactors: [String]
+  },
+  investigation: {
+    investigator: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    startDate: Date,
+    completedDate: Date,
+    findings: String,
+    recommendations: String
+  },
+  correctiveActions: [{ type: mongoose.Schema.Types.ObjectId, ref: 'ActionItem' }],
+  oshaRecordable: { type: Boolean, default: false },
+  oshaClassification: {
+    type: String,
+    enum: ['death', 'days_away', 'restricted_transfer', 'other_recordable', 'not_recordable']
+  },
+  regulatoryReporting: {
+    oshaReported: Boolean,
+    oshaReportDate: Date,
+    oshaReportNumber: String,
+    epaReported: Boolean,
+    epaReportDate: Date,
+    otherAgencies: [{ agency: String, reportDate: Date, referenceNumber: String }]
+  },
+  attachments: [{
+    filename: String,
+    originalName: String,
+    mimeType: String,
+    size: Number,
+    uploadedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    uploadedAt: { type: Date, default: Date.now }
+  }],
+  photos: [{
+    filename: String,
+    caption: String,
+    uploadedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    uploadedAt: { type: Date, default: Date.now }
+  }],
+  costs: {
+    medical: Number,
+    property: Number,
+    legal: Number,
+    productivity: Number,
+    other: Number,
+    total: Number
+  },
+  reportedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  assignedTo: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  reviewedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  reviewedAt: Date,
+  closedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  closedAt: Date,
+  customFields: mongoose.Schema.Types.Mixed,
+  createdAt: { type: Date, default: Date.now },
+  updatedAt: { type: Date, default: Date.now }
+});
+
+// Action Item Schema
+const actionItemSchema = new mongoose.Schema({
+  organization: { type: mongoose.Schema.Types.ObjectId, ref: 'Organization', required: true },
+  actionNumber: { type: String, unique: true },
+  title: { type: String, required: true },
+  description: String,
+  type: {
+    type: String,
+    enum: ['corrective', 'preventive', 'improvement', 'maintenance', 'training', 'other'],
+    default: 'corrective'
+  },
+  priority: {
+    type: String,
+    enum: ['low', 'medium', 'high', 'critical'],
+    default: 'medium'
+  },
+  status: {
+    type: String,
+    enum: ['open', 'in_progress', 'pending_verification', 'completed', 'overdue', 'cancelled'],
+    default: 'open'
+  },
+  source: {
+    type: { type: String, enum: ['incident', 'inspection', 'audit', 'observation', 'suggestion', 'regulatory', 'other'] },
+    referenceId: mongoose.Schema.Types.ObjectId,
+    referenceNumber: String
+  },
+  location: String,
+  department: String,
+  assignedTo: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  assignedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  dueDate: Date,
+  completedDate: Date,
+  verifiedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  verifiedDate: Date,
+  verificationNotes: String,
+  estimatedCost: Number,
+  actualCost: Number,
+  attachments: [{
+    filename: String,
+    originalName: String,
+    uploadedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    uploadedAt: { type: Date, default: Date.now }
+  }],
+  comments: [{
+    user: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    comment: String,
+    createdAt: { type: Date, default: Date.now }
+  }],
+  history: [{
+    action: String,
+    user: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    details: String,
+    timestamp: { type: Date, default: Date.now }
+  }],
+  customFields: mongoose.Schema.Types.Mixed,
+  createdAt: { type: Date, default: Date.now },
+  updatedAt: { type: Date, default: Date.now }
+});
+
+// Inspection Schema
+const inspectionSchema = new mongoose.Schema({
+  organization: { type: mongoose.Schema.Types.ObjectId, ref: 'Organization', required: true },
+  inspectionNumber: { type: String, unique: true },
+  title: { type: String, required: true },
+  type: {
+    type: String,
+    enum: ['safety', 'environmental', 'equipment', 'facility', 'vehicle', 'ppe', 'fire', 'ergonomic', 'custom'],
+    default: 'safety'
+  },
+  template: { type: mongoose.Schema.Types.ObjectId, ref: 'InspectionTemplate' },
+  status: {
+    type: String,
+    enum: ['scheduled', 'in_progress', 'completed', 'cancelled'],
+    default: 'scheduled'
+  },
+  scheduledDate: Date,
+  completedDate: Date,
+  location: String,
+  department: String,
+  inspector: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  participants: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
+  sections: [{
+    title: String,
+    items: [{
+      question: String,
+      type: { type: String, enum: ['yes_no', 'pass_fail', 'rating', 'text', 'number', 'checklist'] },
+      response: mongoose.Schema.Types.Mixed,
+      status: { type: String, enum: ['pass', 'fail', 'na', 'pending'] },
+      notes: String,
+      photos: [String],
+      actionRequired: Boolean,
+      actionItem: { type: mongoose.Schema.Types.ObjectId, ref: 'ActionItem' }
+    }]
+  }],
+  summary: {
+    totalItems: Number,
+    passedItems: Number,
+    failedItems: Number,
+    naItems: Number,
+    score: Number
+  },
+  findings: String,
+  recommendations: String,
+  actionItems: [{ type: mongoose.Schema.Types.ObjectId, ref: 'ActionItem' }],
+  attachments: [{
+    filename: String,
+    originalName: String,
+    uploadedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    uploadedAt: { type: Date, default: Date.now }
+  }],
+  signature: {
+    inspector: { signed: Boolean, date: Date, signature: String },
+    reviewer: { user: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }, signed: Boolean, date: Date, signature: String }
+  },
+  customFields: mongoose.Schema.Types.Mixed,
+  createdAt: { type: Date, default: Date.now },
+  updatedAt: { type: Date, default: Date.now }
+});
+
+// Inspection Template Schema
+const inspectionTemplateSchema = new mongoose.Schema({
+  organization: { type: mongoose.Schema.Types.ObjectId, ref: 'Organization', required: true },
+  name: { type: String, required: true },
+  type: String,
+  description: String,
+  sections: [{
+    title: String,
+    order: Number,
+    items: [{
+      question: String,
+      type: { type: String, enum: ['yes_no', 'pass_fail', 'rating', 'text', 'number', 'checklist'] },
+      required: Boolean,
+      options: [String],
+      order: Number
+    }]
+  }],
+  isActive: { type: Boolean, default: true },
+  createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  createdAt: { type: Date, default: Date.now },
+  updatedAt: { type: Date, default: Date.now }
+});
+
+// Training Schema
+const trainingSchema = new mongoose.Schema({
+  organization: { type: mongoose.Schema.Types.ObjectId, ref: 'Organization', required: true },
+  title: { type: String, required: true },
+  description: String,
+  type: {
+    type: String,
+    enum: ['safety', 'compliance', 'orientation', 'certification', 'skill', 'refresher', 'other'],
+    default: 'safety'
+  },
+  category: String,
+  provider: {
+    type: { type: String, enum: ['internal', 'external', 'online'] },
+    name: String,
+    contact: String
+  },
+  duration: { hours: Number, minutes: Number },
+  frequency: {
+    type: { type: String, enum: ['one_time', 'annual', 'biannual', 'quarterly', 'monthly', 'custom'] },
+    customDays: Number
+  },
+  requirements: {
+    roles: [String],
+    departments: [String],
+    locations: [String],
+    prerequisites: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Training' }]
+  },
+  content: {
+    materials: [{
+      title: String,
+      type: { type: String },
+      url: String,
+      filename: String
+    }],
+    quiz: {
+      enabled: Boolean,
+      passingScore: Number,
+      questions: [{
+        question: String,
+        type: { type: String, enum: ['multiple_choice', 'true_false', 'short_answer'] },
+        options: [String],
+        correctAnswer: mongoose.Schema.Types.Mixed,
+        points: Number
+      }]
+    }
+  },
+  isActive: { type: Boolean, default: true },
+  createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  createdAt: { type: Date, default: Date.now },
+  updatedAt: { type: Date, default: Date.now }
+});
+
+// Training Record Schema
+const trainingRecordSchema = new mongoose.Schema({
+  organization: { type: mongoose.Schema.Types.ObjectId, ref: 'Organization', required: true },
+  training: { type: mongoose.Schema.Types.ObjectId, ref: 'Training', required: true },
+  user: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+  status: {
+    type: String,
+    enum: ['assigned', 'in_progress', 'completed', 'expired', 'failed'],
+    default: 'assigned'
+  },
+  assignedDate: { type: Date, default: Date.now },
+  dueDate: Date,
+  startedDate: Date,
+  completedDate: Date,
+  expirationDate: Date,
+  instructor: String,
+  location: String,
+  score: Number,
+  attempts: [{
+    date: Date,
+    score: Number,
+    passed: Boolean
+  }],
+  certificate: {
+    issued: Boolean,
+    number: String,
+    issuedDate: Date,
+    expirationDate: Date,
+    file: String
+  },
+  signature: {
+    trainee: { signed: Boolean, date: Date },
+    trainer: { signed: Boolean, date: Date, name: String }
+  },
+  notes: String,
+  createdAt: { type: Date, default: Date.now },
+  updatedAt: { type: Date, default: Date.now }
+});
+
+// Document Schema
+const documentSchema = new mongoose.Schema({
+  organization: { type: mongoose.Schema.Types.ObjectId, ref: 'Organization', required: true },
+  title: { type: String, required: true },
+  description: String,
+  category: {
+    type: String,
+    enum: ['policy', 'procedure', 'form', 'permit', 'certificate', 'sds', 'manual', 'report', 'other'],
+    default: 'other'
+  },
+  subcategory: String,
+  documentNumber: String,
+  version: { type: String, default: '1.0' },
+  status: {
+    type: String,
+    enum: ['draft', 'pending_review', 'approved', 'published', 'archived', 'obsolete'],
+    default: 'draft'
+  },
+  file: {
+    filename: String,
+    originalName: String,
+    mimeType: String,
+    size: Number,
+    path: String
+  },
+  effectiveDate: Date,
+  expirationDate: Date,
+  reviewDate: Date,
+  owner: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  approver: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  approvedDate: Date,
+  departments: [String],
+  locations: [String],
+  tags: [String],
+  accessLevel: {
+    type: String,
+    enum: ['public', 'internal', 'restricted', 'confidential'],
+    default: 'internal'
+  },
+  relatedDocuments: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Document' }],
+  revisionHistory: [{
+    version: String,
+    date: Date,
+    changedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    changes: String,
+    file: String
+  }],
+  acknowledgments: [{
+    user: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    date: Date,
+    acknowledged: Boolean
+  }],
+  customFields: mongoose.Schema.Types.Mixed,
+  createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  createdAt: { type: Date, default: Date.now },
+  updatedAt: { type: Date, default: Date.now }
+});
+
+// OSHA 300 Log Schema
+const osha300LogSchema = new mongoose.Schema({
+  organization: { type: mongoose.Schema.Types.ObjectId, ref: 'Organization', required: true },
+  year: { type: Number, required: true },
+  establishment: {
+    name: String,
+    address: String,
+    city: String,
+    state: String,
+    zip: String,
+    industry: String,
+    naicsCode: String
+  },
+  entries: [{
+    caseNumber: String,
+    employeeName: String,
+    jobTitle: String,
+    dateOfInjury: Date,
+    whereOccurred: String,
+    describeInjury: String,
+    classifyCase: {
+      death: Boolean,
+      daysAwayFromWork: Boolean,
+      jobTransferOrRestriction: Boolean,
+      otherRecordableCase: Boolean
+    },
+    daysAwayFromWork: Number,
+    daysJobTransferRestriction: Number,
+    injuryType: {
+      injury: Boolean,
+      skinDisorder: Boolean,
+      respiratoryCondition: Boolean,
+      poisoning: Boolean,
+      hearingLoss: Boolean,
+      allOtherIllnesses: Boolean
+    },
+    incident: { type: mongoose.Schema.Types.ObjectId, ref: 'Incident' }
+  }],
+  summary: {
+    totalDeaths: Number,
+    totalDaysAway: Number,
+    totalDaysTransferRestriction: Number,
+    totalOtherRecordable: Number,
+    totalInjuries: Number,
+    totalSkinDisorders: Number,
+    totalRespiratoryConditions: Number,
+    totalPoisonings: Number,
+    totalHearingLoss: Number,
+    totalOtherIllnesses: Number,
+    totalDaysAwayFromWork: Number,
+    totalDaysJobTransferRestriction: Number
+  },
+  annualAverage: {
+    employees: Number,
+    hoursWorked: Number
+  },
+  certification: {
+    certifiedBy: String,
+    title: String,
+    phone: String,
+    date: Date,
+    signature: String
+  },
+  status: {
+    type: String,
+    enum: ['draft', 'finalized', 'submitted'],
+    default: 'draft'
+  },
+  createdAt: { type: Date, default: Date.now },
+  updatedAt: { type: Date, default: Date.now }
+});
+
+osha300LogSchema.index({ organization: 1, year: 1 }, { unique: true });
+
+// Audit Log Schema
+const auditLogSchema = new mongoose.Schema({
+  organization: { type: mongoose.Schema.Types.ObjectId, ref: 'Organization', required: true },
+  user: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  action: {
+    type: String,
+    enum: ['create', 'read', 'update', 'delete', 'login', 'logout', 'export', 'import', 'approve', 'reject', 'assign', 'other'],
+    required: true
+  },
+  module: {
+    type: String,
+    enum: ['incidents', 'action_items', 'inspections', 'training', 'documents', 'users', 'organization', 'reports', 'osha_logs', 'system'],
+    required: true
+  },
+  entityType: String,
+  entityId: mongoose.Schema.Types.ObjectId,
+  entityName: String,
+  details: String,
+  changes: {
+    before: mongoose.Schema.Types.Mixed,
+    after: mongoose.Schema.Types.Mixed
+  },
+  ipAddress: String,
+  userAgent: String,
+  timestamp: { type: Date, default: Date.now }
+});
+
+// Notification Schema
+const notificationSchema = new mongoose.Schema({
+  organization: { type: mongoose.Schema.Types.ObjectId, ref: 'Organization', required: true },
+  user: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+  type: {
+    type: String,
+    enum: ['incident', 'action_item', 'inspection', 'training', 'document', 'system', 'reminder'],
+    required: true
+  },
+  title: String,
+  message: String,
+  link: String,
+  priority: {
+    type: String,
+    enum: ['low', 'medium', 'high', 'urgent'],
+    default: 'medium'
+  },
+  read: { type: Boolean, default: false },
+  readAt: Date,
+  emailSent: { type: Boolean, default: false },
+  emailSentAt: Date,
+  createdAt: { type: Date, default: Date.now }
+});
+
+// Custom Form Schema
+const customFormSchema = new mongoose.Schema({
+  organization: { type: mongoose.Schema.Types.ObjectId, ref: 'Organization', required: true },
+  name: { type: String, required: true },
+  description: String,
+  category: String,
+  fields: [{
+    name: String,
+    label: String,
+    type: { type: String, enum: ['text', 'textarea', 'number', 'date', 'time', 'datetime', 'select', 'multiselect', 'checkbox', 'radio', 'file', 'signature'] },
+    required: Boolean,
+    options: [String],
+    validation: {
+      min: Number,
+      max: Number,
+      pattern: String,
+      message: String
+    },
+    order: Number
+  }],
+  workflow: {
+    approvalRequired: Boolean,
+    approvers: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
+    notifyOnSubmit: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }]
+  },
+  isActive: { type: Boolean, default: true },
+  createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  createdAt: { type: Date, default: Date.now },
+  updatedAt: { type: Date, default: Date.now }
+});
+
+// Custom Form Submission Schema
+const customFormSubmissionSchema = new mongoose.Schema({
+  organization: { type: mongoose.Schema.Types.ObjectId, ref: 'Organization', required: true },
+  form: { type: mongoose.Schema.Types.ObjectId, ref: 'CustomForm', required: true },
+  submittedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+  data: mongoose.Schema.Types.Mixed,
+  status: {
+    type: String,
+    enum: ['draft', 'submitted', 'pending_approval', 'approved', 'rejected'],
+    default: 'draft'
+  },
+  approvedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  approvedAt: Date,
+  rejectedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  rejectedAt: Date,
+  rejectionReason: String,
+  attachments: [{
+    filename: String,
+    originalName: String,
+    uploadedAt: { type: Date, default: Date.now }
+  }],
+  createdAt: { type: Date, default: Date.now },
+  updatedAt: { type: Date, default: Date.now }
+});
+
+// Risk Assessment Schema
+const riskAssessmentSchema = new mongoose.Schema({
+  organization: { type: mongoose.Schema.Types.ObjectId, ref: 'Organization', required: true },
+  assessmentNumber: { type: String, unique: true },
+  title: { type: String, required: true },
+  description: String,
+  type: {
+    type: String,
+    enum: ['job_task', 'process', 'equipment', 'chemical', 'ergonomic', 'environmental', 'general'],
+    default: 'general'
+  },
+  status: {
+    type: String,
+    enum: ['draft', 'pending_review', 'approved', 'active', 'expired', 'archived'],
+    default: 'draft'
+  },
+  location: String,
+  department: String,
+  assessmentDate: { type: Date, default: Date.now },
+  reviewDate: Date,
+  expirationDate: Date,
+  assessor: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  reviewedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  approvedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  hazards: [{
+    hazardId: String,
+    description: String,
+    category: { type: String, enum: ['physical', 'chemical', 'biological', 'ergonomic', 'psychosocial', 'environmental', 'other'] },
+    source: String,
+    affectedPersons: [String],
+    initialRisk: {
+      likelihood: { type: Number, min: 1, max: 5 },
+      severity: { type: Number, min: 1, max: 5 },
+      score: Number,
+      level: { type: String, enum: ['low', 'medium', 'high', 'critical'] }
+    },
+    controls: [{
+      type: { type: String, enum: ['elimination', 'substitution', 'engineering', 'administrative', 'ppe'] },
+      description: String,
+      responsible: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+      dueDate: Date,
+      implementedDate: Date,
+      status: { type: String, enum: ['planned', 'in_progress', 'implemented', 'verified'] }
+    }],
+    residualRisk: {
+      likelihood: { type: Number, min: 1, max: 5 },
+      severity: { type: Number, min: 1, max: 5 },
+      score: Number,
+      level: { type: String, enum: ['low', 'medium', 'high', 'critical'] }
+    }
+  }],
+  overallRiskLevel: { type: String, enum: ['low', 'medium', 'high', 'critical'] },
+  actionItems: [{ type: mongoose.Schema.Types.ObjectId, ref: 'ActionItem' }],
+  attachments: [{ filename: String, originalName: String, uploadedAt: Date }],
+  signatures: {
+    assessor: { signed: Boolean, date: Date, signature: String },
+    reviewer: { signed: Boolean, date: Date, signature: String },
+    approver: { signed: Boolean, date: Date, signature: String }
+  },
+  revisionHistory: [{ version: String, date: Date, changedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }, changes: String }],
+  createdAt: { type: Date, default: Date.now },
+  updatedAt: { type: Date, default: Date.now }
+});
+
+// Job Safety Analysis (JSA) Schema
+const jsaSchema = new mongoose.Schema({
+  organization: { type: mongoose.Schema.Types.ObjectId, ref: 'Organization', required: true },
+  jsaNumber: { type: String, unique: true },
+  title: { type: String, required: true },
+  jobDescription: String,
+  department: String,
+  location: String,
+  status: {
+    type: String,
+    enum: ['draft', 'pending_review', 'approved', 'active', 'expired', 'archived'],
+    default: 'draft'
+  },
+  createdDate: { type: Date, default: Date.now },
+  reviewDate: Date,
+  expirationDate: Date,
+  createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  reviewedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  approvedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  requiredPPE: [{
+    type: { type: String },
+    description: String,
+    required: { type: Boolean, default: true }
+  }],
+  requiredTraining: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Training' }],
+  steps: [{
+    stepNumber: Number,
+    task: String,
+    hazards: [{
+      description: String,
+      type: { type: String, enum: ['struck_by', 'caught_in', 'fall', 'electrical', 'chemical', 'ergonomic', 'environmental', 'other'] },
+      riskLevel: { type: String, enum: ['low', 'medium', 'high', 'critical'] }
+    }],
+    controls: [{
+      description: String,
+      type: { type: String, enum: ['elimination', 'substitution', 'engineering', 'administrative', 'ppe'] }
+    }],
+    responsibleParty: String
+  }],
+  tools: [{ name: String, inspectionRequired: Boolean }],
+  permits: [{ type: { type: String }, required: { type: Boolean } }],
+  emergencyProcedures: String,
+  signatures: {
+    supervisor: { name: String, signed: Boolean, date: Date },
+    safetyRep: { name: String, signed: Boolean, date: Date },
+    employees: [{ name: String, signed: Boolean, date: Date }]
+  },
+  attachments: [{ filename: String, originalName: String }],
+  relatedIncidents: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Incident' }],
+  createdAt: { type: Date, default: Date.now },
+  updatedAt: { type: Date, default: Date.now }
+});
+
+// Permit to Work Schema
+const permitToWorkSchema = new mongoose.Schema({
+  organization: { type: mongoose.Schema.Types.ObjectId, ref: 'Organization', required: true },
+  permitNumber: { type: String, unique: true },
+  title: { type: String, required: true },
+  type: {
+    type: String,
+    enum: ['hot_work', 'confined_space', 'electrical', 'excavation', 'height_work', 'lockout_tagout', 'chemical', 'general'],
+    required: true
+  },
+  status: {
+    type: String,
+    enum: ['draft', 'pending_approval', 'approved', 'active', 'suspended', 'completed', 'cancelled', 'expired'],
+    default: 'draft'
+  },
+  priority: { type: String, enum: ['routine', 'urgent', 'emergency'], default: 'routine' },
+  workDescription: String,
+  location: { site: String, area: String, specificLocation: String },
+  department: String,
+  startDateTime: Date,
+  endDateTime: Date,
+  duration: { hours: Number, days: Number },
+  requestedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  contractor: { type: mongoose.Schema.Types.ObjectId, ref: 'Contractor' },
+  workers: [{
+    name: String,
+    company: String,
+    role: String,
+    verified: Boolean
+  }],
+  hazardsIdentified: [{
+    hazard: String,
+    controls: [String],
+    riskLevel: { type: String, enum: ['low', 'medium', 'high', 'critical'] }
+  }],
+  precautions: [{
+    category: String,
+    description: String,
+    completed: Boolean,
+    completedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    completedAt: Date
+  }],
+  ppeRequired: [{ type: { type: String }, description: String }],
+  isolations: [{
+    type: { type: String, enum: ['electrical', 'mechanical', 'process', 'other'] },
+    location: String,
+    method: String,
+    isolatedBy: String,
+    verified: Boolean,
+    verifiedBy: String,
+    lockNumber: String
+  }],
+  gasTests: [{
+    testType: String,
+    result: String,
+    testedBy: String,
+    time: Date,
+    acceptable: Boolean
+  }],
+  emergencyProcedures: String,
+  communicationPlan: String,
+  approvals: [{
+    role: String,
+    user: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    status: { type: String, enum: ['pending', 'approved', 'rejected'] },
+    date: Date,
+    comments: String,
+    signature: String
+  }],
+  extensions: [{
+    extendedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    newEndDateTime: Date,
+    reason: String,
+    approvedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    date: Date
+  }],
+  closeout: {
+    completedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    completedAt: Date,
+    workCompleted: Boolean,
+    areaSecured: Boolean,
+    isolationsRemoved: Boolean,
+    notes: String,
+    signature: String
+  },
+  attachments: [{ filename: String, originalName: String, type: { type: String } }],
+  relatedJSA: { type: mongoose.Schema.Types.ObjectId, ref: 'JSA' },
+  relatedRiskAssessment: { type: mongoose.Schema.Types.ObjectId, ref: 'RiskAssessment' },
+  createdAt: { type: Date, default: Date.now },
+  updatedAt: { type: Date, default: Date.now }
+});
+
+// Contractor Schema
+const contractorSchema = new mongoose.Schema({
+  organization: { type: mongoose.Schema.Types.ObjectId, ref: 'Organization', required: true },
+  contractorNumber: { type: String, unique: true },
+  companyName: { type: String, required: true },
+  tradeName: String,
+  type: { type: String, enum: ['general', 'electrical', 'mechanical', 'construction', 'cleaning', 'security', 'it', 'other'] },
+  status: { type: String, enum: ['pending', 'approved', 'suspended', 'expired', 'blacklisted'], default: 'pending' },
+  contact: {
+    primaryName: String,
+    primaryEmail: String,
+    primaryPhone: String,
+    secondaryName: String,
+    secondaryEmail: String,
+    secondaryPhone: String
+  },
+  address: { street: String, city: String, state: String, zip: String, country: String },
+  insurance: {
+    generalLiability: { provider: String, policyNumber: String, expirationDate: Date, coverageAmount: Number, verified: Boolean },
+    workersComp: { provider: String, policyNumber: String, expirationDate: Date, verified: Boolean },
+    autoLiability: { provider: String, policyNumber: String, expirationDate: Date, verified: Boolean }
+  },
+  certifications: [{
+    name: String,
+    issuingBody: String,
+    number: String,
+    issueDate: Date,
+    expirationDate: Date,
+    verified: Boolean,
+    document: String
+  }],
+  safetyRecord: {
+    emr: Number,
+    trir: Number,
+    dart: Number,
+    lastUpdated: Date
+  },
+  prequalification: {
+    status: { type: String, enum: ['not_started', 'in_progress', 'completed', 'expired'] },
+    completedDate: Date,
+    expirationDate: Date,
+    score: Number,
+    notes: String
+  },
+  orientationRequired: { type: Boolean, default: true },
+  orientationCompleted: Boolean,
+  orientationDate: Date,
+  authorizedLocations: [String],
+  authorizedWorkTypes: [String],
+  employees: [{
+    name: String,
+    role: String,
+    phone: String,
+    email: String,
+    orientationComplete: Boolean,
+    badgeNumber: String,
+    certifications: [{ name: String, expirationDate: Date }]
+  }],
+  documents: [{
+    type: { type: String },
+    name: String,
+    filename: String,
+    uploadedAt: Date,
+    expirationDate: Date
+  }],
+  performanceRatings: [{
+    date: Date,
+    ratedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    project: String,
+    safetyRating: Number,
+    qualityRating: Number,
+    timelinessRating: Number,
+    overallRating: Number,
+    comments: String
+  }],
+  incidents: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Incident' }],
+  permits: [{ type: mongoose.Schema.Types.ObjectId, ref: 'PermitToWork' }],
+  notes: [{ date: Date, author: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }, note: String }],
+  createdAt: { type: Date, default: Date.now },
+  updatedAt: { type: Date, default: Date.now }
+});
+
+// Chemical/SDS Schema
+const chemicalSchema = new mongoose.Schema({
+  organization: { type: mongoose.Schema.Types.ObjectId, ref: 'Organization', required: true },
+  chemicalId: { type: String, unique: true },
+  productName: { type: String, required: true },
+  manufacturer: String,
+  supplier: String,
+  casNumber: String,
+  unNumber: String,
+  status: { type: String, enum: ['active', 'inactive', 'pending_approval', 'discontinued'], default: 'active' },
+  location: [{ site: String, building: String, room: String, quantity: Number, unit: String }],
+  department: String,
+  hazardClassification: {
+    ghsCategories: [String],
+    signalWord: { type: String, enum: ['danger', 'warning', 'none'] },
+    hazardStatements: [String],
+    precautionaryStatements: [String],
+    pictograms: [String]
+  },
+  physicalProperties: {
+    state: { type: String, enum: ['solid', 'liquid', 'gas'] },
+    color: String,
+    odor: String,
+    ph: String,
+    flashPoint: String,
+    boilingPoint: String,
+    meltingPoint: String,
+    vaporPressure: String,
+    specificGravity: String
+  },
+  healthHazards: {
+    routes: [{ type: String, enum: ['inhalation', 'skin', 'eye', 'ingestion'] }],
+    acuteEffects: [String],
+    chronicEffects: [String],
+    targetOrgans: [String],
+    carcinogen: Boolean,
+    mutagen: Boolean,
+    reproductiveToxin: Boolean
+  },
+  exposureLimits: {
+    osha_pel: String,
+    acgih_tlv: String,
+    niosh_rel: String,
+    idlh: String
+  },
+  ppe: {
+    respiratory: String,
+    eye: String,
+    skin: String,
+    hand: String,
+    other: String
+  },
+  storage: {
+    requirements: String,
+    incompatibilities: [String],
+    temperature: String,
+    ventilation: String
+  },
+  spill: {
+    smallSpill: String,
+    largeSpill: String,
+    disposalMethod: String
+  },
+  firstAid: {
+    inhalation: String,
+    skin: String,
+    eye: String,
+    ingestion: String,
+    notes: String
+  },
+  firefighting: {
+    extinguishingMedia: [String],
+    specialHazards: String,
+    firefighterPPE: String
+  },
+  sds: {
+    filename: String,
+    originalName: String,
+    version: String,
+    issueDate: Date,
+    reviewDate: Date,
+    uploadedAt: Date
+  },
+  approvedUses: [String],
+  restrictedUses: [String],
+  trainingRequired: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Training' }],
+  riskAssessment: { type: mongoose.Schema.Types.ObjectId, ref: 'RiskAssessment' },
+  lastInventoryDate: Date,
+  createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  createdAt: { type: Date, default: Date.now },
+  updatedAt: { type: Date, default: Date.now }
+});
+
+// Occupational Health Record Schema
+const occupationalHealthSchema = new mongoose.Schema({
+  organization: { type: mongoose.Schema.Types.ObjectId, ref: 'Organization', required: true },
+  employee: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+  recordType: {
+    type: String,
+    enum: ['medical_surveillance', 'fitness_for_duty', 'exposure_monitoring', 'health_screening', 'vaccination', 'drug_test', 'return_to_work', 'accommodation'],
+    required: true
+  },
+  status: { type: String, enum: ['scheduled', 'completed', 'pending_results', 'action_required', 'cleared'], default: 'scheduled' },
+  date: Date,
+  provider: { name: String, facility: String, phone: String },
+  examType: String,
+  reason: String,
+  exposureType: String,
+  results: {
+    outcome: { type: String, enum: ['normal', 'abnormal', 'pending', 'requires_follow_up'] },
+    restrictions: [String],
+    recommendations: [String],
+    nextExamDate: Date,
+    notes: String
+  },
+  clearance: {
+    status: { type: String, enum: ['full', 'restricted', 'not_cleared'] },
+    restrictions: [String],
+    accommodations: [String],
+    reviewDate: Date,
+    clearedBy: String
+  },
+  attachments: [{ filename: String, type: { type: String }, uploadedAt: Date }],
+  confidential: { type: Boolean, default: true },
+  createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  createdAt: { type: Date, default: Date.now },
+  updatedAt: { type: Date, default: Date.now }
+});
+
+// Emergency Response Plan Schema
+const emergencyResponseSchema = new mongoose.Schema({
+  organization: { type: mongoose.Schema.Types.ObjectId, ref: 'Organization', required: true },
+  planNumber: { type: String, unique: true },
+  title: { type: String, required: true },
+  type: {
+    type: String,
+    enum: ['fire', 'chemical_spill', 'medical', 'natural_disaster', 'active_shooter', 'evacuation', 'shelter_in_place', 'utility_failure', 'pandemic', 'general'],
+    required: true
+  },
+  status: { type: String, enum: ['draft', 'active', 'under_review', 'archived'], default: 'draft' },
+  location: String,
+  effectiveDate: Date,
+  reviewDate: Date,
+  version: String,
+  purpose: String,
+  scope: String,
+  emergencyContacts: [{
+    role: String,
+    name: String,
+    title: String,
+    phone: String,
+    alternatePhone: String,
+    email: String,
+    available24x7: Boolean
+  }],
+  externalContacts: [{
+    agency: String,
+    type: { type: String },
+    phone: String,
+    address: String
+  }],
+  procedures: [{
+    step: Number,
+    action: String,
+    responsible: String,
+    details: String,
+    timeframe: String
+  }],
+  evacuationRoutes: [{
+    area: String,
+    primaryRoute: String,
+    alternateRoute: String,
+    assemblyPoint: String,
+    accountabilityPerson: String
+  }],
+  equipmentLocations: [{
+    type: { type: String },
+    location: String,
+    quantity: Number,
+    lastInspection: Date
+  }],
+  communicationPlan: {
+    internalNotification: String,
+    externalNotification: String,
+    mediaContact: String,
+    employeeCommunication: String
+  },
+  trainingRequirements: [{
+    training: String,
+    frequency: String,
+    audience: String
+  }],
+  drills: [{
+    type: { type: String },
+    date: Date,
+    participants: Number,
+    duration: Number,
+    observations: String,
+    improvements: [String],
+    conductedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }
+  }],
+  resources: [{
+    type: { type: String },
+    description: String,
+    location: String,
+    quantity: Number
+  }],
+  attachments: [{ filename: String, originalName: String, type: { type: String } }],
+  approvedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  approvedDate: Date,
+  createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  createdAt: { type: Date, default: Date.now },
+  updatedAt: { type: Date, default: Date.now }
+});
+
+// Ergonomic Assessment Schema
+const ergonomicAssessmentSchema = new mongoose.Schema({
+  organization: { type: mongoose.Schema.Types.ObjectId, ref: 'Organization', required: true },
+  assessmentNumber: { type: String, unique: true },
+  employee: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  employeeName: String,
+  jobTitle: String,
+  department: String,
+  location: String,
+  assessmentDate: { type: Date, default: Date.now },
+  assessor: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  status: { type: String, enum: ['scheduled', 'in_progress', 'completed', 'follow_up_required'], default: 'scheduled' },
+  type: { type: String, enum: ['workstation', 'manual_handling', 'repetitive_motion', 'comprehensive'], default: 'workstation' },
+  reason: { type: String, enum: ['new_employee', 'complaint', 'injury', 'periodic', 'job_change', 'equipment_change'] },
+  workstation: {
+    type: { type: String, enum: ['office', 'industrial', 'laboratory', 'warehouse', 'other'] },
+    sharedWorkstation: Boolean,
+    hoursPerDay: Number,
+    breaks: String
+  },
+  findings: [{
+    category: { type: String, enum: ['posture', 'equipment', 'environment', 'work_practices', 'physical_demands'] },
+    issue: String,
+    riskLevel: { type: String, enum: ['low', 'medium', 'high'] },
+    bodyPartAffected: String,
+    currentCondition: String,
+    photo: String
+  }],
+  measurements: {
+    chairHeight: String,
+    deskHeight: String,
+    monitorDistance: String,
+    monitorHeight: String,
+    keyboardHeight: String,
+    lighting: String,
+    temperature: String,
+    noise: String
+  },
+  recommendations: [{
+    priority: { type: String, enum: ['immediate', 'short_term', 'long_term'] },
+    category: String,
+    recommendation: String,
+    estimatedCost: Number,
+    responsible: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    dueDate: Date,
+    status: { type: String, enum: ['pending', 'in_progress', 'completed', 'declined'] },
+    completedDate: Date,
+    notes: String
+  }],
+  equipmentProvided: [{
+    item: String,
+    dateProvided: Date,
+    cost: Number
+  }],
+  followUp: {
+    required: Boolean,
+    date: Date,
+    notes: String,
+    completed: Boolean
+  },
+  employeeSignature: { signed: Boolean, date: Date },
+  attachments: [{ filename: String, type: { type: String } }],
+  actionItems: [{ type: mongoose.Schema.Types.ObjectId, ref: 'ActionItem' }],
+  createdAt: { type: Date, default: Date.now },
+  updatedAt: { type: Date, default: Date.now }
+});
+
+// Scheduled Report Schema
+const scheduledReportSchema = new mongoose.Schema({
+  organization: { type: mongoose.Schema.Types.ObjectId, ref: 'Organization', required: true },
+  name: { type: String, required: true },
+  reportType: {
+    type: String,
+    enum: ['incidents', 'action_items', 'inspections', 'training', 'osha_summary', 'kpi_dashboard', 'audit_log', 'custom'],
+    required: true
+  },
+  status: { type: String, enum: ['active', 'paused', 'disabled'], default: 'active' },
+  schedule: {
+    frequency: { type: String, enum: ['daily', 'weekly', 'biweekly', 'monthly', 'quarterly', 'annually'], required: true },
+    dayOfWeek: Number,
+    dayOfMonth: Number,
+    time: String,
+    timezone: String
+  },
+  filters: {
+    dateRange: { type: String, enum: ['last_day', 'last_week', 'last_month', 'last_quarter', 'last_year', 'custom'] },
+    locations: [String],
+    departments: [String],
+    types: [String],
+    statuses: [String]
+  },
+  format: { type: String, enum: ['pdf', 'xlsx', 'csv'], default: 'pdf' },
+  recipients: [{
+    user: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    email: String,
+    name: String
+  }],
+  includeCharts: { type: Boolean, default: true },
+  includeSummary: { type: Boolean, default: true },
+  lastRun: Date,
+  nextRun: Date,
+  runHistory: [{
+    date: Date,
+    status: { type: String, enum: ['success', 'failed'] },
+    recipients: Number,
+    error: String
+  }],
+  createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  createdAt: { type: Date, default: Date.now },
+  updatedAt: { type: Date, default: Date.now }
+});
+
+// Action Item Template Schema
+const actionItemTemplateSchema = new mongoose.Schema({
+  organization: { type: mongoose.Schema.Types.ObjectId, ref: 'Organization', required: true },
+  name: { type: String, required: true },
+  description: String,
+  category: String,
+  defaultType: { type: String, enum: ['corrective', 'preventive', 'improvement', 'maintenance', 'training', 'other'] },
+  defaultPriority: { type: String, enum: ['low', 'medium', 'high', 'critical'] },
+  defaultDueDays: Number,
+  checklist: [{ item: String, required: { type: Boolean, default: false } }],
+  isActive: { type: Boolean, default: true },
+  createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  createdAt: { type: Date, default: Date.now }
+});
+
+// Create Models
+const Organization = mongoose.model('Organization', organizationSchema);
+const User = mongoose.model('User', userSchema);
+const Incident = mongoose.model('Incident', incidentSchema);
+const ActionItem = mongoose.model('ActionItem', actionItemSchema);
+const Inspection = mongoose.model('Inspection', inspectionSchema);
+const InspectionTemplate = mongoose.model('InspectionTemplate', inspectionTemplateSchema);
+const Training = mongoose.model('Training', trainingSchema);
+const TrainingRecord = mongoose.model('TrainingRecord', trainingRecordSchema);
+const Document = mongoose.model('Document', documentSchema);
+const OSHA300Log = mongoose.model('OSHA300Log', osha300LogSchema);
+const AuditLog = mongoose.model('AuditLog', auditLogSchema);
+const Notification = mongoose.model('Notification', notificationSchema);
+const CustomForm = mongoose.model('CustomForm', customFormSchema);
+const CustomFormSubmission = mongoose.model('CustomFormSubmission', customFormSubmissionSchema);
+const RiskAssessment = mongoose.model('RiskAssessment', riskAssessmentSchema);
+const JSA = mongoose.model('JSA', jsaSchema);
+const PermitToWork = mongoose.model('PermitToWork', permitToWorkSchema);
+const Contractor = mongoose.model('Contractor', contractorSchema);
+const Chemical = mongoose.model('Chemical', chemicalSchema);
+const OccupationalHealth = mongoose.model('OccupationalHealth', occupationalHealthSchema);
+const EmergencyResponse = mongoose.model('EmergencyResponse', emergencyResponseSchema);
+const ErgonomicAssessment = mongoose.model('ErgonomicAssessment', ergonomicAssessmentSchema);
+const ScheduledReport = mongoose.model('ScheduledReport', scheduledReportSchema);
+const ActionItemTemplate = mongoose.model('ActionItemTemplate', actionItemTemplateSchema);
+
+// =============================================================================
+// UTILITY FUNCTIONS
+// =============================================================================
+
+// Generate unique numbers
+const generateNumber = async (model, prefix, orgId) => {
+  const year = new Date().getFullYear();
+  const count = await model.countDocuments({ organization: orgId });
+  return `${prefix}-${year}-${String(count + 1).padStart(5, '0')}`;
+};
+
+// Create audit log entry
+const createAuditLog = async (req, action, module, entityType, entityId, entityName, details, changes = null) => {
+  try {
+    await AuditLog.create({
+      organization: req.user?.organization,
+      user: req.user?._id,
+      action,
+      module,
+      entityType,
+      entityId,
+      entityName,
+      details,
+      changes,
+      ipAddress: req.ip,
+      userAgent: req.get('User-Agent')
+    });
+  } catch (error) {
+    console.error('Audit log error:', error);
+  }
+};
+
+// Email transporter
+let emailTransporter = null;
+if (CONFIG.SMTP.host && CONFIG.SMTP.user) {
+  emailTransporter = nodemailer.createTransport({
+    host: CONFIG.SMTP.host,
+    port: CONFIG.SMTP.port,
+    secure: false,
+    auth: {
+      user: CONFIG.SMTP.user,
+      pass: CONFIG.SMTP.pass
+    }
+  });
+}
+
+// Send email
+const sendEmail = async (to, subject, html) => {
+  if (!emailTransporter) {
+    console.log('Email not configured. Would send:', { to, subject });
+    return { success: true, mock: true };
+  }
+  try {
+    await emailTransporter.sendMail({
+      from: CONFIG.SMTP.from,
+      to,
+      subject,
+      html
+    });
+    return { success: true };
+  } catch (error) {
+    console.error('Email error:', error);
+    return { success: false, error: error.message };
+  }
+};
+
+// Twilio client
+let twilioClient = null;
+if (CONFIG.TWILIO.accountSid && CONFIG.TWILIO.authToken) {
+  try {
+    const twilio = require('twilio');
+    twilioClient = twilio(CONFIG.TWILIO.accountSid, CONFIG.TWILIO.authToken);
+  } catch (e) {
+    console.log('Twilio not configured');
+  }
+}
+
+// Send SMS
+const sendSMS = async (to, message) => {
+  if (!twilioClient) {
+    console.log('SMS not configured. Would send:', { to, message });
+    return { success: true, mock: true };
+  }
+  try {
+    await twilioClient.messages.create({
+      body: message,
+      from: CONFIG.TWILIO.phoneNumber,
+      to
+    });
+    return { success: true };
+  } catch (error) {
+    console.error('SMS error:', error);
+    return { success: false, error: error.message };
+  }
+};
+
+// =============================================================================
+// AUTHENTICATION MIDDLEWARE
+// =============================================================================
+
+const authenticate = async (req, res, next) => {
+  try {
+    const token = req.headers.authorization?.replace('Bearer ', '');
+    if (!token) {
+      return res.status(401).json({ error: 'Authentication required' });
+    }
+
+    const decoded = jwt.verify(token, CONFIG.JWT_SECRET);
+    const user = await User.findById(decoded.userId).populate('organization');
+    
+    if (!user || !user.isActive) {
+      return res.status(401).json({ error: 'User not found or inactive' });
+    }
+
+    if (!user.organization || !user.organization.isActive) {
+      return res.status(401).json({ error: 'Organization not found or inactive' });
+    }
+
+    req.user = user;
+    req.organization = user.organization;
+    next();
+  } catch (error) {
+    res.status(401).json({ error: 'Invalid token' });
+  }
+};
+
+// Role-based access control middleware
+const authorize = (...roles) => {
+  return (req, res, next) => {
+    if (!roles.includes(req.user.role)) {
+      return res.status(403).json({ error: 'Insufficient permissions' });
+    }
+    next();
+  };
+};
+
+// Subscription feature check middleware
+const requireFeature = (feature) => {
+  return (req, res, next) => {
+    const tier = req.organization.subscription.tier;
+    const tierConfig = SUBSCRIPTION_TIERS[tier];
+    
+    if (!tierConfig[feature] && !tierConfig.features.includes('all')) {
+      return res.status(403).json({ 
+        error: 'Feature not available',
+        message: `This feature requires a ${feature === 'oshaLogs' ? 'Professional' : 'Enterprise'} subscription`,
+        requiredTier: feature === 'oshaLogs' ? 'professional' : 'enterprise'
+      });
+    }
+    next();
+  };
+};
+
+// Check subscription limits
+const checkLimit = (limitType) => {
+  return async (req, res, next) => {
+    const tier = req.organization.subscription.tier;
+    const tierConfig = SUBSCRIPTION_TIERS[tier];
+    const limit = tierConfig[limitType];
+    
+    if (limit === -1) return next(); // Unlimited
+    
+    let count = 0;
+    switch (limitType) {
+      case 'maxUsers':
+        count = await User.countDocuments({ organization: req.organization._id, isActive: true });
+        break;
+      case 'maxIncidents':
+        count = await Incident.countDocuments({ organization: req.organization._id });
+        break;
+      case 'maxActionItems':
+        count = await ActionItem.countDocuments({ organization: req.organization._id });
+        break;
+      case 'maxInspections':
+        count = await Inspection.countDocuments({ organization: req.organization._id });
+        break;
+      case 'maxDocuments':
+        count = await Document.countDocuments({ organization: req.organization._id });
+        break;
+    }
+    
+    if (count >= limit) {
+      return res.status(403).json({
+        error: 'Limit reached',
+        message: `You have reached the maximum ${limitType.replace('max', '').toLowerCase()} for your subscription tier`,
+        currentCount: count,
+        limit: limit,
+        upgrade: true
+      });
+    }
+    next();
+  };
+};
+
+// =============================================================================
+// API ROUTES
+// =============================================================================
+
+// Health check
+app.get('/api/health', (req, res) => {
+  res.json({ status: 'healthy', timestamp: new Date().toISOString() });
+});
+
+// -----------------------------------------------------------------------------
+// AUTH ROUTES
+// -----------------------------------------------------------------------------
+
+// Register organization and admin user
+app.post('/api/auth/register', async (req, res) => {
+  try {
+    const { organizationName, email, phone, password, firstName, lastName, industry } = req.body;
+
+    // Check if email exists
+    const existingUser = await User.findOne({ email: email.toLowerCase() });
+    if (existingUser) {
+      return res.status(400).json({ error: 'Email already registered' });
+    }
+
+    // Create organization
+    const slug = organizationName.toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-');
+    const organization = await Organization.create({
+      name: organizationName,
+      slug: `${slug}-${Date.now()}`,
+      industry,
+      subscription: {
+        tier: 'starter',
+        startDate: new Date(),
+        status: 'trial'
+      }
+    });
+
+    // Create admin user
+    const hashedPassword = await bcrypt.hash(password, 12);
+    const emailVerificationToken = crypto.randomBytes(32).toString('hex');
+    const phoneVerificationCode = Math.floor(100000 + Math.random() * 900000).toString();
+
+    const user = await User.create({
+      organization: organization._id,
+      email: email.toLowerCase(),
+      phone,
+      password: hashedPassword,
+      firstName,
+      lastName,
+      role: 'admin',
+      permissions: {
+        incidents: { view: true, create: true, edit: true, delete: true, approve: true },
+        actionItems: { view: true, create: true, edit: true, delete: true, approve: true },
+        inspections: { view: true, create: true, edit: true, delete: true, approve: true },
+        training: { view: true, create: true, edit: true, delete: true, approve: true },
+        documents: { view: true, create: true, edit: true, delete: true, approve: true },
+        reports: { view: true, create: true, export: true },
+        admin: { users: true, settings: true, billing: true }
+      },
+      verification: {
+        email: {
+          verified: false,
+          token: emailVerificationToken,
+          expires: new Date(Date.now() + 24 * 60 * 60 * 1000)
+        },
+        phone: {
+          verified: false,
+          code: phoneVerificationCode,
+          expires: new Date(Date.now() + 10 * 60 * 1000)
+        }
+      }
+    });
+
+    // Send verification email
+    const verifyUrl = `${CONFIG.APP_URL}/verify-email?token=${emailVerificationToken}`;
+    await sendEmail(
+      email,
+      'Verify Your EHS Management Account',
+      `<h1>Welcome to EHS Management System</h1>
+       <p>Please verify your email by clicking the link below:</p>
+       <a href="${verifyUrl}">${verifyUrl}</a>
+       <p>This link expires in 24 hours.</p>`
+    );
+
+    // Send phone verification SMS
+    if (phone) {
+      await sendSMS(phone, `Your EHS verification code is: ${phoneVerificationCode}`);
+    }
+
+    // Generate token
+    const token = jwt.sign({ userId: user._id }, CONFIG.JWT_SECRET, { expiresIn: CONFIG.JWT_EXPIRES_IN });
+
+    res.status(201).json({
+      success: true,
+      message: 'Registration successful. Please verify your email and phone.',
+      token,
+      user: {
+        id: user._id,
+        email: user.email,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        role: user.role,
+        organization: {
+          id: organization._id,
+          name: organization.name,
+          subscription: organization.subscription
+        },
+        verification: {
+          emailVerified: false,
+          phoneVerified: false
+        }
+      }
+    });
+  } catch (error) {
+    console.error('Registration error:', error);
+    res.status(500).json({ error: 'Registration failed', details: error.message });
+  }
+});
+
+// Verify email
+app.post('/api/auth/verify-email', async (req, res) => {
+  try {
+    const { token } = req.body;
+    
+    const user = await User.findOne({
+      'verification.email.token': token,
+      'verification.email.expires': { $gt: new Date() }
+    });
+
+    if (!user) {
+      return res.status(400).json({ error: 'Invalid or expired verification token' });
+    }
+
+    user.verification.email.verified = true;
+    user.verification.email.token = undefined;
+    user.verification.email.expires = undefined;
+    await user.save();
+
+    res.json({ success: true, message: 'Email verified successfully' });
+  } catch (error) {
+    res.status(500).json({ error: 'Verification failed' });
+  }
+});
+
+// Verify phone
+app.post('/api/auth/verify-phone', authenticate, async (req, res) => {
+  try {
+    const { code } = req.body;
+    
+    if (req.user.verification.phone.code !== code) {
+      return res.status(400).json({ error: 'Invalid verification code' });
+    }
+
+    if (new Date() > req.user.verification.phone.expires) {
+      return res.status(400).json({ error: 'Verification code expired' });
+    }
+
+    req.user.verification.phone.verified = true;
+    req.user.verification.phone.code = undefined;
+    req.user.verification.phone.expires = undefined;
+    await req.user.save();
+
+    res.json({ success: true, message: 'Phone verified successfully' });
+  } catch (error) {
+    res.status(500).json({ error: 'Verification failed' });
+  }
+});
+
+// Resend phone verification
+app.post('/api/auth/resend-phone-verification', authenticate, async (req, res) => {
+  try {
+    const code = Math.floor(100000 + Math.random() * 900000).toString();
+    
+    req.user.verification.phone.code = code;
+    req.user.verification.phone.expires = new Date(Date.now() + 10 * 60 * 1000);
+    await req.user.save();
+
+    await sendSMS(req.user.phone, `Your EHS verification code is: ${code}`);
+
+    res.json({ success: true, message: 'Verification code sent' });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to send verification code' });
+  }
+});
+
+// Login
+app.post('/api/auth/login', async (req, res) => {
+  try {
+    const { email, password } = req.body;
+
+    const user = await User.findOne({ email: email.toLowerCase() }).populate('organization');
+    if (!user) {
+      return res.status(401).json({ error: 'Invalid credentials' });
+    }
+
+    // Check if account is locked
+    if (user.lockUntil && user.lockUntil > new Date()) {
+      return res.status(423).json({ error: 'Account locked. Try again later.' });
+    }
+
+    const isValidPassword = await bcrypt.compare(password, user.password);
+    if (!isValidPassword) {
+      user.loginAttempts += 1;
+      if (user.loginAttempts >= 5) {
+        user.lockUntil = new Date(Date.now() + 30 * 60 * 1000); // Lock for 30 minutes
+      }
+      await user.save();
+      return res.status(401).json({ error: 'Invalid credentials' });
+    }
+
+    if (!user.isActive) {
+      return res.status(401).json({ error: 'Account is inactive' });
+    }
+
+    // Reset login attempts
+    user.loginAttempts = 0;
+    user.lockUntil = undefined;
+    user.lastLogin = new Date();
+    await user.save();
+
+    // Create audit log
+    await createAuditLog({ user, ip: req.ip, get: (h) => req.get(h) }, 'login', 'system', 'User', user._id, user.email, 'User logged in');
+
+    const token = jwt.sign({ userId: user._id }, CONFIG.JWT_SECRET, { expiresIn: CONFIG.JWT_EXPIRES_IN });
+
+    res.json({
+      success: true,
+      token,
+      user: {
+        id: user._id,
+        email: user.email,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        role: user.role,
+        permissions: user.permissions,
+        organization: {
+          id: user.organization._id,
+          name: user.organization.name,
+          subscription: user.organization.subscription,
+          settings: user.organization.settings
+        },
+        verification: {
+          emailVerified: user.verification.email.verified,
+          phoneVerified: user.verification.phone.verified
+        }
+      }
+    });
+  } catch (error) {
+    console.error('Login error:', error);
+    res.status(500).json({ error: 'Login failed' });
+  }
+});
+
+// Get current user
+app.get('/api/auth/me', authenticate, async (req, res) => {
+  try {
+    const user = await User.findById(req.user._id).populate('organization');
+    res.json({
+      user: {
+        id: user._id,
+        email: user.email,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        role: user.role,
+        department: user.department,
+        location: user.location,
+        jobTitle: user.jobTitle,
+        permissions: user.permissions,
+        organization: {
+          id: user.organization._id,
+          name: user.organization.name,
+          subscription: user.organization.subscription,
+          settings: user.organization.settings,
+          locations: user.organization.locations,
+          departments: user.organization.departments
+        },
+        verification: {
+          emailVerified: user.verification.email.verified,
+          phoneVerified: user.verification.phone.verified
+        }
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to get user' });
+  }
+});
+
+// -----------------------------------------------------------------------------
+// SUPER ADMIN ROUTES (Platform Administration)
+// -----------------------------------------------------------------------------
+
+// Super Admin credentials (in production, store in database)
+const SUPER_ADMIN = {
+  email: process.env.SUPER_ADMIN_EMAIL || 'admin@safetyfirst.com',
+  password: process.env.SUPER_ADMIN_PASSWORD || 'SuperAdmin123!'
+};
+
+// Super Admin login
+app.post('/api/auth/superadmin/login', async (req, res) => {
+  try {
+    const { email, password } = req.body;
+    
+    if (email !== SUPER_ADMIN.email || password !== SUPER_ADMIN.password) {
+      return res.status(401).json({ error: 'Invalid credentials' });
+    }
+    
+    const token = jwt.sign({ 
+      isSuperAdmin: true, 
+      email: SUPER_ADMIN.email 
+    }, CONFIG.JWT_SECRET, { expiresIn: '8h' });
+    
+    res.json({
+      success: true,
+      token,
+      user: {
+        email: SUPER_ADMIN.email,
+        role: 'superadmin',
+        isSuperAdmin: true
+      }
+    });
+  } catch (error) {
+    console.error('Super admin login error:', error);
+    res.status(500).json({ error: 'Login failed' });
+  }
+});
+
+// Super Admin middleware
+const authenticateSuperAdmin = async (req, res, next) => {
+  try {
+    const token = req.headers.authorization?.replace('Bearer ', '');
+    if (!token) return res.status(401).json({ error: 'Authentication required' });
+    
+    const decoded = jwt.verify(token, CONFIG.JWT_SECRET);
+    if (!decoded.isSuperAdmin) {
+      return res.status(403).json({ error: 'Super admin access required' });
+    }
+    
+    req.superAdmin = decoded;
+    next();
+  } catch (error) {
+    res.status(401).json({ error: 'Invalid token' });
+  }
+};
+
+// Get all organizations (Super Admin)
+app.get('/api/superadmin/organizations', authenticateSuperAdmin, async (req, res) => {
+  try {
+    const organizations = await Organization.find()
+      .sort({ createdAt: -1 });
+    
+    // Get user counts for each organization
+    const orgsWithCounts = await Promise.all(organizations.map(async (org) => {
+      const userCount = await User.countDocuments({ organization: org._id });
+      return {
+        ...org.toObject(),
+        userCount
+      };
+    }));
+    
+    res.json({ organizations: orgsWithCounts });
+  } catch (error) {
+    console.error('Get organizations error:', error);
+    res.status(500).json({ error: 'Failed to get organizations' });
+  }
+});
+
+// Get super admin stats
+app.get('/api/superadmin/stats', authenticateSuperAdmin, async (req, res) => {
+  try {
+    const totalOrgs = await Organization.countDocuments();
+    const totalUsers = await User.countDocuments();
+    
+    // Count by subscription tier
+    const starterOrgs = await Organization.countDocuments({ 'subscription.tier': 'starter' });
+    const professionalOrgs = await Organization.countDocuments({ 'subscription.tier': 'professional' });
+    const enterpriseOrgs = await Organization.countDocuments({ 'subscription.tier': 'enterprise' });
+    
+    // Calculate revenue
+    const revenue = (starterOrgs * 199) + (professionalOrgs * 499) + (enterpriseOrgs * 1299);
+    
+    // Active trials (organizations less than 14 days old)
+    const trialCutoff = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000);
+    const activeTrials = await Organization.countDocuments({ createdAt: { $gte: trialCutoff } });
+    
+    res.json({
+      totalOrgs,
+      totalUsers,
+      activeTrials,
+      revenue,
+      byTier: {
+        starter: starterOrgs,
+        professional: professionalOrgs,
+        enterprise: enterpriseOrgs
+      }
+    });
+  } catch (error) {
+    console.error('Get stats error:', error);
+    res.status(500).json({ error: 'Failed to get stats' });
+  }
+});
+
+// Create organization (Super Admin)
+app.post('/api/superadmin/organizations', authenticateSuperAdmin, async (req, res) => {
+  try {
+    const { name, industry, email, phone, subscription } = req.body;
+    
+    const organization = new Organization({
+      name,
+      industry,
+      contact: { email, phone },
+      subscription: {
+        tier: subscription?.tier || 'starter',
+        status: 'active',
+        startDate: new Date(),
+        billingCycle: 'monthly'
+      },
+      settings: {
+        timezone: 'America/New_York',
+        dateFormat: 'MM/DD/YYYY',
+        currency: 'USD'
+      }
+    });
+    
+    await organization.save();
+    res.status(201).json({ organization });
+  } catch (error) {
+    console.error('Create organization error:', error);
+    res.status(500).json({ error: 'Failed to create organization' });
+  }
+});
+
+// Update organization (Super Admin)
+app.put('/api/superadmin/organizations/:id', authenticateSuperAdmin, async (req, res) => {
+  try {
+    const { name, industry, email, phone, subscription } = req.body;
+    
+    const updates = {};
+    if (name) updates.name = name;
+    if (industry) updates.industry = industry;
+    if (email) updates['contact.email'] = email;
+    if (phone) updates['contact.phone'] = phone;
+    if (subscription?.tier) updates['subscription.tier'] = subscription.tier;
+    
+    const organization = await Organization.findByIdAndUpdate(
+      req.params.id,
+      { $set: updates },
+      { new: true }
+    );
+    
+    if (!organization) {
+      return res.status(404).json({ error: 'Organization not found' });
+    }
+    
+    res.json({ organization });
+  } catch (error) {
+    console.error('Update organization error:', error);
+    res.status(500).json({ error: 'Failed to update organization' });
+  }
+});
+
+// Delete organization (Super Admin)
+app.delete('/api/superadmin/organizations/:id', authenticateSuperAdmin, async (req, res) => {
+  try {
+    // Delete all users in the organization
+    await User.deleteMany({ organization: req.params.id });
+    
+    // Delete the organization
+    await Organization.findByIdAndDelete(req.params.id);
+    
+    res.json({ success: true, message: 'Organization deleted' });
+  } catch (error) {
+    console.error('Delete organization error:', error);
+    res.status(500).json({ error: 'Failed to delete organization' });
+  }
+});
+
+// -----------------------------------------------------------------------------
+// INCIDENT ROUTES
+// -----------------------------------------------------------------------------
+
+// Get all incidents
+app.get('/api/incidents', authenticate, async (req, res) => {
+  try {
+    const { status, type, severity, startDate, endDate, search, page = 1, limit = 20 } = req.query;
+    
+    const query = { organization: req.organization._id };
+    
+    if (status) query.status = status;
+    if (type) query.type = type;
+    if (severity) query.severity = severity;
+    if (startDate || endDate) {
+      query.dateOccurred = {};
+      if (startDate) query.dateOccurred.$gte = new Date(startDate);
+      if (endDate) query.dateOccurred.$lte = new Date(endDate);
+    }
+    if (search) {
+      query.$or = [
+        { title: { $regex: search, $options: 'i' } },
+        { description: { $regex: search, $options: 'i' } },
+        { incidentNumber: { $regex: search, $options: 'i' } }
+      ];
+    }
+
+    const total = await Incident.countDocuments(query);
+    const incidents = await Incident.find(query)
+      .populate('reportedBy', 'firstName lastName')
+      .populate('assignedTo', 'firstName lastName')
+      .sort({ dateOccurred: -1 })
+      .skip((page - 1) * limit)
+      .limit(parseInt(limit));
+
+    res.json({
+      incidents,
+      pagination: {
+        total,
+        page: parseInt(page),
+        limit: parseInt(limit),
+        pages: Math.ceil(total / limit)
+      }
+    });
+  } catch (error) {
+    console.error('Get incidents error:', error);
+    res.status(500).json({ error: 'Failed to get incidents' });
+  }
+});
+
+// Get single incident
+app.get('/api/incidents/:id', authenticate, async (req, res) => {
+  try {
+    const incident = await Incident.findOne({ _id: req.params.id, organization: req.organization._id })
+      .populate('reportedBy', 'firstName lastName email')
+      .populate('assignedTo', 'firstName lastName email')
+      .populate('reviewedBy', 'firstName lastName')
+      .populate('closedBy', 'firstName lastName')
+      .populate('correctiveActions')
+      .populate('investigation.investigator', 'firstName lastName');
+
+    if (!incident) {
+      return res.status(404).json({ error: 'Incident not found' });
+    }
+
+    await createAuditLog(req, 'read', 'incidents', 'Incident', incident._id, incident.incidentNumber, 'Viewed incident');
+
+    res.json({ incident });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to get incident' });
+  }
+});
+
+// Create incident
+app.post('/api/incidents', authenticate, checkLimit('maxIncidents'), async (req, res) => {
+  try {
+    const incidentNumber = await generateNumber(Incident, 'INC', req.organization._id);
+    
+    const incident = await Incident.create({
+      ...req.body,
+      organization: req.organization._id,
+      incidentNumber,
+      reportedBy: req.user._id,
+      status: req.body.status || 'draft'
+    });
+
+    await createAuditLog(req, 'create', 'incidents', 'Incident', incident._id, incident.incidentNumber, 'Created incident');
+
+    // Create notification for assigned user
+    if (incident.assignedTo) {
+      await Notification.create({
+        organization: req.organization._id,
+        user: incident.assignedTo,
+        type: 'incident',
+        title: 'New Incident Assigned',
+        message: `You have been assigned to incident ${incident.incidentNumber}: ${incident.title}`,
+        link: `/incidents/${incident._id}`,
+        priority: incident.severity === 'severe' || incident.severity === 'catastrophic' ? 'urgent' : 'medium'
+      });
+    }
+
+    res.status(201).json({ incident });
+  } catch (error) {
+    console.error('Create incident error:', error);
+    res.status(500).json({ error: 'Failed to create incident' });
+  }
+});
+
+// Update incident
+app.put('/api/incidents/:id', authenticate, async (req, res) => {
+  try {
+    const incident = await Incident.findOne({ _id: req.params.id, organization: req.organization._id });
+    if (!incident) {
+      return res.status(404).json({ error: 'Incident not found' });
+    }
+
+    const before = incident.toObject();
+    Object.assign(incident, req.body);
+    incident.updatedAt = new Date();
+    await incident.save();
+
+    await createAuditLog(req, 'update', 'incidents', 'Incident', incident._id, incident.incidentNumber, 'Updated incident', { before, after: incident.toObject() });
+
+    res.json({ incident });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to update incident' });
+  }
+});
+
+// Delete incident
+app.delete('/api/incidents/:id', authenticate, authorize('admin', 'superadmin'), async (req, res) => {
+  try {
+    const incident = await Incident.findOneAndDelete({ _id: req.params.id, organization: req.organization._id });
+    if (!incident) {
+      return res.status(404).json({ error: 'Incident not found' });
+    }
+
+    await createAuditLog(req, 'delete', 'incidents', 'Incident', incident._id, incident.incidentNumber, 'Deleted incident');
+
+    res.json({ success: true, message: 'Incident deleted' });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to delete incident' });
+  }
+});
+
+// -----------------------------------------------------------------------------
+// ACTION ITEM ROUTES
+// -----------------------------------------------------------------------------
+
+// Get all action items
+app.get('/api/action-items', authenticate, async (req, res) => {
+  try {
+    const { status, priority, assignedTo, dueDate, overdue, page = 1, limit = 20 } = req.query;
+    
+    const query = { organization: req.organization._id };
+    
+    if (status) query.status = status;
+    if (priority) query.priority = priority;
+    if (assignedTo) query.assignedTo = assignedTo;
+    if (dueDate) query.dueDate = { $lte: new Date(dueDate) };
+    if (overdue === 'true') {
+      query.dueDate = { $lt: new Date() };
+      query.status = { $nin: ['completed', 'cancelled'] };
+    }
+
+    const total = await ActionItem.countDocuments(query);
+    const actionItems = await ActionItem.find(query)
+      .populate('assignedTo', 'firstName lastName')
+      .populate('assignedBy', 'firstName lastName')
+      .sort({ dueDate: 1 })
+      .skip((page - 1) * limit)
+      .limit(parseInt(limit));
+
+    res.json({
+      actionItems,
+      pagination: {
+        total,
+        page: parseInt(page),
+        limit: parseInt(limit),
+        pages: Math.ceil(total / limit)
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to get action items' });
+  }
+});
+
+// Get single action item
+app.get('/api/action-items/:id', authenticate, async (req, res) => {
+  try {
+    const actionItem = await ActionItem.findOne({ _id: req.params.id, organization: req.organization._id })
+      .populate('assignedTo', 'firstName lastName email')
+      .populate('assignedBy', 'firstName lastName')
+      .populate('verifiedBy', 'firstName lastName')
+      .populate('comments.user', 'firstName lastName');
+
+    if (!actionItem) {
+      return res.status(404).json({ error: 'Action item not found' });
+    }
+
+    res.json({ actionItem });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to get action item' });
+  }
+});
+
+// Create action item
+app.post('/api/action-items', authenticate, checkLimit('maxActionItems'), async (req, res) => {
+  try {
+    const actionNumber = await generateNumber(ActionItem, 'ACT', req.organization._id);
+    
+    const actionItem = await ActionItem.create({
+      ...req.body,
+      organization: req.organization._id,
+      actionNumber,
+      assignedBy: req.user._id,
+      history: [{
+        action: 'Created',
+        user: req.user._id,
+        details: 'Action item created',
+        timestamp: new Date()
+      }]
+    });
+
+    await createAuditLog(req, 'create', 'action_items', 'ActionItem', actionItem._id, actionItem.actionNumber, 'Created action item');
+
+    // Create notification
+    if (actionItem.assignedTo) {
+      await Notification.create({
+        organization: req.organization._id,
+        user: actionItem.assignedTo,
+        type: 'action_item',
+        title: 'New Action Item Assigned',
+        message: `You have been assigned action item ${actionItem.actionNumber}: ${actionItem.title}`,
+        link: `/action-items/${actionItem._id}`,
+        priority: actionItem.priority === 'critical' ? 'urgent' : 'medium'
+      });
+    }
+
+    res.status(201).json({ actionItem });
+  } catch (error) {
+    console.error('Create action item error:', error);
+    res.status(500).json({ error: 'Failed to create action item' });
+  }
+});
+
+// Update action item
+app.put('/api/action-items/:id', authenticate, async (req, res) => {
+  try {
+    const actionItem = await ActionItem.findOne({ _id: req.params.id, organization: req.organization._id });
+    if (!actionItem) {
+      return res.status(404).json({ error: 'Action item not found' });
+    }
+
+    const before = actionItem.toObject();
+    const statusChanged = req.body.status && req.body.status !== actionItem.status;
+    
+    Object.assign(actionItem, req.body);
+    actionItem.updatedAt = new Date();
+
+    // Add history entry
+    if (statusChanged) {
+      actionItem.history.push({
+        action: 'Status Changed',
+        user: req.user._id,
+        details: `Status changed from ${before.status} to ${req.body.status}`,
+        timestamp: new Date()
+      });
+
+      if (req.body.status === 'completed') {
+        actionItem.completedDate = new Date();
+      }
+    }
+
+    await actionItem.save();
+
+    await createAuditLog(req, 'update', 'action_items', 'ActionItem', actionItem._id, actionItem.actionNumber, 'Updated action item', { before, after: actionItem.toObject() });
+
+    res.json({ actionItem });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to update action item' });
+  }
+});
+
+// Add comment to action item
+app.post('/api/action-items/:id/comments', authenticate, async (req, res) => {
+  try {
+    const actionItem = await ActionItem.findOne({ _id: req.params.id, organization: req.organization._id });
+    if (!actionItem) {
+      return res.status(404).json({ error: 'Action item not found' });
+    }
+
+    actionItem.comments.push({
+      user: req.user._id,
+      comment: req.body.comment,
+      createdAt: new Date()
+    });
+
+    actionItem.history.push({
+      action: 'Comment Added',
+      user: req.user._id,
+      details: 'Added a comment',
+      timestamp: new Date()
+    });
+
+    await actionItem.save();
+
+    res.json({ actionItem });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to add comment' });
+  }
+});
+
+// Delete action item
+app.delete('/api/action-items/:id', authenticate, authorize('admin', 'superadmin', 'manager'), async (req, res) => {
+  try {
+    const actionItem = await ActionItem.findOneAndDelete({ _id: req.params.id, organization: req.organization._id });
+    if (!actionItem) {
+      return res.status(404).json({ error: 'Action item not found' });
+    }
+
+    await createAuditLog(req, 'delete', 'action_items', 'ActionItem', actionItem._id, actionItem.actionNumber, 'Deleted action item');
+
+    res.json({ success: true, message: 'Action item deleted' });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to delete action item' });
+  }
+});
+
+// -----------------------------------------------------------------------------
+// INSPECTION ROUTES
+// -----------------------------------------------------------------------------
+
+// Get all inspections
+app.get('/api/inspections', authenticate, requireFeature('auditModule'), async (req, res) => {
+  try {
+    const { status, type, startDate, endDate, page = 1, limit = 20 } = req.query;
+    
+    const query = { organization: req.organization._id };
+    
+    if (status) query.status = status;
+    if (type) query.type = type;
+    if (startDate || endDate) {
+      query.scheduledDate = {};
+      if (startDate) query.scheduledDate.$gte = new Date(startDate);
+      if (endDate) query.scheduledDate.$lte = new Date(endDate);
+    }
+
+    const total = await Inspection.countDocuments(query);
+    const inspections = await Inspection.find(query)
+      .populate('inspector', 'firstName lastName')
+      .populate('template', 'name')
+      .sort({ scheduledDate: -1 })
+      .skip((page - 1) * limit)
+      .limit(parseInt(limit));
+
+    res.json({
+      inspections,
+      pagination: {
+        total,
+        page: parseInt(page),
+        limit: parseInt(limit),
+        pages: Math.ceil(total / limit)
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to get inspections' });
+  }
+});
+
+// Get single inspection
+app.get('/api/inspections/:id', authenticate, requireFeature('auditModule'), async (req, res) => {
+  try {
+    const inspection = await Inspection.findOne({ _id: req.params.id, organization: req.organization._id })
+      .populate('inspector', 'firstName lastName email')
+      .populate('participants', 'firstName lastName')
+      .populate('template')
+      .populate('actionItems');
+
+    if (!inspection) {
+      return res.status(404).json({ error: 'Inspection not found' });
+    }
+
+    res.json({ inspection });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to get inspection' });
+  }
+});
+
+// Create inspection
+app.post('/api/inspections', authenticate, requireFeature('auditModule'), checkLimit('maxInspections'), async (req, res) => {
+  try {
+    const inspectionNumber = await generateNumber(Inspection, 'INS', req.organization._id);
+    
+    const inspection = await Inspection.create({
+      ...req.body,
+      organization: req.organization._id,
+      inspectionNumber,
+      inspector: req.body.inspector || req.user._id
+    });
+
+    await createAuditLog(req, 'create', 'inspections', 'Inspection', inspection._id, inspection.inspectionNumber, 'Created inspection');
+
+    res.status(201).json({ inspection });
+  } catch (error) {
+    console.error('Create inspection error:', error);
+    res.status(500).json({ error: 'Failed to create inspection' });
+  }
+});
+
+// Update inspection
+app.put('/api/inspections/:id', authenticate, requireFeature('auditModule'), async (req, res) => {
+  try {
+    const inspection = await Inspection.findOne({ _id: req.params.id, organization: req.organization._id });
+    if (!inspection) {
+      return res.status(404).json({ error: 'Inspection not found' });
+    }
+
+    const before = inspection.toObject();
+    Object.assign(inspection, req.body);
+    inspection.updatedAt = new Date();
+
+    // Calculate summary if sections are provided
+    if (req.body.sections) {
+      let totalItems = 0, passedItems = 0, failedItems = 0, naItems = 0;
+      
+      inspection.sections.forEach(section => {
+        section.items.forEach(item => {
+          totalItems++;
+          if (item.status === 'pass') passedItems++;
+          else if (item.status === 'fail') failedItems++;
+          else if (item.status === 'na') naItems++;
+        });
+      });
+
+      inspection.summary = {
+        totalItems,
+        passedItems,
+        failedItems,
+        naItems,
+        score: totalItems > 0 ? Math.round((passedItems / (totalItems - naItems)) * 100) : 0
+      };
+    }
+
+    await inspection.save();
+
+    await createAuditLog(req, 'update', 'inspections', 'Inspection', inspection._id, inspection.inspectionNumber, 'Updated inspection', { before, after: inspection.toObject() });
+
+    res.json({ inspection });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to update inspection' });
+  }
+});
+
+// Delete inspection
+app.delete('/api/inspections/:id', authenticate, authorize('admin', 'superadmin'), async (req, res) => {
+  try {
+    const inspection = await Inspection.findOneAndDelete({ _id: req.params.id, organization: req.organization._id });
+    if (!inspection) {
+      return res.status(404).json({ error: 'Inspection not found' });
+    }
+
+    await createAuditLog(req, 'delete', 'inspections', 'Inspection', inspection._id, inspection.inspectionNumber, 'Deleted inspection');
+
+    res.json({ success: true, message: 'Inspection deleted' });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to delete inspection' });
+  }
+});
+
+// -----------------------------------------------------------------------------
+// INSPECTION TEMPLATE ROUTES
+// -----------------------------------------------------------------------------
+
+app.get('/api/inspection-templates', authenticate, requireFeature('auditModule'), async (req, res) => {
+  try {
+    const templates = await InspectionTemplate.find({ organization: req.organization._id, isActive: true });
+    res.json({ templates });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to get templates' });
+  }
+});
+
+app.post('/api/inspection-templates', authenticate, requireFeature('auditModule'), async (req, res) => {
+  try {
+    const template = await InspectionTemplate.create({
+      ...req.body,
+      organization: req.organization._id,
+      createdBy: req.user._id
+    });
+    res.status(201).json({ template });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to create template' });
+  }
+});
+
+app.put('/api/inspection-templates/:id', authenticate, requireFeature('auditModule'), async (req, res) => {
+  try {
+    const template = await InspectionTemplate.findOneAndUpdate(
+      { _id: req.params.id, organization: req.organization._id },
+      { ...req.body, updatedAt: new Date() },
+      { new: true }
+    );
+    res.json({ template });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to update template' });
+  }
+});
+
+app.delete('/api/inspection-templates/:id', authenticate, authorize('admin', 'superadmin'), async (req, res) => {
+  try {
+    await InspectionTemplate.findOneAndUpdate(
+      { _id: req.params.id, organization: req.organization._id },
+      { isActive: false }
+    );
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to delete template' });
+  }
+});
+
+// -----------------------------------------------------------------------------
+// TRAINING ROUTES
+// -----------------------------------------------------------------------------
+
+// Get all training courses
+app.get('/api/training', authenticate, requireFeature('trainingModule'), async (req, res) => {
+  try {
+    const { type, category, page = 1, limit = 20 } = req.query;
+    
+    const query = { organization: req.organization._id, isActive: true };
+    if (type) query.type = type;
+    if (category) query.category = category;
+
+    const total = await Training.countDocuments(query);
+    const trainings = await Training.find(query)
+      .populate('createdBy', 'firstName lastName')
+      .sort({ title: 1 })
+      .skip((page - 1) * limit)
+      .limit(parseInt(limit));
+
+    res.json({
+      trainings,
+      pagination: {
+        total,
+        page: parseInt(page),
+        limit: parseInt(limit),
+        pages: Math.ceil(total / limit)
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to get training courses' });
+  }
+});
+
+// Get single training
+app.get('/api/training/:id', authenticate, requireFeature('trainingModule'), async (req, res) => {
+  try {
+    const training = await Training.findOne({ _id: req.params.id, organization: req.organization._id });
+    if (!training) {
+      return res.status(404).json({ error: 'Training not found' });
+    }
+    res.json({ training });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to get training' });
+  }
+});
+
+// Create training
+app.post('/api/training', authenticate, requireFeature('trainingModule'), authorize('admin', 'manager'), async (req, res) => {
+  try {
+    const training = await Training.create({
+      ...req.body,
+      organization: req.organization._id,
+      createdBy: req.user._id
+    });
+
+    await createAuditLog(req, 'create', 'training', 'Training', training._id, training.title, 'Created training course');
+
+    res.status(201).json({ training });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to create training' });
+  }
+});
+
+// Update training
+app.put('/api/training/:id', authenticate, requireFeature('trainingModule'), authorize('admin', 'manager'), async (req, res) => {
+  try {
+    const training = await Training.findOneAndUpdate(
+      { _id: req.params.id, organization: req.organization._id },
+      { ...req.body, updatedAt: new Date() },
+      { new: true }
+    );
+    res.json({ training });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to update training' });
+  }
+});
+
+// Get training records for current user
+app.get('/api/training-records/my', authenticate, requireFeature('trainingModule'), async (req, res) => {
+  try {
+    const records = await TrainingRecord.find({ user: req.user._id })
+      .populate('training')
+      .sort({ dueDate: 1 });
+    res.json({ records });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to get training records' });
+  }
+});
+
+// Get all training records (admin)
+app.get('/api/training-records', authenticate, requireFeature('trainingModule'), authorize('admin', 'manager'), async (req, res) => {
+  try {
+    const { userId, trainingId, status, page = 1, limit = 20 } = req.query;
+    
+    const query = { organization: req.organization._id };
+    if (userId) query.user = userId;
+    if (trainingId) query.training = trainingId;
+    if (status) query.status = status;
+
+    const total = await TrainingRecord.countDocuments(query);
+    const records = await TrainingRecord.find(query)
+      .populate('training', 'title type')
+      .populate('user', 'firstName lastName email department')
+      .sort({ dueDate: 1 })
+      .skip((page - 1) * limit)
+      .limit(parseInt(limit));
+
+    res.json({
+      records,
+      pagination: {
+        total,
+        page: parseInt(page),
+        limit: parseInt(limit),
+        pages: Math.ceil(total / limit)
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to get training records' });
+  }
+});
+
+// Assign training
+app.post('/api/training-records', authenticate, requireFeature('trainingModule'), authorize('admin', 'manager'), async (req, res) => {
+  try {
+    const { trainingId, userIds, dueDate } = req.body;
+
+    const training = await Training.findById(trainingId);
+    if (!training) {
+      return res.status(404).json({ error: 'Training not found' });
+    }
+
+    const records = [];
+    for (const userId of userIds) {
+      const existingRecord = await TrainingRecord.findOne({
+        training: trainingId,
+        user: userId,
+        status: { $in: ['assigned', 'in_progress'] }
+      });
+
+      if (!existingRecord) {
+        const record = await TrainingRecord.create({
+          organization: req.organization._id,
+          training: trainingId,
+          user: userId,
+          dueDate,
+          status: 'assigned'
+        });
+        records.push(record);
+
+        // Create notification
+        await Notification.create({
+          organization: req.organization._id,
+          user: userId,
+          type: 'training',
+          title: 'Training Assigned',
+          message: `You have been assigned training: ${training.title}`,
+          link: `/training/${trainingId}`,
+          priority: 'medium'
+        });
+      }
+    }
+
+    res.status(201).json({ records, assigned: records.length });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to assign training' });
+  }
+});
+
+// Complete training
+app.post('/api/training-records/:id/complete', authenticate, requireFeature('trainingModule'), async (req, res) => {
+  try {
+    const record = await TrainingRecord.findOne({ _id: req.params.id, user: req.user._id });
+    if (!record) {
+      return res.status(404).json({ error: 'Training record not found' });
+    }
+
+    const training = await Training.findById(record.training);
+    
+    record.status = 'completed';
+    record.completedDate = new Date();
+    record.score = req.body.score;
+
+    // Calculate expiration date
+    if (training.frequency.type !== 'one_time') {
+      let expirationDays;
+      switch (training.frequency.type) {
+        case 'annual': expirationDays = 365; break;
+        case 'biannual': expirationDays = 180; break;
+        case 'quarterly': expirationDays = 90; break;
+        case 'monthly': expirationDays = 30; break;
+        case 'custom': expirationDays = training.frequency.customDays; break;
+      }
+      record.expirationDate = new Date(Date.now() + expirationDays * 24 * 60 * 60 * 1000);
+    }
+
+    await record.save();
+
+    await createAuditLog(req, 'update', 'training', 'TrainingRecord', record._id, training.title, 'Completed training');
+
+    res.json({ record });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to complete training' });
+  }
+});
+
+// -----------------------------------------------------------------------------
+// DOCUMENT ROUTES
+// -----------------------------------------------------------------------------
+
+app.get('/api/documents', authenticate, async (req, res) => {
+  try {
+    const { category, status, search, page = 1, limit = 20 } = req.query;
+    
+    const query = { organization: req.organization._id };
+    if (category) query.category = category;
+    if (status) query.status = status;
+    if (search) {
+      query.$or = [
+        { title: { $regex: search, $options: 'i' } },
+        { description: { $regex: search, $options: 'i' } },
+        { tags: { $in: [new RegExp(search, 'i')] } }
+      ];
+    }
+
+    const total = await Document.countDocuments(query);
+    const documents = await Document.find(query)
+      .populate('owner', 'firstName lastName')
+      .sort({ updatedAt: -1 })
+      .skip((page - 1) * limit)
+      .limit(parseInt(limit));
+
+    res.json({
+      documents,
+      pagination: {
+        total,
+        page: parseInt(page),
+        limit: parseInt(limit),
+        pages: Math.ceil(total / limit)
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to get documents' });
+  }
+});
+
+app.get('/api/documents/:id', authenticate, async (req, res) => {
+  try {
+    const document = await Document.findOne({ _id: req.params.id, organization: req.organization._id })
+      .populate('owner', 'firstName lastName email')
+      .populate('approver', 'firstName lastName')
+      .populate('createdBy', 'firstName lastName')
+      .populate('relatedDocuments', 'title documentNumber');
+
+    if (!document) {
+      return res.status(404).json({ error: 'Document not found' });
+    }
+
+    await createAuditLog(req, 'read', 'documents', 'Document', document._id, document.title, 'Viewed document');
+
+    res.json({ document });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to get document' });
+  }
+});
+
+app.post('/api/documents', authenticate, checkLimit('maxDocuments'), upload.single('file'), async (req, res) => {
+  try {
+    const documentData = {
+      ...req.body,
+      organization: req.organization._id,
+      createdBy: req.user._id,
+      owner: req.user._id
+    };
+
+    if (req.file) {
+      documentData.file = {
+        filename: req.file.filename,
+        originalName: req.file.originalname,
+        mimeType: req.file.mimetype,
+        size: req.file.size,
+        path: req.file.path
+      };
+    }
+
+    if (req.body.tags && typeof req.body.tags === 'string') {
+      documentData.tags = req.body.tags.split(',').map(t => t.trim());
+    }
+
+    const document = await Document.create(documentData);
+
+    await createAuditLog(req, 'create', 'documents', 'Document', document._id, document.title, 'Created document');
+
+    res.status(201).json({ document });
+  } catch (error) {
+    console.error('Create document error:', error);
+    res.status(500).json({ error: 'Failed to create document' });
+  }
+});
+
+app.put('/api/documents/:id', authenticate, upload.single('file'), async (req, res) => {
+  try {
+    const document = await Document.findOne({ _id: req.params.id, organization: req.organization._id });
+    if (!document) {
+      return res.status(404).json({ error: 'Document not found' });
+    }
+
+    const before = document.toObject();
+    
+    // Handle version control
+    if (req.file && document.file) {
+      document.revisionHistory.push({
+        version: document.version,
+        date: document.updatedAt,
+        changedBy: req.user._id,
+        changes: req.body.revisionNotes || 'Updated document',
+        file: document.file.filename
+      });
+      
+      // Increment version
+      const [major, minor] = document.version.split('.').map(Number);
+      document.version = req.body.majorUpdate ? `${major + 1}.0` : `${major}.${minor + 1}`;
+      
+      document.file = {
+        filename: req.file.filename,
+        originalName: req.file.originalname,
+        mimeType: req.file.mimetype,
+        size: req.file.size,
+        path: req.file.path
+      };
+    }
+
+    Object.keys(req.body).forEach(key => {
+      if (key !== 'file' && key !== 'revisionNotes' && key !== 'majorUpdate') {
+        document[key] = req.body[key];
+      }
+    });
+
+    document.updatedAt = new Date();
+    await document.save();
+
+    await createAuditLog(req, 'update', 'documents', 'Document', document._id, document.title, 'Updated document', { before, after: document.toObject() });
+
+    res.json({ document });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to update document' });
+  }
+});
+
+app.delete('/api/documents/:id', authenticate, authorize('admin', 'superadmin'), async (req, res) => {
+  try {
+    const document = await Document.findOneAndDelete({ _id: req.params.id, organization: req.organization._id });
+    if (!document) {
+      return res.status(404).json({ error: 'Document not found' });
+    }
+
+    await createAuditLog(req, 'delete', 'documents', 'Document', document._id, document.title, 'Deleted document');
+
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to delete document' });
+  }
+});
+
+// -----------------------------------------------------------------------------
+// OSHA 300 LOG ROUTES
+// -----------------------------------------------------------------------------
+
+app.get('/api/osha-logs', authenticate, requireFeature('oshaLogs'), async (req, res) => {
+  try {
+    const logs = await OSHA300Log.find({ organization: req.organization._id }).sort({ year: -1 });
+    res.json({ logs });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to get OSHA logs' });
+  }
+});
+
+app.get('/api/osha-logs/:year', authenticate, requireFeature('oshaLogs'), async (req, res) => {
+  try {
+    let log = await OSHA300Log.findOne({ organization: req.organization._id, year: parseInt(req.params.year) })
+      .populate('entries.incident');
+
+    if (!log) {
+      // Create new log for the year
+      log = await OSHA300Log.create({
+        organization: req.organization._id,
+        year: parseInt(req.params.year),
+        establishment: {
+          name: req.organization.settings.oshaEstablishmentName || req.organization.name,
+          address: req.organization.settings.oshaEstablishmentAddress || '',
+          naicsCode: req.organization.settings.naicsCode || ''
+        },
+        entries: [],
+        summary: {
+          totalDeaths: 0,
+          totalDaysAway: 0,
+          totalDaysTransferRestriction: 0,
+          totalOtherRecordable: 0,
+          totalInjuries: 0,
+          totalSkinDisorders: 0,
+          totalRespiratoryConditions: 0,
+          totalPoisonings: 0,
+          totalHearingLoss: 0,
+          totalOtherIllnesses: 0,
+          totalDaysAwayFromWork: 0,
+          totalDaysJobTransferRestriction: 0
+        }
+      });
+    }
+
+    res.json({ log });
+  } catch (error) {
+    console.error('Get OSHA log error:', error);
+    res.status(500).json({ error: 'Failed to get OSHA log' });
+  }
+});
+
+app.put('/api/osha-logs/:year', authenticate, requireFeature('oshaLogs'), authorize('admin', 'manager'), async (req, res) => {
+  try {
+    const log = await OSHA300Log.findOneAndUpdate(
+      { organization: req.organization._id, year: parseInt(req.params.year) },
+      { ...req.body, updatedAt: new Date() },
+      { new: true, upsert: true }
+    );
+
+    await createAuditLog(req, 'update', 'osha_logs', 'OSHA300Log', log._id, `OSHA 300 Log ${req.params.year}`, 'Updated OSHA log');
+
+    res.json({ log });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to update OSHA log' });
+  }
+});
+
+// Sync recordable incidents to OSHA log
+app.post('/api/osha-logs/:year/sync', authenticate, requireFeature('oshaLogs'), authorize('admin', 'manager'), async (req, res) => {
+  try {
+    const year = parseInt(req.params.year);
+    const startDate = new Date(year, 0, 1);
+    const endDate = new Date(year, 11, 31, 23, 59, 59);
+
+    const recordableIncidents = await Incident.find({
+      organization: req.organization._id,
+      oshaRecordable: true,
+      dateOccurred: { $gte: startDate, $lte: endDate }
+    });
+
+    let log = await OSHA300Log.findOne({ organization: req.organization._id, year });
+    if (!log) {
+      log = new OSHA300Log({
+        organization: req.organization._id,
+        year,
+        establishment: {
+          name: req.organization.settings.oshaEstablishmentName || req.organization.name
+        }
+      });
+    }
+
+    // Clear existing entries and rebuild from incidents
+    log.entries = recordableIncidents.map((incident, index) => {
+      const involvedPerson = incident.involvedPersons[0] || {};
+      return {
+        caseNumber: `${year}-${String(index + 1).padStart(3, '0')}`,
+        employeeName: involvedPerson.name || 'Unknown',
+        jobTitle: involvedPerson.jobTitle || '',
+        dateOfInjury: incident.dateOccurred,
+        whereOccurred: incident.location?.specificLocation || incident.location?.site || '',
+        describeInjury: incident.description,
+        classifyCase: {
+          death: incident.oshaClassification === 'death',
+          daysAwayFromWork: incident.oshaClassification === 'days_away',
+          jobTransferOrRestriction: incident.oshaClassification === 'restricted_transfer',
+          otherRecordableCase: incident.oshaClassification === 'other_recordable'
+        },
+        daysAwayFromWork: involvedPerson.daysAwayFromWork || 0,
+        daysJobTransferRestriction: involvedPerson.daysRestrictedDuty || 0,
+        injuryType: {
+          injury: incident.type === 'injury',
+          skinDisorder: false,
+          respiratoryCondition: false,
+          poisoning: false,
+          hearingLoss: false,
+          allOtherIllnesses: incident.type === 'illness'
+        },
+        incident: incident._id
+      };
+    });
+
+    // Calculate summary
+    log.summary = {
+      totalDeaths: log.entries.filter(e => e.classifyCase.death).length,
+      totalDaysAway: log.entries.filter(e => e.classifyCase.daysAwayFromWork).length,
+      totalDaysTransferRestriction: log.entries.filter(e => e.classifyCase.jobTransferOrRestriction).length,
+      totalOtherRecordable: log.entries.filter(e => e.classifyCase.otherRecordableCase).length,
+      totalInjuries: log.entries.filter(e => e.injuryType.injury).length,
+      totalSkinDisorders: log.entries.filter(e => e.injuryType.skinDisorder).length,
+      totalRespiratoryConditions: log.entries.filter(e => e.injuryType.respiratoryCondition).length,
+      totalPoisonings: log.entries.filter(e => e.injuryType.poisoning).length,
+      totalHearingLoss: log.entries.filter(e => e.injuryType.hearingLoss).length,
+      totalOtherIllnesses: log.entries.filter(e => e.injuryType.allOtherIllnesses).length,
+      totalDaysAwayFromWork: log.entries.reduce((sum, e) => sum + (e.daysAwayFromWork || 0), 0),
+      totalDaysJobTransferRestriction: log.entries.reduce((sum, e) => sum + (e.daysJobTransferRestriction || 0), 0)
+    };
+
+    await log.save();
+
+    await createAuditLog(req, 'update', 'osha_logs', 'OSHA300Log', log._id, `OSHA 300 Log ${year}`, 'Synced incidents to OSHA log');
+
+    res.json({ log, syncedIncidents: recordableIncidents.length });
+  } catch (error) {
+    console.error('Sync OSHA log error:', error);
+    res.status(500).json({ error: 'Failed to sync OSHA log' });
+  }
+});
+
+// Generate OSHA 300/300A/301 PDF
+app.get('/api/osha-logs/:year/export/:form', authenticate, requireFeature('oshaLogs'), async (req, res) => {
+  try {
+    const { year, form } = req.params;
+    const log = await OSHA300Log.findOne({ organization: req.organization._id, year: parseInt(year) });
+    
+    if (!log) {
+      return res.status(404).json({ error: 'OSHA log not found' });
+    }
+
+    const doc = new PDFDocument({ margin: 50 });
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename=OSHA-${form}-${year}.pdf`);
+    doc.pipe(res);
+
+    if (form === '300') {
+      // OSHA 300 Log
+      doc.fontSize(16).text('OSHA Form 300', { align: 'center' });
+      doc.fontSize(12).text('Log of Work-Related Injuries and Illnesses', { align: 'center' });
+      doc.moveDown();
+      doc.fontSize(10).text(`Year: ${year}`);
+      doc.text(`Establishment: ${log.establishment.name}`);
+      doc.text(`Address: ${log.establishment.address || 'N/A'}`);
+      doc.moveDown();
+
+      // Table headers
+      doc.fontSize(8);
+      doc.text('Case No. | Employee Name | Job Title | Date | Location | Description | Classification', { continued: false });
+      doc.moveDown(0.5);
+
+      log.entries.forEach(entry => {
+        doc.text(`${entry.caseNumber} | ${entry.employeeName} | ${entry.jobTitle} | ${new Date(entry.dateOfInjury).toLocaleDateString()} | ${entry.whereOccurred} | ${entry.describeInjury?.substring(0, 50)}...`);
+      });
+
+    } else if (form === '300a') {
+      // OSHA 300A Summary
+      doc.fontSize(16).text('OSHA Form 300A', { align: 'center' });
+      doc.fontSize(12).text('Summary of Work-Related Injuries and Illnesses', { align: 'center' });
+      doc.moveDown();
+      doc.fontSize(10);
+      doc.text(`Calendar Year: ${year}`);
+      doc.text(`Establishment: ${log.establishment.name}`);
+      doc.moveDown();
+
+      doc.text('Number of Cases:');
+      doc.text(`  Total deaths: ${log.summary.totalDeaths}`);
+      doc.text(`  Cases with days away from work: ${log.summary.totalDaysAway}`);
+      doc.text(`  Cases with job transfer or restriction: ${log.summary.totalDaysTransferRestriction}`);
+      doc.text(`  Other recordable cases: ${log.summary.totalOtherRecordable}`);
+      doc.moveDown();
+
+      doc.text('Number of Days:');
+      doc.text(`  Total days away from work: ${log.summary.totalDaysAwayFromWork}`);
+      doc.text(`  Total days of job transfer or restriction: ${log.summary.totalDaysJobTransferRestriction}`);
+      doc.moveDown();
+
+      doc.text('Injury and Illness Types:');
+      doc.text(`  Injuries: ${log.summary.totalInjuries}`);
+      doc.text(`  Skin disorders: ${log.summary.totalSkinDisorders}`);
+      doc.text(`  Respiratory conditions: ${log.summary.totalRespiratoryConditions}`);
+      doc.text(`  Poisonings: ${log.summary.totalPoisonings}`);
+      doc.text(`  Hearing loss: ${log.summary.totalHearingLoss}`);
+      doc.text(`  All other illnesses: ${log.summary.totalOtherIllnesses}`);
+
+    } else if (form === '301') {
+      // OSHA 301 - Individual incident reports
+      doc.fontSize(16).text('OSHA Form 301', { align: 'center' });
+      doc.fontSize(12).text('Injury and Illness Incident Report', { align: 'center' });
+      doc.moveDown();
+
+      log.entries.forEach((entry, index) => {
+        if (index > 0) doc.addPage();
+        
+        doc.fontSize(12).text(`Case Number: ${entry.caseNumber}`);
+        doc.fontSize(10);
+        doc.text(`Employee Name: ${entry.employeeName}`);
+        doc.text(`Job Title: ${entry.jobTitle}`);
+        doc.text(`Date of Injury: ${new Date(entry.dateOfInjury).toLocaleDateString()}`);
+        doc.text(`Where did the event occur: ${entry.whereOccurred}`);
+        doc.moveDown();
+        doc.text('Description of injury or illness:');
+        doc.text(entry.describeInjury || 'N/A');
+        doc.moveDown();
+        doc.text(`Days away from work: ${entry.daysAwayFromWork || 0}`);
+        doc.text(`Days of restricted work: ${entry.daysJobTransferRestriction || 0}`);
+      });
+    }
+
+    doc.end();
+
+    await createAuditLog(req, 'export', 'osha_logs', 'OSHA300Log', log._id, `OSHA ${form} ${year}`, `Exported OSHA ${form} form`);
+  } catch (error) {
+    console.error('Export OSHA log error:', error);
+    res.status(500).json({ error: 'Failed to export OSHA log' });
+  }
+});
+
+// -----------------------------------------------------------------------------
+// USER MANAGEMENT ROUTES
+// -----------------------------------------------------------------------------
+
+app.get('/api/users', authenticate, authorize('admin', 'superadmin', 'manager'), async (req, res) => {
+  try {
+    const { role, department, isActive, page = 1, limit = 20 } = req.query;
+    
+    const query = { organization: req.organization._id };
+    if (role) query.role = role;
+    if (department) query.department = department;
+    if (isActive !== undefined) query.isActive = isActive === 'true';
+
+    const total = await User.countDocuments(query);
+    const users = await User.find(query)
+      .select('-password -verification.email.token -verification.phone.code -twoFactorAuth.secret')
+      .sort({ lastName: 1, firstName: 1 })
+      .skip((page - 1) * limit)
+      .limit(parseInt(limit));
+
+    res.json({
+      users,
+      pagination: {
+        total,
+        page: parseInt(page),
+        limit: parseInt(limit),
+        pages: Math.ceil(total / limit)
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to get users' });
+  }
+});
+
+app.get('/api/users/:id', authenticate, authorize('admin', 'superadmin', 'manager'), async (req, res) => {
+  try {
+    const user = await User.findOne({ _id: req.params.id, organization: req.organization._id })
+      .select('-password -verification.email.token -verification.phone.code -twoFactorAuth.secret');
+    
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    res.json({ user });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to get user' });
+  }
+});
+
+app.post('/api/users', authenticate, authorize('admin', 'superadmin'), checkLimit('maxUsers'), async (req, res) => {
+  try {
+    const { email, password, firstName, lastName, role, department, location, jobTitle, permissions } = req.body;
+
+    const existingUser = await User.findOne({ organization: req.organization._id, email: email.toLowerCase() });
+    if (existingUser) {
+      return res.status(400).json({ error: 'Email already exists in organization' });
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 12);
+    const emailVerificationToken = crypto.randomBytes(32).toString('hex');
+
+    const user = await User.create({
+      organization: req.organization._id,
+      email: email.toLowerCase(),
+      password: hashedPassword,
+      firstName,
+      lastName,
+      role: role || 'user',
+      department,
+      location,
+      jobTitle,
+      permissions: permissions || getDefaultPermissions(role || 'user'),
+      verification: {
+        email: {
+          verified: false,
+          token: emailVerificationToken,
+          expires: new Date(Date.now() + 24 * 60 * 60 * 1000)
+        }
+      }
+    });
+
+    // Send welcome email
+    const verifyUrl = `${CONFIG.APP_URL}/verify-email?token=${emailVerificationToken}`;
+    await sendEmail(
+      email,
+      `Welcome to ${req.organization.name} EHS System`,
+      `<h1>Welcome to the EHS Management System</h1>
+       <p>You have been added to ${req.organization.name}'s EHS system.</p>
+       <p>Your temporary password is: ${password}</p>
+       <p>Please verify your email by clicking: <a href="${verifyUrl}">${verifyUrl}</a></p>
+       <p>You will be asked to change your password on first login.</p>`
+    );
+
+    await createAuditLog(req, 'create', 'users', 'User', user._id, user.email, 'Created user');
+
+    res.status(201).json({ 
+      user: {
+        id: user._id,
+        email: user.email,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        role: user.role
+      }
+    });
+  } catch (error) {
+    console.error('Create user error:', error);
+    res.status(500).json({ error: 'Failed to create user' });
+  }
+});
+
+app.put('/api/users/:id', authenticate, authorize('admin', 'superadmin'), async (req, res) => {
+  try {
+    const user = await User.findOne({ _id: req.params.id, organization: req.organization._id });
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    const { password, ...updateData } = req.body;
+    
+    if (password) {
+      updateData.password = await bcrypt.hash(password, 12);
+    }
+
+    Object.assign(user, updateData);
+    user.updatedAt = new Date();
+    await user.save();
+
+    await createAuditLog(req, 'update', 'users', 'User', user._id, user.email, 'Updated user');
+
+    res.json({ 
+      user: {
+        id: user._id,
+        email: user.email,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        role: user.role,
+        department: user.department,
+        permissions: user.permissions,
+        isActive: user.isActive
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to update user' });
+  }
+});
+
+app.delete('/api/users/:id', authenticate, authorize('admin', 'superadmin'), async (req, res) => {
+  try {
+    if (req.params.id === req.user._id.toString()) {
+      return res.status(400).json({ error: 'Cannot delete your own account' });
+    }
+
+    const user = await User.findOneAndUpdate(
+      { _id: req.params.id, organization: req.organization._id },
+      { isActive: false, updatedAt: new Date() },
+      { new: true }
+    );
+
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    await createAuditLog(req, 'delete', 'users', 'User', user._id, user.email, 'Deactivated user');
+
+    res.json({ success: true, message: 'User deactivated' });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to delete user' });
+  }
+});
+
+// Helper function for default permissions
+function getDefaultPermissions(role) {
+  const permissions = {
+    incidents: { view: true, create: false, edit: false, delete: false, approve: false },
+    actionItems: { view: true, create: false, edit: false, delete: false, approve: false },
+    inspections: { view: true, create: false, edit: false, delete: false, approve: false },
+    training: { view: true, create: false, edit: false, delete: false, approve: false },
+    documents: { view: true, create: false, edit: false, delete: false, approve: false },
+    reports: { view: true, create: false, export: false },
+    admin: { users: false, settings: false, billing: false }
+  };
+
+  switch (role) {
+    case 'admin':
+    case 'superadmin':
+      Object.keys(permissions).forEach(key => {
+        Object.keys(permissions[key]).forEach(perm => {
+          permissions[key][perm] = true;
+        });
+      });
+      break;
+    case 'manager':
+      permissions.incidents = { view: true, create: true, edit: true, delete: false, approve: true };
+      permissions.actionItems = { view: true, create: true, edit: true, delete: false, approve: true };
+      permissions.inspections = { view: true, create: true, edit: true, delete: false, approve: true };
+      permissions.training = { view: true, create: true, edit: true, delete: false, approve: true };
+      permissions.documents = { view: true, create: true, edit: true, delete: false, approve: false };
+      permissions.reports = { view: true, create: true, export: true };
+      break;
+    case 'supervisor':
+      permissions.incidents = { view: true, create: true, edit: true, delete: false, approve: false };
+      permissions.actionItems = { view: true, create: true, edit: true, delete: false, approve: false };
+      permissions.inspections = { view: true, create: true, edit: true, delete: false, approve: false };
+      permissions.training = { view: true, create: false, edit: false, delete: false, approve: false };
+      permissions.documents = { view: true, create: true, edit: false, delete: false, approve: false };
+      permissions.reports = { view: true, create: true, export: false };
+      break;
+    case 'user':
+      permissions.incidents = { view: true, create: true, edit: false, delete: false, approve: false };
+      permissions.actionItems = { view: true, create: false, edit: false, delete: false, approve: false };
+      break;
+  }
+
+  return permissions;
+}
+
+// -----------------------------------------------------------------------------
+// ORGANIZATION ROUTES
+// -----------------------------------------------------------------------------
+
+app.get('/api/organization', authenticate, async (req, res) => {
+  try {
+    const organization = await Organization.findById(req.organization._id);
+    res.json({ organization });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to get organization' });
+  }
+});
+
+app.put('/api/organization', authenticate, authorize('admin', 'superadmin'), async (req, res) => {
+  try {
+    const before = req.organization.toObject();
+    Object.assign(req.organization, req.body);
+    req.organization.updatedAt = new Date();
+    await req.organization.save();
+
+    await createAuditLog(req, 'update', 'organization', 'Organization', req.organization._id, req.organization.name, 'Updated organization settings', { before, after: req.organization.toObject() });
+
+    res.json({ organization: req.organization });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to update organization' });
+  }
+});
+
+// Locations
+app.post('/api/organization/locations', authenticate, authorize('admin', 'superadmin'), async (req, res) => {
+  try {
+    req.organization.locations.push(req.body);
+    await req.organization.save();
+    res.json({ locations: req.organization.locations });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to add location' });
+  }
+});
+
+app.put('/api/organization/locations/:index', authenticate, authorize('admin', 'superadmin'), async (req, res) => {
+  try {
+    const index = parseInt(req.params.index);
+    if (index >= 0 && index < req.organization.locations.length) {
+      req.organization.locations[index] = { ...req.organization.locations[index], ...req.body };
+      await req.organization.save();
+    }
+    res.json({ locations: req.organization.locations });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to update location' });
+  }
+});
+
+// Departments
+app.post('/api/organization/departments', authenticate, authorize('admin', 'superadmin'), async (req, res) => {
+  try {
+    req.organization.departments.push(req.body);
+    await req.organization.save();
+    res.json({ departments: req.organization.departments });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to add department' });
+  }
+});
+
+// -----------------------------------------------------------------------------
+// NOTIFICATION ROUTES
+// -----------------------------------------------------------------------------
+
+app.get('/api/notifications', authenticate, async (req, res) => {
+  try {
+    const { unreadOnly, page = 1, limit = 20 } = req.query;
+    
+    const query = { user: req.user._id };
+    if (unreadOnly === 'true') query.read = false;
+
+    const total = await Notification.countDocuments(query);
+    const notifications = await Notification.find(query)
+      .sort({ createdAt: -1 })
+      .skip((page - 1) * limit)
+      .limit(parseInt(limit));
+
+    const unreadCount = await Notification.countDocuments({ user: req.user._id, read: false });
+
+    res.json({
+      notifications,
+      unreadCount,
+      pagination: {
+        total,
+        page: parseInt(page),
+        limit: parseInt(limit),
+        pages: Math.ceil(total / limit)
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to get notifications' });
+  }
+});
+
+app.put('/api/notifications/:id/read', authenticate, async (req, res) => {
+  try {
+    await Notification.findOneAndUpdate(
+      { _id: req.params.id, user: req.user._id },
+      { read: true, readAt: new Date() }
+    );
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to mark notification as read' });
+  }
+});
+
+app.put('/api/notifications/read-all', authenticate, async (req, res) => {
+  try {
+    await Notification.updateMany(
+      { user: req.user._id, read: false },
+      { read: true, readAt: new Date() }
+    );
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to mark notifications as read' });
+  }
+});
+
+// -----------------------------------------------------------------------------
+// AUDIT LOG ROUTES
+// -----------------------------------------------------------------------------
+
+app.get('/api/audit-logs', authenticate, authorize('admin', 'superadmin'), async (req, res) => {
+  try {
+    const { module, action, userId, startDate, endDate, page = 1, limit = 50 } = req.query;
+    
+    const query = { organization: req.organization._id };
+    if (module) query.module = module;
+    if (action) query.action = action;
+    if (userId) query.user = userId;
+    if (startDate || endDate) {
+      query.timestamp = {};
+      if (startDate) query.timestamp.$gte = new Date(startDate);
+      if (endDate) query.timestamp.$lte = new Date(endDate);
+    }
+
+    const total = await AuditLog.countDocuments(query);
+    const logs = await AuditLog.find(query)
+      .populate('user', 'firstName lastName email')
+      .sort({ timestamp: -1 })
+      .skip((page - 1) * limit)
+      .limit(parseInt(limit));
+
+    res.json({
+      logs,
+      pagination: {
+        total,
+        page: parseInt(page),
+        limit: parseInt(limit),
+        pages: Math.ceil(total / limit)
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to get audit logs' });
+  }
+});
+
+// Export audit logs
+app.get('/api/audit-logs/export', authenticate, authorize('admin', 'superadmin'), async (req, res) => {
+  try {
+    const { startDate, endDate, format = 'xlsx' } = req.query;
+    
+    const query = { organization: req.organization._id };
+    if (startDate || endDate) {
+      query.timestamp = {};
+      if (startDate) query.timestamp.$gte = new Date(startDate);
+      if (endDate) query.timestamp.$lte = new Date(endDate);
+    }
+
+    const logs = await AuditLog.find(query)
+      .populate('user', 'firstName lastName email')
+      .sort({ timestamp: -1 });
+
+    if (format === 'xlsx') {
+      const workbook = new ExcelJS.Workbook();
+      const worksheet = workbook.addWorksheet('Audit Logs');
+
+      worksheet.columns = [
+        { header: 'Timestamp', key: 'timestamp', width: 20 },
+        { header: 'User', key: 'user', width: 25 },
+        { header: 'Action', key: 'action', width: 15 },
+        { header: 'Module', key: 'module', width: 15 },
+        { header: 'Entity', key: 'entity', width: 25 },
+        { header: 'Details', key: 'details', width: 50 },
+        { header: 'IP Address', key: 'ip', width: 15 }
+      ];
+
+      logs.forEach(log => {
+        worksheet.addRow({
+          timestamp: log.timestamp,
+          user: log.user ? `${log.user.firstName} ${log.user.lastName}` : 'System',
+          action: log.action,
+          module: log.module,
+          entity: log.entityName,
+          details: log.details,
+          ip: log.ipAddress
+        });
+      });
+
+      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      res.setHeader('Content-Disposition', 'attachment; filename=audit-logs.xlsx');
+      await workbook.xlsx.write(res);
+      res.end();
+    } else {
+      res.json({ logs });
+    }
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to export audit logs' });
+  }
+});
+
+// -----------------------------------------------------------------------------
+// DASHBOARD & REPORTING ROUTES
+// -----------------------------------------------------------------------------
+
+app.get('/api/dashboard', authenticate, async (req, res) => {
+  try {
+    const now = new Date();
+    const startOfYear = new Date(now.getFullYear(), 0, 1);
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+
+    // Incidents summary
+    const [
+      totalIncidents,
+      openIncidents,
+      ytdIncidents,
+      mtdIncidents,
+      recordableIncidents
+    ] = await Promise.all([
+      Incident.countDocuments({ organization: req.organization._id }),
+      Incident.countDocuments({ organization: req.organization._id, status: { $nin: ['closed', 'draft'] } }),
+      Incident.countDocuments({ organization: req.organization._id, dateOccurred: { $gte: startOfYear } }),
+      Incident.countDocuments({ organization: req.organization._id, dateOccurred: { $gte: startOfMonth } }),
+      Incident.countDocuments({ organization: req.organization._id, oshaRecordable: true, dateOccurred: { $gte: startOfYear } })
+    ]);
+
+    // Action items summary
+    const [
+      totalActionItems,
+      openActionItems,
+      overdueActionItems
+    ] = await Promise.all([
+      ActionItem.countDocuments({ organization: req.organization._id }),
+      ActionItem.countDocuments({ organization: req.organization._id, status: { $nin: ['completed', 'cancelled'] } }),
+      ActionItem.countDocuments({ 
+        organization: req.organization._id, 
+        status: { $nin: ['completed', 'cancelled'] },
+        dueDate: { $lt: now }
+      })
+    ]);
+
+    // Inspections summary (if feature enabled)
+    let inspectionsSummary = null;
+    const tier = req.organization.subscription.tier;
+    if (SUBSCRIPTION_TIERS[tier].auditModule) {
+      const [totalInspections, completedInspections, scheduledInspections] = await Promise.all([
+        Inspection.countDocuments({ organization: req.organization._id }),
+        Inspection.countDocuments({ organization: req.organization._id, status: 'completed', completedDate: { $gte: startOfMonth } }),
+        Inspection.countDocuments({ organization: req.organization._id, status: 'scheduled', scheduledDate: { $gte: now } })
+      ]);
+      inspectionsSummary = { totalInspections, completedInspections, scheduledInspections };
+    }
+
+    // Training summary (if feature enabled)
+    let trainingSummary = null;
+    if (SUBSCRIPTION_TIERS[tier].trainingModule) {
+      const [assignedTraining, overdueTraining, completedTraining] = await Promise.all([
+        TrainingRecord.countDocuments({ organization: req.organization._id, status: 'assigned' }),
+        TrainingRecord.countDocuments({ organization: req.organization._id, status: 'assigned', dueDate: { $lt: now } }),
+        TrainingRecord.countDocuments({ organization: req.organization._id, status: 'completed', completedDate: { $gte: startOfMonth } })
+      ]);
+      trainingSummary = { assignedTraining, overdueTraining, completedTraining };
+    }
+
+    // Recent activity
+    const recentIncidents = await Incident.find({ organization: req.organization._id })
+      .sort({ createdAt: -1 })
+      .limit(5)
+      .select('incidentNumber title type severity status dateOccurred');
+
+    const recentActionItems = await ActionItem.find({ organization: req.organization._id })
+      .sort({ createdAt: -1 })
+      .limit(5)
+      .select('actionNumber title priority status dueDate');
+
+    // Incident trends (last 12 months)
+    const twelveMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 11, 1);
+    const incidentTrends = await Incident.aggregate([
+      {
+        $match: {
+          organization: req.organization._id,
+          dateOccurred: { $gte: twelveMonthsAgo }
+        }
+      },
+      {
+        $group: {
+          _id: {
+            year: { $year: '$dateOccurred' },
+            month: { $month: '$dateOccurred' }
+          },
+          count: { $sum: 1 },
+          recordable: { $sum: { $cond: ['$oshaRecordable', 1, 0] } }
+        }
+      },
+      { $sort: { '_id.year': 1, '_id.month': 1 } }
+    ]);
+
+    // Incidents by type
+    const incidentsByType = await Incident.aggregate([
+      {
+        $match: {
+          organization: req.organization._id,
+          dateOccurred: { $gte: startOfYear }
+        }
+      },
+      {
+        $group: {
+          _id: '$type',
+          count: { $sum: 1 }
+        }
+      }
+    ]);
+
+    res.json({
+      incidents: {
+        total: totalIncidents,
+        open: openIncidents,
+        ytd: ytdIncidents,
+        mtd: mtdIncidents,
+        recordable: recordableIncidents
+      },
+      actionItems: {
+        total: totalActionItems,
+        open: openActionItems,
+        overdue: overdueActionItems
+      },
+      inspections: inspectionsSummary,
+      training: trainingSummary,
+      recentActivity: {
+        incidents: recentIncidents,
+        actionItems: recentActionItems
+      },
+      trends: {
+        incidents: incidentTrends,
+        byType: incidentsByType
+      },
+      subscription: {
+        tier: req.organization.subscription.tier,
+        features: SUBSCRIPTION_TIERS[req.organization.subscription.tier]
+      }
+    });
+  } catch (error) {
+    console.error('Dashboard error:', error);
+    res.status(500).json({ error: 'Failed to get dashboard data' });
+  }
+});
+
+// Reports endpoint
+app.get('/api/reports/:type', authenticate, requireFeature('advancedReporting'), async (req, res) => {
+  try {
+    const { type } = req.params;
+    const { startDate, endDate, format = 'json' } = req.query;
+
+    const dateFilter = {};
+    if (startDate) dateFilter.$gte = new Date(startDate);
+    if (endDate) dateFilter.$lte = new Date(endDate);
+
+    let reportData;
+
+    switch (type) {
+      case 'incidents':
+        reportData = await Incident.aggregate([
+          {
+            $match: {
+              organization: req.organization._id,
+              ...(Object.keys(dateFilter).length && { dateOccurred: dateFilter })
+            }
+          },
+          {
+            $group: {
+              _id: {
+                type: '$type',
+                severity: '$severity',
+                month: { $month: '$dateOccurred' },
+                year: { $year: '$dateOccurred' }
+              },
+              count: { $sum: 1 },
+              recordable: { $sum: { $cond: ['$oshaRecordable', 1, 0] } }
+            }
+          },
+          { $sort: { '_id.year': 1, '_id.month': 1 } }
+        ]);
+        break;
+
+      case 'action-items':
+        reportData = await ActionItem.aggregate([
+          {
+            $match: {
+              organization: req.organization._id,
+              ...(Object.keys(dateFilter).length && { createdAt: dateFilter })
+            }
+          },
+          {
+            $group: {
+              _id: {
+                status: '$status',
+                priority: '$priority',
+                type: '$type'
+              },
+              count: { $sum: 1 },
+              avgDaysToComplete: {
+                $avg: {
+                  $cond: [
+                    { $eq: ['$status', 'completed'] },
+                    { $divide: [{ $subtract: ['$completedDate', '$createdAt'] }, 86400000] },
+                    null
+                  ]
+                }
+              }
+            }
+          }
+        ]);
+        break;
+
+      case 'training':
+        reportData = await TrainingRecord.aggregate([
+          {
+            $match: {
+              organization: req.organization._id,
+              ...(Object.keys(dateFilter).length && { assignedDate: dateFilter })
+            }
+          },
+          {
+            $lookup: {
+              from: 'trainings',
+              localField: 'training',
+              foreignField: '_id',
+              as: 'trainingInfo'
+            }
+          },
+          { $unwind: '$trainingInfo' },
+          {
+            $group: {
+              _id: {
+                training: '$trainingInfo.title',
+                status: '$status'
+              },
+              count: { $sum: 1 },
+              avgScore: { $avg: '$score' }
+            }
+          }
+        ]);
+        break;
+
+      case 'inspections':
+        reportData = await Inspection.aggregate([
+          {
+            $match: {
+              organization: req.organization._id,
+              ...(Object.keys(dateFilter).length && { scheduledDate: dateFilter })
+            }
+          },
+          {
+            $group: {
+              _id: {
+                type: '$type',
+                status: '$status',
+                month: { $month: '$scheduledDate' },
+                year: { $year: '$scheduledDate' }
+              },
+              count: { $sum: 1 },
+              avgScore: { $avg: '$summary.score' },
+              totalFindings: { $sum: '$summary.failedItems' }
+            }
+          },
+          { $sort: { '_id.year': 1, '_id.month': 1 } }
+        ]);
+        break;
+
+      default:
+        return res.status(400).json({ error: 'Invalid report type' });
+    }
+
+    if (format === 'xlsx') {
+      const workbook = new ExcelJS.Workbook();
+      const worksheet = workbook.addWorksheet('Report');
+
+      if (reportData.length > 0) {
+        const flatData = reportData.map(item => ({
+          ...item._id,
+          ...Object.fromEntries(Object.entries(item).filter(([key]) => key !== '_id'))
+        }));
+
+        const columns = Object.keys(flatData[0]).map(key => ({
+          header: key.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase()),
+          key,
+          width: 15
+        }));
+
+        worksheet.columns = columns;
+        flatData.forEach(row => worksheet.addRow(row));
+      }
+
+      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      res.setHeader('Content-Disposition', `attachment; filename=${type}-report.xlsx`);
+      await workbook.xlsx.write(res);
+      res.end();
+    } else {
+      res.json({ report: reportData });
+    }
+
+    await createAuditLog(req, 'export', 'reports', 'Report', null, `${type} report`, `Generated ${type} report`);
+  } catch (error) {
+    console.error('Report error:', error);
+    res.status(500).json({ error: 'Failed to generate report' });
+  }
+});
+
+// -----------------------------------------------------------------------------
+// CUSTOM FORMS ROUTES (Enterprise only)
+// -----------------------------------------------------------------------------
+
+app.get('/api/custom-forms', authenticate, requireFeature('customForms'), async (req, res) => {
+  try {
+    const forms = await CustomForm.find({ organization: req.organization._id, isActive: true });
+    res.json({ forms });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to get custom forms' });
+  }
+});
+
+app.post('/api/custom-forms', authenticate, requireFeature('customForms'), authorize('admin'), async (req, res) => {
+  try {
+    const form = await CustomForm.create({
+      ...req.body,
+      organization: req.organization._id,
+      createdBy: req.user._id
+    });
+    res.status(201).json({ form });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to create custom form' });
+  }
+});
+
+app.get('/api/custom-forms/:id/submissions', authenticate, requireFeature('customForms'), async (req, res) => {
+  try {
+    const submissions = await CustomFormSubmission.find({
+      form: req.params.id,
+      organization: req.organization._id
+    })
+      .populate('submittedBy', 'firstName lastName')
+      .sort({ createdAt: -1 });
+    res.json({ submissions });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to get submissions' });
+  }
+});
+
+app.post('/api/custom-forms/:id/submit', authenticate, requireFeature('customForms'), async (req, res) => {
+  try {
+    const form = await CustomForm.findById(req.params.id);
+    if (!form) {
+      return res.status(404).json({ error: 'Form not found' });
+    }
+
+    const submission = await CustomFormSubmission.create({
+      organization: req.organization._id,
+      form: form._id,
+      submittedBy: req.user._id,
+      data: req.body.data,
+      status: form.workflow.approvalRequired ? 'pending_approval' : 'submitted'
+    });
+
+    res.status(201).json({ submission });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to submit form' });
+  }
+});
+
+// -----------------------------------------------------------------------------
+// RISK ASSESSMENT ROUTES
+// -----------------------------------------------------------------------------
+
+app.get('/api/risk-assessments', authenticate, requireFeature('riskAssessment'), async (req, res) => {
+  try {
+    const { status, type, page = 1, limit = 20 } = req.query;
+    const query = { organization: req.organization._id };
+    if (status) query.status = status;
+    if (type) query.type = type;
+
+    const total = await RiskAssessment.countDocuments(query);
+    const assessments = await RiskAssessment.find(query)
+      .populate('assessor', 'firstName lastName')
+      .sort({ createdAt: -1 })
+      .skip((page - 1) * limit)
+      .limit(parseInt(limit));
+
+    res.json({ assessments, pagination: { total, page: parseInt(page), limit: parseInt(limit), pages: Math.ceil(total / limit) } });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to get risk assessments' });
+  }
+});
+
+app.get('/api/risk-assessments/:id', authenticate, requireFeature('riskAssessment'), async (req, res) => {
+  try {
+    const assessment = await RiskAssessment.findOne({ _id: req.params.id, organization: req.organization._id })
+      .populate('assessor', 'firstName lastName')
+      .populate('reviewedBy', 'firstName lastName')
+      .populate('approvedBy', 'firstName lastName')
+      .populate('actionItems');
+    if (!assessment) return res.status(404).json({ error: 'Risk assessment not found' });
+    res.json({ assessment });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to get risk assessment' });
+  }
+});
+
+app.post('/api/risk-assessments', authenticate, requireFeature('riskAssessment'), async (req, res) => {
+  try {
+    const assessmentNumber = await generateNumber(RiskAssessment, 'RA', req.organization._id);
+    const assessment = await RiskAssessment.create({
+      ...req.body,
+      organization: req.organization._id,
+      assessmentNumber,
+      assessor: req.user._id
+    });
+    await createAuditLog(req, 'create', 'risk_assessment', 'RiskAssessment', assessment._id, assessment.assessmentNumber, 'Created risk assessment');
+    res.status(201).json({ assessment });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to create risk assessment' });
+  }
+});
+
+app.put('/api/risk-assessments/:id', authenticate, requireFeature('riskAssessment'), async (req, res) => {
+  try {
+    const assessment = await RiskAssessment.findOneAndUpdate(
+      { _id: req.params.id, organization: req.organization._id },
+      { ...req.body, updatedAt: new Date() },
+      { new: true }
+    );
+    if (!assessment) return res.status(404).json({ error: 'Risk assessment not found' });
+    await createAuditLog(req, 'update', 'risk_assessment', 'RiskAssessment', assessment._id, assessment.assessmentNumber, 'Updated risk assessment');
+    res.json({ assessment });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to update risk assessment' });
+  }
+});
+
+app.delete('/api/risk-assessments/:id', authenticate, requireFeature('riskAssessment'), authorize('admin', 'superadmin'), async (req, res) => {
+  try {
+    const assessment = await RiskAssessment.findOneAndDelete({ _id: req.params.id, organization: req.organization._id });
+    if (!assessment) return res.status(404).json({ error: 'Risk assessment not found' });
+    await createAuditLog(req, 'delete', 'risk_assessment', 'RiskAssessment', assessment._id, assessment.assessmentNumber, 'Deleted risk assessment');
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to delete risk assessment' });
+  }
+});
+
+// -----------------------------------------------------------------------------
+// JSA (JOB SAFETY ANALYSIS) ROUTES
+// -----------------------------------------------------------------------------
+
+app.get('/api/jsa', authenticate, requireFeature('jsaModule'), async (req, res) => {
+  try {
+    const { status, department, page = 1, limit = 20 } = req.query;
+    const query = { organization: req.organization._id };
+    if (status) query.status = status;
+    if (department) query.department = department;
+
+    const total = await JSA.countDocuments(query);
+    const jsas = await JSA.find(query)
+      .populate('createdBy', 'firstName lastName')
+      .sort({ createdAt: -1 })
+      .skip((page - 1) * limit)
+      .limit(parseInt(limit));
+
+    res.json({ jsas, pagination: { total, page: parseInt(page), limit: parseInt(limit), pages: Math.ceil(total / limit) } });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to get JSAs' });
+  }
+});
+
+app.get('/api/jsa/:id', authenticate, requireFeature('jsaModule'), async (req, res) => {
+  try {
+    const jsa = await JSA.findOne({ _id: req.params.id, organization: req.organization._id })
+      .populate('createdBy', 'firstName lastName')
+      .populate('reviewedBy', 'firstName lastName')
+      .populate('approvedBy', 'firstName lastName')
+      .populate('requiredTraining');
+    if (!jsa) return res.status(404).json({ error: 'JSA not found' });
+    res.json({ jsa });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to get JSA' });
+  }
+});
+
+app.post('/api/jsa', authenticate, requireFeature('jsaModule'), async (req, res) => {
+  try {
+    const jsaNumber = await generateNumber(JSA, 'JSA', req.organization._id);
+    const jsa = await JSA.create({
+      ...req.body,
+      organization: req.organization._id,
+      jsaNumber,
+      createdBy: req.user._id
+    });
+    await createAuditLog(req, 'create', 'jsa', 'JSA', jsa._id, jsa.jsaNumber, 'Created JSA');
+    res.status(201).json({ jsa });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to create JSA' });
+  }
+});
+
+app.put('/api/jsa/:id', authenticate, requireFeature('jsaModule'), async (req, res) => {
+  try {
+    const jsa = await JSA.findOneAndUpdate(
+      { _id: req.params.id, organization: req.organization._id },
+      { ...req.body, updatedAt: new Date() },
+      { new: true }
+    );
+    if (!jsa) return res.status(404).json({ error: 'JSA not found' });
+    await createAuditLog(req, 'update', 'jsa', 'JSA', jsa._id, jsa.jsaNumber, 'Updated JSA');
+    res.json({ jsa });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to update JSA' });
+  }
+});
+
+app.delete('/api/jsa/:id', authenticate, requireFeature('jsaModule'), authorize('admin', 'superadmin'), async (req, res) => {
+  try {
+    const jsa = await JSA.findOneAndDelete({ _id: req.params.id, organization: req.organization._id });
+    if (!jsa) return res.status(404).json({ error: 'JSA not found' });
+    await createAuditLog(req, 'delete', 'jsa', 'JSA', jsa._id, jsa.jsaNumber, 'Deleted JSA');
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to delete JSA' });
+  }
+});
+
+// -----------------------------------------------------------------------------
+// PERMIT TO WORK ROUTES
+// -----------------------------------------------------------------------------
+
+app.get('/api/permits', authenticate, requireFeature('permitToWork'), async (req, res) => {
+  try {
+    const { status, type, page = 1, limit = 20 } = req.query;
+    const query = { organization: req.organization._id };
+    if (status) query.status = status;
+    if (type) query.type = type;
+
+    const total = await PermitToWork.countDocuments(query);
+    const permits = await PermitToWork.find(query)
+      .populate('requestedBy', 'firstName lastName')
+      .populate('contractor', 'companyName')
+      .sort({ startDateTime: -1 })
+      .skip((page - 1) * limit)
+      .limit(parseInt(limit));
+
+    res.json({ permits, pagination: { total, page: parseInt(page), limit: parseInt(limit), pages: Math.ceil(total / limit) } });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to get permits' });
+  }
+});
+
+app.get('/api/permits/:id', authenticate, requireFeature('permitToWork'), async (req, res) => {
+  try {
+    const permit = await PermitToWork.findOne({ _id: req.params.id, organization: req.organization._id })
+      .populate('requestedBy', 'firstName lastName')
+      .populate('contractor')
+      .populate('approvals.user', 'firstName lastName')
+      .populate('relatedJSA')
+      .populate('relatedRiskAssessment');
+    if (!permit) return res.status(404).json({ error: 'Permit not found' });
+    res.json({ permit });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to get permit' });
+  }
+});
+
+app.post('/api/permits', authenticate, requireFeature('permitToWork'), async (req, res) => {
+  try {
+    const permitNumber = await generateNumber(PermitToWork, 'PTW', req.organization._id);
+    const permit = await PermitToWork.create({
+      ...req.body,
+      organization: req.organization._id,
+      permitNumber,
+      requestedBy: req.user._id
+    });
+    await createAuditLog(req, 'create', 'permits', 'PermitToWork', permit._id, permit.permitNumber, 'Created permit to work');
+    res.status(201).json({ permit });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to create permit' });
+  }
+});
+
+app.put('/api/permits/:id', authenticate, requireFeature('permitToWork'), async (req, res) => {
+  try {
+    const permit = await PermitToWork.findOneAndUpdate(
+      { _id: req.params.id, organization: req.organization._id },
+      { ...req.body, updatedAt: new Date() },
+      { new: true }
+    );
+    if (!permit) return res.status(404).json({ error: 'Permit not found' });
+    await createAuditLog(req, 'update', 'permits', 'PermitToWork', permit._id, permit.permitNumber, 'Updated permit');
+    res.json({ permit });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to update permit' });
+  }
+});
+
+app.post('/api/permits/:id/approve', authenticate, requireFeature('permitToWork'), async (req, res) => {
+  try {
+    const permit = await PermitToWork.findOne({ _id: req.params.id, organization: req.organization._id });
+    if (!permit) return res.status(404).json({ error: 'Permit not found' });
+    
+    permit.approvals.push({
+      role: req.body.role || req.user.role,
+      user: req.user._id,
+      status: 'approved',
+      date: new Date(),
+      comments: req.body.comments,
+      signature: req.body.signature
+    });
+
+    const allApproved = permit.approvals.every(a => a.status === 'approved');
+    if (allApproved && permit.status === 'pending_approval') {
+      permit.status = 'approved';
+    }
+    
+    await permit.save();
+    await createAuditLog(req, 'approve', 'permits', 'PermitToWork', permit._id, permit.permitNumber, 'Approved permit');
+    res.json({ permit });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to approve permit' });
+  }
+});
+
+app.post('/api/permits/:id/close', authenticate, requireFeature('permitToWork'), async (req, res) => {
+  try {
+    const permit = await PermitToWork.findOne({ _id: req.params.id, organization: req.organization._id });
+    if (!permit) return res.status(404).json({ error: 'Permit not found' });
+    
+    permit.status = 'completed';
+    permit.closeout = {
+      completedBy: req.user._id,
+      completedAt: new Date(),
+      workCompleted: req.body.workCompleted,
+      areaSecured: req.body.areaSecured,
+      isolationsRemoved: req.body.isolationsRemoved,
+      notes: req.body.notes,
+      signature: req.body.signature
+    };
+    
+    await permit.save();
+    await createAuditLog(req, 'update', 'permits', 'PermitToWork', permit._id, permit.permitNumber, 'Closed permit');
+    res.json({ permit });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to close permit' });
+  }
+});
+
+// -----------------------------------------------------------------------------
+// CONTRACTOR MANAGEMENT ROUTES
+// -----------------------------------------------------------------------------
+
+app.get('/api/contractors', authenticate, requireFeature('contractorManagement'), async (req, res) => {
+  try {
+    const { status, type, page = 1, limit = 20 } = req.query;
+    const query = { organization: req.organization._id };
+    if (status) query.status = status;
+    if (type) query.type = type;
+
+    const total = await Contractor.countDocuments(query);
+    const contractors = await Contractor.find(query)
+      .sort({ companyName: 1 })
+      .skip((page - 1) * limit)
+      .limit(parseInt(limit));
+
+    res.json({ contractors, pagination: { total, page: parseInt(page), limit: parseInt(limit), pages: Math.ceil(total / limit) } });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to get contractors' });
+  }
+});
+
+app.get('/api/contractors/:id', authenticate, requireFeature('contractorManagement'), async (req, res) => {
+  try {
+    const contractor = await Contractor.findOne({ _id: req.params.id, organization: req.organization._id })
+      .populate('incidents')
+      .populate('permits');
+    if (!contractor) return res.status(404).json({ error: 'Contractor not found' });
+    res.json({ contractor });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to get contractor' });
+  }
+});
+
+app.post('/api/contractors', authenticate, requireFeature('contractorManagement'), async (req, res) => {
+  try {
+    const contractorNumber = await generateNumber(Contractor, 'CON', req.organization._id);
+    const contractor = await Contractor.create({
+      ...req.body,
+      organization: req.organization._id,
+      contractorNumber
+    });
+    await createAuditLog(req, 'create', 'contractors', 'Contractor', contractor._id, contractor.companyName, 'Created contractor');
+    res.status(201).json({ contractor });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to create contractor' });
+  }
+});
+
+app.put('/api/contractors/:id', authenticate, requireFeature('contractorManagement'), async (req, res) => {
+  try {
+    const contractor = await Contractor.findOneAndUpdate(
+      { _id: req.params.id, organization: req.organization._id },
+      { ...req.body, updatedAt: new Date() },
+      { new: true }
+    );
+    if (!contractor) return res.status(404).json({ error: 'Contractor not found' });
+    await createAuditLog(req, 'update', 'contractors', 'Contractor', contractor._id, contractor.companyName, 'Updated contractor');
+    res.json({ contractor });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to update contractor' });
+  }
+});
+
+app.post('/api/contractors/:id/rate', authenticate, requireFeature('contractorManagement'), async (req, res) => {
+  try {
+    const contractor = await Contractor.findOne({ _id: req.params.id, organization: req.organization._id });
+    if (!contractor) return res.status(404).json({ error: 'Contractor not found' });
+    
+    contractor.performanceRatings.push({
+      date: new Date(),
+      ratedBy: req.user._id,
+      project: req.body.project,
+      safetyRating: req.body.safetyRating,
+      qualityRating: req.body.qualityRating,
+      timelinessRating: req.body.timelinessRating,
+      overallRating: req.body.overallRating,
+      comments: req.body.comments
+    });
+    
+    await contractor.save();
+    res.json({ contractor });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to rate contractor' });
+  }
+});
+
+// -----------------------------------------------------------------------------
+// CHEMICAL/SDS MANAGEMENT ROUTES
+// -----------------------------------------------------------------------------
+
+app.get('/api/chemicals', authenticate, requireFeature('chemicalManagement'), async (req, res) => {
+  try {
+    const { status, location, search, page = 1, limit = 20 } = req.query;
+    const query = { organization: req.organization._id };
+    if (status) query.status = status;
+    if (search) {
+      query.$or = [
+        { productName: { $regex: search, $options: 'i' } },
+        { manufacturer: { $regex: search, $options: 'i' } },
+        { casNumber: { $regex: search, $options: 'i' } }
+      ];
+    }
+
+    const total = await Chemical.countDocuments(query);
+    const chemicals = await Chemical.find(query)
+      .sort({ productName: 1 })
+      .skip((page - 1) * limit)
+      .limit(parseInt(limit));
+
+    res.json({ chemicals, pagination: { total, page: parseInt(page), limit: parseInt(limit), pages: Math.ceil(total / limit) } });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to get chemicals' });
+  }
+});
+
+app.get('/api/chemicals/:id', authenticate, requireFeature('chemicalManagement'), async (req, res) => {
+  try {
+    const chemical = await Chemical.findOne({ _id: req.params.id, organization: req.organization._id })
+      .populate('trainingRequired')
+      .populate('riskAssessment');
+    if (!chemical) return res.status(404).json({ error: 'Chemical not found' });
+    res.json({ chemical });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to get chemical' });
+  }
+});
+
+app.post('/api/chemicals', authenticate, requireFeature('chemicalManagement'), async (req, res) => {
+  try {
+    const chemicalId = await generateNumber(Chemical, 'CHEM', req.organization._id);
+    const chemical = await Chemical.create({
+      ...req.body,
+      organization: req.organization._id,
+      chemicalId,
+      createdBy: req.user._id
+    });
+    await createAuditLog(req, 'create', 'chemicals', 'Chemical', chemical._id, chemical.productName, 'Created chemical record');
+    res.status(201).json({ chemical });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to create chemical' });
+  }
+});
+
+app.put('/api/chemicals/:id', authenticate, requireFeature('chemicalManagement'), async (req, res) => {
+  try {
+    const chemical = await Chemical.findOneAndUpdate(
+      { _id: req.params.id, organization: req.organization._id },
+      { ...req.body, updatedAt: new Date() },
+      { new: true }
+    );
+    if (!chemical) return res.status(404).json({ error: 'Chemical not found' });
+    await createAuditLog(req, 'update', 'chemicals', 'Chemical', chemical._id, chemical.productName, 'Updated chemical record');
+    res.json({ chemical });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to update chemical' });
+  }
+});
+
+// -----------------------------------------------------------------------------
+// OCCUPATIONAL HEALTH ROUTES
+// -----------------------------------------------------------------------------
+
+app.get('/api/occupational-health', authenticate, requireFeature('occupationalHealth'), async (req, res) => {
+  try {
+    const { recordType, status, employeeId, page = 1, limit = 20 } = req.query;
+    const query = { organization: req.organization._id };
+    if (recordType) query.recordType = recordType;
+    if (status) query.status = status;
+    if (employeeId) query.employee = employeeId;
+
+    const total = await OccupationalHealth.countDocuments(query);
+    const records = await OccupationalHealth.find(query)
+      .populate('employee', 'firstName lastName employeeId')
+      .sort({ date: -1 })
+      .skip((page - 1) * limit)
+      .limit(parseInt(limit));
+
+    res.json({ records, pagination: { total, page: parseInt(page), limit: parseInt(limit), pages: Math.ceil(total / limit) } });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to get health records' });
+  }
+});
+
+app.post('/api/occupational-health', authenticate, requireFeature('occupationalHealth'), async (req, res) => {
+  try {
+    const record = await OccupationalHealth.create({
+      ...req.body,
+      organization: req.organization._id,
+      createdBy: req.user._id
+    });
+    await createAuditLog(req, 'create', 'occupational_health', 'OccupationalHealth', record._id, record.recordType, 'Created health record');
+    res.status(201).json({ record });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to create health record' });
+  }
+});
+
+app.put('/api/occupational-health/:id', authenticate, requireFeature('occupationalHealth'), async (req, res) => {
+  try {
+    const record = await OccupationalHealth.findOneAndUpdate(
+      { _id: req.params.id, organization: req.organization._id },
+      { ...req.body, updatedAt: new Date() },
+      { new: true }
+    );
+    if (!record) return res.status(404).json({ error: 'Health record not found' });
+    res.json({ record });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to update health record' });
+  }
+});
+
+// -----------------------------------------------------------------------------
+// EMERGENCY RESPONSE ROUTES
+// -----------------------------------------------------------------------------
+
+app.get('/api/emergency-plans', authenticate, requireFeature('emergencyResponse'), async (req, res) => {
+  try {
+    const { type, status, page = 1, limit = 20 } = req.query;
+    const query = { organization: req.organization._id };
+    if (type) query.type = type;
+    if (status) query.status = status;
+
+    const total = await EmergencyResponse.countDocuments(query);
+    const plans = await EmergencyResponse.find(query)
+      .populate('createdBy', 'firstName lastName')
+      .sort({ title: 1 })
+      .skip((page - 1) * limit)
+      .limit(parseInt(limit));
+
+    res.json({ plans, pagination: { total, page: parseInt(page), limit: parseInt(limit), pages: Math.ceil(total / limit) } });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to get emergency plans' });
+  }
+});
+
+app.get('/api/emergency-plans/:id', authenticate, requireFeature('emergencyResponse'), async (req, res) => {
+  try {
+    const plan = await EmergencyResponse.findOne({ _id: req.params.id, organization: req.organization._id })
+      .populate('createdBy', 'firstName lastName')
+      .populate('approvedBy', 'firstName lastName');
+    if (!plan) return res.status(404).json({ error: 'Emergency plan not found' });
+    res.json({ plan });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to get emergency plan' });
+  }
+});
+
+app.post('/api/emergency-plans', authenticate, requireFeature('emergencyResponse'), async (req, res) => {
+  try {
+    const planNumber = await generateNumber(EmergencyResponse, 'ERP', req.organization._id);
+    const plan = await EmergencyResponse.create({
+      ...req.body,
+      organization: req.organization._id,
+      planNumber,
+      createdBy: req.user._id
+    });
+    await createAuditLog(req, 'create', 'emergency_plans', 'EmergencyResponse', plan._id, plan.title, 'Created emergency plan');
+    res.status(201).json({ plan });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to create emergency plan' });
+  }
+});
+
+app.put('/api/emergency-plans/:id', authenticate, requireFeature('emergencyResponse'), async (req, res) => {
+  try {
+    const plan = await EmergencyResponse.findOneAndUpdate(
+      { _id: req.params.id, organization: req.organization._id },
+      { ...req.body, updatedAt: new Date() },
+      { new: true }
+    );
+    if (!plan) return res.status(404).json({ error: 'Emergency plan not found' });
+    await createAuditLog(req, 'update', 'emergency_plans', 'EmergencyResponse', plan._id, plan.title, 'Updated emergency plan');
+    res.json({ plan });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to update emergency plan' });
+  }
+});
+
+app.post('/api/emergency-plans/:id/drills', authenticate, requireFeature('emergencyResponse'), async (req, res) => {
+  try {
+    const plan = await EmergencyResponse.findOne({ _id: req.params.id, organization: req.organization._id });
+    if (!plan) return res.status(404).json({ error: 'Emergency plan not found' });
+    
+    plan.drills.push({
+      ...req.body,
+      date: new Date(),
+      conductedBy: req.user._id
+    });
+    
+    await plan.save();
+    await createAuditLog(req, 'update', 'emergency_plans', 'EmergencyResponse', plan._id, plan.title, 'Recorded emergency drill');
+    res.json({ plan });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to record drill' });
+  }
+});
+
+// -----------------------------------------------------------------------------
+// ERGONOMIC ASSESSMENT ROUTES
+// -----------------------------------------------------------------------------
+
+app.get('/api/ergonomic-assessments', authenticate, requireFeature('ergonomics'), async (req, res) => {
+  try {
+    const { status, type, page = 1, limit = 20 } = req.query;
+    const query = { organization: req.organization._id };
+    if (status) query.status = status;
+    if (type) query.type = type;
+
+    const total = await ErgonomicAssessment.countDocuments(query);
+    const assessments = await ErgonomicAssessment.find(query)
+      .populate('employee', 'firstName lastName')
+      .populate('assessor', 'firstName lastName')
+      .sort({ assessmentDate: -1 })
+      .skip((page - 1) * limit)
+      .limit(parseInt(limit));
+
+    res.json({ assessments, pagination: { total, page: parseInt(page), limit: parseInt(limit), pages: Math.ceil(total / limit) } });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to get ergonomic assessments' });
+  }
+});
+
+app.get('/api/ergonomic-assessments/:id', authenticate, requireFeature('ergonomics'), async (req, res) => {
+  try {
+    const assessment = await ErgonomicAssessment.findOne({ _id: req.params.id, organization: req.organization._id })
+      .populate('employee', 'firstName lastName email department')
+      .populate('assessor', 'firstName lastName')
+      .populate('actionItems');
+    if (!assessment) return res.status(404).json({ error: 'Assessment not found' });
+    res.json({ assessment });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to get assessment' });
+  }
+});
+
+app.post('/api/ergonomic-assessments', authenticate, requireFeature('ergonomics'), async (req, res) => {
+  try {
+    const assessmentNumber = await generateNumber(ErgonomicAssessment, 'ERGO', req.organization._id);
+    const assessment = await ErgonomicAssessment.create({
+      ...req.body,
+      organization: req.organization._id,
+      assessmentNumber,
+      assessor: req.user._id
+    });
+    await createAuditLog(req, 'create', 'ergonomics', 'ErgonomicAssessment', assessment._id, assessment.assessmentNumber, 'Created ergonomic assessment');
+    res.status(201).json({ assessment });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to create assessment' });
+  }
+});
+
+app.put('/api/ergonomic-assessments/:id', authenticate, requireFeature('ergonomics'), async (req, res) => {
+  try {
+    const assessment = await ErgonomicAssessment.findOneAndUpdate(
+      { _id: req.params.id, organization: req.organization._id },
+      { ...req.body, updatedAt: new Date() },
+      { new: true }
+    );
+    if (!assessment) return res.status(404).json({ error: 'Assessment not found' });
+    res.json({ assessment });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to update assessment' });
+  }
+});
+
+// -----------------------------------------------------------------------------
+// SCHEDULED REPORTS ROUTES
+// -----------------------------------------------------------------------------
+
+app.get('/api/scheduled-reports', authenticate, requireFeature('scheduledReports'), async (req, res) => {
+  try {
+    const reports = await ScheduledReport.find({ organization: req.organization._id })
+      .populate('createdBy', 'firstName lastName')
+      .sort({ name: 1 });
+    res.json({ reports });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to get scheduled reports' });
+  }
+});
+
+app.post('/api/scheduled-reports', authenticate, requireFeature('scheduledReports'), async (req, res) => {
+  try {
+    const report = await ScheduledReport.create({
+      ...req.body,
+      organization: req.organization._id,
+      createdBy: req.user._id
+    });
+    res.status(201).json({ report });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to create scheduled report' });
+  }
+});
+
+app.put('/api/scheduled-reports/:id', authenticate, requireFeature('scheduledReports'), async (req, res) => {
+  try {
+    const report = await ScheduledReport.findOneAndUpdate(
+      { _id: req.params.id, organization: req.organization._id },
+      { ...req.body, updatedAt: new Date() },
+      { new: true }
+    );
+    if (!report) return res.status(404).json({ error: 'Scheduled report not found' });
+    res.json({ report });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to update scheduled report' });
+  }
+});
+
+app.delete('/api/scheduled-reports/:id', authenticate, requireFeature('scheduledReports'), async (req, res) => {
+  try {
+    await ScheduledReport.findOneAndDelete({ _id: req.params.id, organization: req.organization._id });
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to delete scheduled report' });
+  }
+});
+
+// -----------------------------------------------------------------------------
+// ACTION ITEM TEMPLATES ROUTES
+// -----------------------------------------------------------------------------
+
+app.get('/api/action-item-templates', authenticate, async (req, res) => {
+  try {
+    const templates = await ActionItemTemplate.find({ organization: req.organization._id, isActive: true });
+    res.json({ templates });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to get templates' });
+  }
+});
+
+app.post('/api/action-item-templates', authenticate, authorize('admin', 'manager'), async (req, res) => {
+  try {
+    const template = await ActionItemTemplate.create({
+      ...req.body,
+      organization: req.organization._id,
+      createdBy: req.user._id
+    });
+    res.status(201).json({ template });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to create template' });
+  }
+});
+
+app.put('/api/action-item-templates/:id', authenticate, authorize('admin', 'manager'), async (req, res) => {
+  try {
+    const template = await ActionItemTemplate.findOneAndUpdate(
+      { _id: req.params.id, organization: req.organization._id },
+      req.body,
+      { new: true }
+    );
+    res.json({ template });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to update template' });
+  }
+});
+
+app.delete('/api/action-item-templates/:id', authenticate, authorize('admin'), async (req, res) => {
+  try {
+    await ActionItemTemplate.findOneAndUpdate(
+      { _id: req.params.id, organization: req.organization._id },
+      { isActive: false }
+    );
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to delete template' });
+  }
+});
+
+// -----------------------------------------------------------------------------
+// SUBSCRIPTION ROUTES
+// -----------------------------------------------------------------------------
+
+app.get('/api/subscription', authenticate, async (req, res) => {
+  try {
+    const tier = req.organization.subscription.tier;
+    const tierConfig = SUBSCRIPTION_TIERS[tier];
+
+    const [userCount, incidentCount, actionItemCount, inspectionCount, documentCount] = await Promise.all([
+      User.countDocuments({ organization: req.organization._id, isActive: true }),
+      Incident.countDocuments({ organization: req.organization._id }),
+      ActionItem.countDocuments({ organization: req.organization._id }),
+      Inspection.countDocuments({ organization: req.organization._id }),
+      Document.countDocuments({ organization: req.organization._id })
+    ]);
+
+    res.json({
+      subscription: req.organization.subscription,
+      tier: tierConfig,
+      usage: {
+        users: { current: userCount, limit: tierConfig.maxUsers },
+        incidents: { current: incidentCount, limit: tierConfig.maxIncidents },
+        actionItems: { current: actionItemCount, limit: tierConfig.maxActionItems },
+        inspections: { current: inspectionCount, limit: tierConfig.maxInspections },
+        documents: { current: documentCount, limit: tierConfig.maxDocuments }
+      },
+      availableTiers: SUBSCRIPTION_TIERS
+    });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to get subscription info' });
+  }
+});
+
+app.post('/api/subscription/upgrade', authenticate, authorize('admin', 'superadmin'), async (req, res) => {
+  try {
+    const { tier } = req.body;
+    
+    if (!SUBSCRIPTION_TIERS[tier]) {
+      return res.status(400).json({ error: 'Invalid subscription tier' });
+    }
+
+    req.organization.subscription.tier = tier;
+    req.organization.subscription.status = 'active';
+    req.organization.subscription.startDate = new Date();
+    await req.organization.save();
+
+    await createAuditLog(req, 'update', 'organization', 'Organization', req.organization._id, req.organization.name, `Upgraded subscription to ${tier}`);
+
+    res.json({ 
+      success: true,
+      subscription: req.organization.subscription,
+      tier: SUBSCRIPTION_TIERS[tier]
+    });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to upgrade subscription' });
+  }
+});
+
+// -----------------------------------------------------------------------------
+// FILE UPLOAD ROUTES
+// -----------------------------------------------------------------------------
+
+app.post('/api/upload', authenticate, upload.single('file'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'No file uploaded' });
+    }
+
+    res.json({
+      file: {
+        filename: req.file.filename,
+        originalName: req.file.originalname,
+        mimeType: req.file.mimetype,
+        size: req.file.size,
+        path: `/uploads/${req.file.filename}`
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to upload file' });
+  }
+});
+
+app.post('/api/upload/multiple', authenticate, upload.array('files', 10), async (req, res) => {
+  try {
+    if (!req.files || req.files.length === 0) {
+      return res.status(400).json({ error: 'No files uploaded' });
+    }
+
+    const files = req.files.map(file => ({
+      filename: file.filename,
+      originalName: file.originalname,
+      mimeType: file.mimetype,
+      size: file.size,
+      path: `/uploads/${file.filename}`
+    }));
+
+    res.json({ files });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to upload files' });
+  }
+});
+
+// Serve uploaded files
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+
+// =============================================================================
+// PLATFORM ADMIN ROUTES (Super Admin for managing all organizations)
+// =============================================================================
+
+// Platform admin authentication middleware
+const platformAdminAuth = async (req, res, next) => {
+  try {
+    const token = req.headers.authorization?.replace('Bearer ', '');
+    if (!token) return res.status(401).json({ error: 'No token provided' });
+    
+    const decoded = jwt.verify(token, CONFIG.JWT_SECRET);
+    
+    // Check if this is a platform admin
+    if (decoded.isPlatformAdmin) {
+      req.platformAdmin = decoded;
+      return next();
+    }
+    
+    // Also allow superadmin users from any org
+    const user = await User.findById(decoded.userId).populate('organization');
+    if (user && user.role === 'superadmin') {
+      req.platformAdmin = { ...decoded, user };
+      return next();
+    }
+    
+    return res.status(403).json({ error: 'Platform admin access required' });
+  } catch (error) {
+    res.status(401).json({ error: 'Invalid token' });
+  }
+};
+
+// Platform admin login
+app.post('/api/platform/login', async (req, res) => {
+  try {
+    const { email, password } = req.body;
+    
+    // Check for platform admin credentials (stored in env)
+    const platformAdminEmail = process.env.PLATFORM_ADMIN_EMAIL || 'admin@safetyfirst.io';
+    const platformAdminPassword = process.env.PLATFORM_ADMIN_PASSWORD || 'PlatformAdmin123!';
+    
+    if (email === platformAdminEmail && password === platformAdminPassword) {
+      const token = jwt.sign(
+        { isPlatformAdmin: true, email, role: 'platform_admin' },
+        CONFIG.JWT_SECRET,
+        { expiresIn: '24h' }
+      );
+      
+      return res.json({
+        token,
+        user: { email, role: 'platform_admin', firstName: 'Platform', lastName: 'Admin' }
+      });
+    }
+    
+    // Also check for superadmin users
+    const user = await User.findOne({ email: email.toLowerCase() });
+    if (user && user.role === 'superadmin') {
+      const validPassword = await bcrypt.compare(password, user.password);
+      if (validPassword) {
+        const token = jwt.sign(
+          { userId: user._id, organizationId: user.organization, role: user.role, isPlatformAdmin: true },
+          CONFIG.JWT_SECRET,
+          { expiresIn: '24h' }
+        );
+        return res.json({
+          token,
+          user: { email: user.email, role: 'platform_admin', firstName: user.firstName, lastName: user.lastName }
+        });
+      }
+    }
+    
+    res.status(401).json({ error: 'Invalid credentials' });
+  } catch (error) {
+    res.status(500).json({ error: 'Login failed' });
+  }
+});
+
+// Get all organizations (platform admin)
+app.get('/api/platform/organizations', platformAdminAuth, async (req, res) => {
+  try {
+    const { page = 1, limit = 20, search, status, tier } = req.query;
+    
+    const query = {};
+    if (search) {
+      query.$or = [
+        { name: { $regex: search, $options: 'i' } },
+        { email: { $regex: search, $options: 'i' } }
+      ];
+    }
+    if (status) query.isActive = status === 'active';
+    if (tier) query['subscription.tier'] = tier;
+    
+    const total = await Organization.countDocuments(query);
+    const organizations = await Organization.find(query)
+      .sort({ createdAt: -1 })
+      .skip((page - 1) * limit)
+      .limit(parseInt(limit));
+    
+    // Get user counts for each org
+    const orgsWithCounts = await Promise.all(organizations.map(async (org) => {
+      const userCount = await User.countDocuments({ organization: org._id });
+      const incidentCount = await Incident.countDocuments({ organization: org._id });
+      return {
+        ...org.toObject(),
+        userCount,
+        incidentCount
+      };
+    }));
+    
+    res.json({
+      organizations: orgsWithCounts,
+      pagination: { total, page: parseInt(page), pages: Math.ceil(total / limit) }
+    });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to get organizations' });
+  }
+});
+
+// Get single organization details (platform admin)
+app.get('/api/platform/organizations/:id', platformAdminAuth, async (req, res) => {
+  try {
+    const org = await Organization.findById(req.params.id);
+    if (!org) return res.status(404).json({ error: 'Organization not found' });
+    
+    const users = await User.find({ organization: org._id }).select('-password');
+    const stats = {
+      users: users.length,
+      incidents: await Incident.countDocuments({ organization: org._id }),
+      actionItems: await ActionItem.countDocuments({ organization: org._id }),
+      inspections: await Inspection.countDocuments({ organization: org._id })
+    };
+    
+    res.json({ organization: org, users, stats });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to get organization' });
+  }
+});
+
+// Create organization (platform admin)
+app.post('/api/platform/organizations', platformAdminAuth, async (req, res) => {
+  try {
+    const { name, email, phone, industry, tier, adminEmail, adminFirstName, adminLastName, adminPassword } = req.body;
+    
+    // Create organization
+    const org = await Organization.create({
+      name,
+      email,
+      phone,
+      industry,
+      subscription: {
+        tier: tier || 'starter',
+        status: 'active',
+        startDate: new Date(),
+        billingCycle: 'monthly'
+      },
+      settings: { naicsCode: '', timezone: 'America/New_York' }
+    });
+    
+    // Create admin user
+    const hashedPassword = await bcrypt.hash(adminPassword || 'TempPass123!', 12);
+    const admin = await User.create({
+      organization: org._id,
+      email: adminEmail.toLowerCase(),
+      password: hashedPassword,
+      firstName: adminFirstName,
+      lastName: adminLastName,
+      role: 'admin',
+      permissions: getDefaultPermissions('admin')
+    });
+    
+    res.status(201).json({ organization: org, admin: { id: admin._id, email: admin.email } });
+  } catch (error) {
+    console.error('Create org error:', error);
+    res.status(500).json({ error: 'Failed to create organization' });
+  }
+});
+
+// Update organization (platform admin)
+app.put('/api/platform/organizations/:id', platformAdminAuth, async (req, res) => {
+  try {
+    const org = await Organization.findByIdAndUpdate(
+      req.params.id,
+      { ...req.body, updatedAt: new Date() },
+      { new: true }
+    );
+    if (!org) return res.status(404).json({ error: 'Organization not found' });
+    res.json({ organization: org });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to update organization' });
+  }
+});
+
+// Delete/Deactivate organization (platform admin)
+app.delete('/api/platform/organizations/:id', platformAdminAuth, async (req, res) => {
+  try {
+    const org = await Organization.findByIdAndUpdate(
+      req.params.id,
+      { isActive: false, updatedAt: new Date() },
+      { new: true }
+    );
+    if (!org) return res.status(404).json({ error: 'Organization not found' });
+    
+    // Deactivate all users
+    await User.updateMany({ organization: org._id }, { isActive: false });
+    
+    res.json({ success: true, message: 'Organization deactivated' });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to delete organization' });
+  }
+});
+
+// Platform statistics
+app.get('/api/platform/stats', platformAdminAuth, async (req, res) => {
+  try {
+    const stats = {
+      organizations: {
+        total: await Organization.countDocuments(),
+        active: await Organization.countDocuments({ isActive: true }),
+        byTier: {
+          starter: await Organization.countDocuments({ 'subscription.tier': 'starter' }),
+          professional: await Organization.countDocuments({ 'subscription.tier': 'professional' }),
+          enterprise: await Organization.countDocuments({ 'subscription.tier': 'enterprise' })
+        }
+      },
+      users: {
+        total: await User.countDocuments(),
+        active: await User.countDocuments({ isActive: true })
+      },
+      incidents: {
+        total: await Incident.countDocuments(),
+        thisMonth: await Incident.countDocuments({
+          createdAt: { $gte: new Date(new Date().setDate(1)) }
+        })
+      },
+      revenue: {
+        mrr: await calculateMRR()
+      }
+    };
+    res.json({ stats });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to get stats' });
+  }
+});
+
+// Helper to calculate MRR
+async function calculateMRR() {
+  const orgs = await Organization.find({ isActive: true });
+  return orgs.reduce((sum, org) => {
+    const tier = SUBSCRIPTION_TIERS[org.subscription?.tier || 'starter'];
+    return sum + (tier?.price || 0);
+  }, 0);
+}
+
+// =============================================================================
+// USER INVITATION SYSTEM
+// =============================================================================
+
+// Send user invitation
+app.post('/api/users/invite', authenticate, authorize('admin', 'superadmin'), async (req, res) => {
+  try {
+    const { email, firstName, lastName, role, department, jobTitle } = req.body;
+    
+    // Check if user already exists
+    const existing = await User.findOne({ organization: req.organization._id, email: email.toLowerCase() });
+    if (existing) {
+      return res.status(400).json({ error: 'User already exists in this organization' });
+    }
+    
+    // Check user limit
+    const userCount = await User.countDocuments({ organization: req.organization._id });
+    const tier = SUBSCRIPTION_TIERS[req.organization.subscription?.tier || 'starter'];
+    if (tier.maxUsers !== -1 && userCount >= tier.maxUsers) {
+      return res.status(400).json({ error: 'User limit reached for your subscription tier' });
+    }
+    
+    // Generate invitation token
+    const inviteToken = crypto.randomBytes(32).toString('hex');
+    const tempPassword = crypto.randomBytes(8).toString('hex');
+    const hashedPassword = await bcrypt.hash(tempPassword, 12);
+    
+    // Create user with pending status
+    const user = await User.create({
+      organization: req.organization._id,
+      email: email.toLowerCase(),
+      password: hashedPassword,
+      firstName,
+      lastName,
+      role: role || 'user',
+      department,
+      jobTitle,
+      permissions: getDefaultPermissions(role || 'user'),
+      isActive: false,
+      verification: {
+        email: {
+          verified: false,
+          token: inviteToken,
+          expires: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) // 7 days
+        }
+      }
+    });
+    
+    // Send invitation email
+    const inviteUrl = `${CONFIG.APP_URL}/accept-invite?token=${inviteToken}`;
+    await sendEmail(
+      email,
+      `You've been invited to ${req.organization.name}`,
+      `<h1>Welcome to ${req.organization.name}</h1>
+       <p>${req.user.firstName} ${req.user.lastName} has invited you to join their EHS Management System.</p>
+       <p><strong>Your temporary password:</strong> ${tempPassword}</p>
+       <p><a href="${inviteUrl}" style="display:inline-block;padding:12px 24px;background:#3b82f6;color:white;text-decoration:none;border-radius:8px;">Accept Invitation</a></p>
+       <p>This invitation expires in 7 days.</p>`
+    );
+    
+    await createAuditLog(req, 'create', 'users', 'User', user._id, email, 'Invited user');
+    
+    res.status(201).json({ 
+      success: true, 
+      message: 'Invitation sent',
+      user: { id: user._id, email: user.email, firstName, lastName, role }
+    });
+  } catch (error) {
+    console.error('Invite error:', error);
+    res.status(500).json({ error: 'Failed to send invitation' });
+  }
+});
+
+// Accept invitation
+app.post('/api/users/accept-invite', async (req, res) => {
+  try {
+    const { token, password } = req.body;
+    
+    const user = await User.findOne({
+      'verification.email.token': token,
+      'verification.email.expires': { $gt: new Date() }
+    }).populate('organization');
+    
+    if (!user) {
+      return res.status(400).json({ error: 'Invalid or expired invitation' });
+    }
+    
+    // Update user
+    user.password = await bcrypt.hash(password, 12);
+    user.isActive = true;
+    user.verification.email.verified = true;
+    user.verification.email.token = undefined;
+    await user.save();
+    
+    // Generate login token
+    const authToken = jwt.sign(
+      { userId: user._id, organizationId: user.organization._id, role: user.role },
+      CONFIG.JWT_SECRET,
+      { expiresIn: CONFIG.JWT_EXPIRES_IN }
+    );
+    
+    res.json({
+      token: authToken,
+      user: {
+        id: user._id,
+        email: user.email,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        role: user.role,
+        organization: user.organization
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to accept invitation' });
+  }
+});
+
+// Resend invitation
+app.post('/api/users/:id/resend-invite', authenticate, authorize('admin', 'superadmin'), async (req, res) => {
+  try {
+    const user = await User.findOne({ _id: req.params.id, organization: req.organization._id });
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    if (user.isActive) return res.status(400).json({ error: 'User already active' });
+    
+    // Generate new token
+    const inviteToken = crypto.randomBytes(32).toString('hex');
+    const tempPassword = crypto.randomBytes(8).toString('hex');
+    user.password = await bcrypt.hash(tempPassword, 12);
+    user.verification.email.token = inviteToken;
+    user.verification.email.expires = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+    await user.save();
+    
+    // Send email
+    const inviteUrl = `${CONFIG.APP_URL}/accept-invite?token=${inviteToken}`;
+    await sendEmail(
+      user.email,
+      `Reminder: You've been invited to ${req.organization.name}`,
+      `<h1>Invitation Reminder</h1>
+       <p>You have a pending invitation to join ${req.organization.name}'s EHS Management System.</p>
+       <p><strong>Your new temporary password:</strong> ${tempPassword}</p>
+       <p><a href="${inviteUrl}" style="display:inline-block;padding:12px 24px;background:#3b82f6;color:white;text-decoration:none;border-radius:8px;">Accept Invitation</a></p>`
+    );
+    
+    res.json({ success: true, message: 'Invitation resent' });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to resend invitation' });
+  }
+});
+
+// Activate/Deactivate user
+app.post('/api/users/:id/toggle-status', authenticate, authorize('admin', 'superadmin'), async (req, res) => {
+  try {
+    if (req.params.id === req.user._id.toString()) {
+      return res.status(400).json({ error: 'Cannot change your own status' });
+    }
+    
+    const user = await User.findOne({ _id: req.params.id, organization: req.organization._id });
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    
+    user.isActive = !user.isActive;
+    user.updatedAt = new Date();
+    await user.save();
+    
+    await createAuditLog(req, 'update', 'users', 'User', user._id, user.email, 
+      user.isActive ? 'Activated user' : 'Deactivated user');
+    
+    res.json({ success: true, isActive: user.isActive });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to update user status' });
+  }
+});
+
+// Reset user password (admin)
+app.post('/api/users/:id/reset-password', authenticate, authorize('admin', 'superadmin'), async (req, res) => {
+  try {
+    const user = await User.findOne({ _id: req.params.id, organization: req.organization._id });
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    
+    const tempPassword = crypto.randomBytes(8).toString('hex');
+    user.password = await bcrypt.hash(tempPassword, 12);
+    await user.save();
+    
+    await sendEmail(
+      user.email,
+      'Password Reset',
+      `<h1>Password Reset</h1>
+       <p>Your password has been reset by an administrator.</p>
+       <p><strong>Your new temporary password:</strong> ${tempPassword}</p>
+       <p>Please login and change your password immediately.</p>`
+    );
+    
+    res.json({ success: true, message: 'Password reset email sent' });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to reset password' });
+  }
+});
+
+// =============================================================================
+// SERVE FRONTEND
+// =============================================================================
+
+app.use(express.static(path.join(__dirname, 'public')));
+
+app.get('*', (req, res) => {
+  if (!req.path.startsWith('/api/')) {
+    res.sendFile(path.join(__dirname, 'public', 'index.html'));
+  }
+});
+
+// =============================================================================
+// ERROR HANDLING
+// =============================================================================
+
+app.use((err, req, res, next) => {
+  console.error('Server error:', err);
+  res.status(500).json({ error: 'Internal server error', message: err.message });
+});
+
+// =============================================================================
+// DATABASE CONNECTION & SERVER START
+// =============================================================================
+
+mongoose.connect(CONFIG.MONGODB_URI)
+  .then(() => {
+    console.log('Connected to MongoDB');
+    
+    // Create uploads directory
+    if (!fs.existsSync('./uploads')) {
+      fs.mkdirSync('./uploads', { recursive: true });
+    }
+    
+    // Create public directory
+    if (!fs.existsSync('./public')) {
+      fs.mkdirSync('./public', { recursive: true });
+    }
+
+    app.listen(CONFIG.PORT, () => {
+      console.log(`EHS Management Server running on port ${CONFIG.PORT}`);
+      console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
+    });
+  })
+  .catch(err => {
+    console.error('MongoDB connection error:', err);
+    process.exit(1);
+  });
+
+module.exports = app;
