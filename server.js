@@ -5431,6 +5431,16 @@ app.post('/api/users/:id/reset-password', authenticate, authorize('admin', 'supe
 
 app.use(express.static(path.join(__dirname, 'public')));
 
+// Serve landing page for root
+app.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
+// Serve app for authenticated routes
+app.get(['/app', '/app/*', '/login', '/register', '/superadmin', '/superadmin/*'], (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'app.html'));
+});
+
 app.get('*', (req, res) => {
   if (!req.path.startsWith('/api/')) {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
