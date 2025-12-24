@@ -82,11 +82,20 @@
             ...opt, 
             headers: { 'Content-Type': 'application/json', ...(this.token && { Authorization: 'Bearer ' + this.token }), ...opt.headers } 
           });
-          if (r.status === 401) { this.setToken(null); window.location.reload(); return; }
-          const d = await r.json();
-          if (!r.ok) throw new Error(d.error || 'Request failed');
+          const d = await r.json().catch(() => ({ error: 'Invalid server response' }));
+          if (r.status === 401 && !ep.includes('/auth/')) { 
+            this.setToken(null); 
+            window.location.href = '/login'; 
+            throw new Error('Session expired'); 
+          }
+          if (!r.ok) throw new Error(d.error || d.message || 'Request failed');
           return d;
-        } catch (e) { throw e; }
+        } catch (e) { 
+          if (e.message === 'Failed to fetch') {
+            throw new Error('Unable to connect to server. Please check your connection.');
+          }
+          throw e; 
+        }
       },
       get: (ep) => api.req(ep),
       post: (ep, data) => api.req(ep, { method: 'POST', body: JSON.stringify(data) }),
@@ -390,9 +399,28 @@
         try {
           const endpoint = isSuperAdmin ? '/auth/superadmin/login' : '/auth/login';
           const data = await api.post(endpoint, { email, password });
-          api.setToken(data.token);
-          onLogin(data.user);
+          if (data && data.token) {
+            api.setToken(data.token);
+            onLogin(data.user);
+          } else {
+            throw new Error('Invalid response from server');
+          }
         } catch (err) { setError(err.message); } 
+        finally { setLoading(false); }
+      };
+
+      const handleDemoLogin = async () => {
+        setLoading(true);
+        setError('');
+        try {
+          const data = await api.post('/auth/login', { email: 'demo@safetyfirst.com', password: 'demo123' });
+          if (data && data.token) {
+            api.setToken(data.token);
+            onLogin(data.user);
+          } else {
+            throw new Error('Demo login failed');
+          }
+        } catch (err) { setError(err.message); }
         finally { setLoading(false); }
       };
 
