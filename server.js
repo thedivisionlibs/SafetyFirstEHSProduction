@@ -80,7 +80,13 @@ const SUBSCRIPTION_TIERS = {
     ergonomics: false,
     scheduledReports: false,
     ssoIntegration: false,
-    webhooks: false
+    webhooks: false,
+    moc: false,
+    suppliers: false,
+    assets: false,
+    environmental: false,
+    quality: false,
+    capa: false
   },
   professional: {
     name: 'Professional',
@@ -111,7 +117,13 @@ const SUBSCRIPTION_TIERS = {
     ergonomics: false,
     scheduledReports: true,
     ssoIntegration: false,
-    webhooks: true
+    webhooks: true,
+    moc: true,
+    suppliers: true,
+    assets: true,
+    environmental: false,
+    quality: true,
+    capa: true
   },
   enterprise: {
     name: 'Enterprise',
@@ -146,7 +158,13 @@ const SUBSCRIPTION_TIERS = {
     customBranding: true,
     dedicatedSupport: true,
     dataRetention: true,
-    gdprTools: true
+    gdprTools: true,
+    moc: true,
+    suppliers: true,
+    assets: true,
+    environmental: true,
+    quality: true,
+    capa: true
   }
 };
 
@@ -1518,6 +1536,190 @@ const EmergencyResponse = mongoose.model('EmergencyResponse', emergencyResponseS
 const ErgonomicAssessment = mongoose.model('ErgonomicAssessment', ergonomicAssessmentSchema);
 const ScheduledReport = mongoose.model('ScheduledReport', scheduledReportSchema);
 const ActionItemTemplate = mongoose.model('ActionItemTemplate', actionItemTemplateSchema);
+
+// Safety Observation Schema
+const observationSchema = new mongoose.Schema({
+  organization: { type: mongoose.Schema.Types.ObjectId, ref: 'Organization', required: true },
+  observationNumber: { type: String, unique: true },
+  description: { type: String, required: true },
+  type: { type: String, enum: ['unsafe_condition', 'unsafe_act', 'near_miss', 'positive', 'hazard'], default: 'unsafe_condition' },
+  priority: { type: String, enum: ['low', 'medium', 'high', 'critical'], default: 'medium' },
+  location: String,
+  department: String,
+  immediateAction: String,
+  reportedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  status: { type: String, enum: ['open', 'in_progress', 'closed'], default: 'open' },
+  assignedTo: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  rootCause: String,
+  correctiveAction: String,
+  closedDate: Date,
+  attachments: [{ filename: String, url: String }],
+  createdAt: { type: Date, default: Date.now },
+  updatedAt: { type: Date, default: Date.now }
+});
+
+// Management of Change Schema
+const mocSchema = new mongoose.Schema({
+  organization: { type: mongoose.Schema.Types.ObjectId, ref: 'Organization', required: true },
+  mocNumber: { type: String, unique: true },
+  title: { type: String, required: true },
+  changeType: { type: String, enum: ['process', 'equipment', 'personnel', 'procedure', 'material', 'software'], default: 'process' },
+  description: String,
+  justification: String,
+  priority: { type: String, enum: ['low', 'medium', 'high', 'critical'], default: 'medium' },
+  status: { type: String, enum: ['draft', 'pending_review', 'approved', 'in_progress', 'completed', 'rejected'], default: 'draft' },
+  requestedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  approvedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  approvalDate: Date,
+  implementationDate: Date,
+  riskAssessment: String,
+  affectedAreas: [String],
+  trainingRequired: Boolean,
+  documentationChanges: [String],
+  attachments: [{ filename: String, url: String }],
+  createdAt: { type: Date, default: Date.now },
+  updatedAt: { type: Date, default: Date.now }
+});
+
+// Supplier Schema
+const supplierSchema = new mongoose.Schema({
+  organization: { type: mongoose.Schema.Types.ObjectId, ref: 'Organization', required: true },
+  name: { type: String, required: true },
+  category: { type: String, enum: ['materials', 'equipment', 'services', 'ppe', 'chemicals'], default: 'materials' },
+  contactName: String,
+  email: String,
+  phone: String,
+  address: String,
+  status: { type: String, enum: ['pending', 'approved', 'probation', 'suspended'], default: 'pending' },
+  rating: { type: Number, min: 1, max: 5 },
+  certifications: String,
+  qualificationDate: Date,
+  lastAuditDate: Date,
+  nextAuditDate: Date,
+  notes: String,
+  attachments: [{ filename: String, url: String }],
+  createdAt: { type: Date, default: Date.now },
+  updatedAt: { type: Date, default: Date.now }
+});
+
+// Asset Schema
+const assetSchema = new mongoose.Schema({
+  organization: { type: mongoose.Schema.Types.ObjectId, ref: 'Organization', required: true },
+  assetNumber: { type: String, unique: true },
+  name: { type: String, required: true },
+  category: { type: String, enum: ['equipment', 'vehicle', 'tool', 'ppe', 'safety_device', 'instrument'], default: 'equipment' },
+  serialNumber: String,
+  manufacturer: String,
+  model: String,
+  location: String,
+  department: String,
+  purchaseDate: Date,
+  purchaseCost: Number,
+  warrantyExpiration: Date,
+  status: { type: String, enum: ['active', 'maintenance', 'retired', 'disposed'], default: 'active' },
+  lastInspection: Date,
+  nextInspection: Date,
+  inspectionFrequency: Number,
+  maintenanceHistory: [{ date: Date, type: String, description: String, cost: Number, performedBy: String }],
+  attachments: [{ filename: String, url: String }],
+  createdAt: { type: Date, default: Date.now },
+  updatedAt: { type: Date, default: Date.now }
+});
+
+// Environmental Record Schema
+const environmentalSchema = new mongoose.Schema({
+  organization: { type: mongoose.Schema.Types.ObjectId, ref: 'Organization', required: true },
+  recordNumber: { type: String, unique: true },
+  type: { type: String, enum: ['air', 'water', 'waste', 'noise', 'spill'], default: 'air' },
+  source: { type: String, required: true },
+  date: { type: Date, default: Date.now },
+  value: Number,
+  unit: String,
+  permitLimit: String,
+  status: { type: String, enum: ['compliant', 'non_compliant', 'exceedance', 'pending'], default: 'compliant' },
+  permitNumber: String,
+  monitoringPoint: String,
+  reportedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  notes: String,
+  correctiveAction: String,
+  attachments: [{ filename: String, url: String }],
+  createdAt: { type: Date, default: Date.now },
+  updatedAt: { type: Date, default: Date.now }
+});
+
+// Quality/NCR Schema
+const qualitySchema = new mongoose.Schema({
+  organization: { type: mongoose.Schema.Types.ObjectId, ref: 'Organization', required: true },
+  ncrNumber: { type: String, unique: true },
+  title: { type: String, required: true },
+  type: { type: String, enum: ['product', 'process', 'service', 'supplier', 'documentation'], default: 'product' },
+  severity: { type: String, enum: ['minor', 'major', 'critical'], default: 'minor' },
+  description: String,
+  source: String,
+  affectedProduct: String,
+  detectedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  status: { type: String, enum: ['open', 'investigating', 'containment', 'closed'], default: 'open' },
+  rootCause: String,
+  containmentAction: String,
+  dispositionDecision: { type: String, enum: ['use_as_is', 'rework', 'repair', 'scrap', 'return_to_supplier'] },
+  quantityAffected: Number,
+  costOfNonconformance: Number,
+  linkedCapa: { type: mongoose.Schema.Types.ObjectId, ref: 'CAPA' },
+  attachments: [{ filename: String, url: String }],
+  createdAt: { type: Date, default: Date.now },
+  updatedAt: { type: Date, default: Date.now }
+});
+
+// CAPA Schema
+const capaSchema = new mongoose.Schema({
+  organization: { type: mongoose.Schema.Types.ObjectId, ref: 'Organization', required: true },
+  capaNumber: { type: String, unique: true },
+  title: { type: String, required: true },
+  type: { type: String, enum: ['corrective', 'preventive'], default: 'corrective' },
+  source: { type: String, enum: ['ncr', 'audit', 'inspection', 'incident', 'customer_complaint'], default: 'ncr' },
+  sourceReference: String,
+  description: String,
+  rootCause: String,
+  action: String,
+  responsible: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  dueDate: Date,
+  completedDate: Date,
+  status: { type: String, enum: ['open', 'in_progress', 'pending_verification', 'closed'], default: 'open' },
+  effectiveness: { type: String, enum: ['effective', 'not_effective', ''] },
+  verifiedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  verificationDate: Date,
+  verificationNotes: String,
+  attachments: [{ filename: String, url: String }],
+  createdAt: { type: Date, default: Date.now },
+  updatedAt: { type: Date, default: Date.now }
+});
+
+// Meeting Schema
+const meetingSchema = new mongoose.Schema({
+  organization: { type: mongoose.Schema.Types.ObjectId, ref: 'Organization', required: true },
+  title: { type: String, required: true },
+  type: { type: String, enum: ['safety_committee', 'toolbox_talk', 'safety_stand_down', 'training_session', 'incident_review', 'management_review'], default: 'safety_committee' },
+  date: Date,
+  location: String,
+  facilitator: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  attendees: [{ user: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }, name: String, signature: Boolean }],
+  agenda: String,
+  minutes: String,
+  actionItems: [{ description: String, responsible: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }, dueDate: Date, status: String }],
+  status: { type: String, enum: ['scheduled', 'in_progress', 'completed', 'cancelled'], default: 'scheduled' },
+  attachments: [{ filename: String, url: String }],
+  createdAt: { type: Date, default: Date.now },
+  updatedAt: { type: Date, default: Date.now }
+});
+
+const Observation = mongoose.model('Observation', observationSchema);
+const MOC = mongoose.model('MOC', mocSchema);
+const Supplier = mongoose.model('Supplier', supplierSchema);
+const Asset = mongoose.model('Asset', assetSchema);
+const Environmental = mongoose.model('Environmental', environmentalSchema);
+const Quality = mongoose.model('Quality', qualitySchema);
+const CAPA = mongoose.model('CAPA', capaSchema);
+const Meeting = mongoose.model('Meeting', meetingSchema);
 
 // =============================================================================
 // UTILITY FUNCTIONS
@@ -5422,6 +5624,450 @@ app.post('/api/users/:id/reset-password', authenticate, authorize('admin', 'supe
     res.json({ success: true, message: 'Password reset email sent' });
   } catch (error) {
     res.status(500).json({ error: 'Failed to reset password' });
+  }
+});
+
+// -----------------------------------------------------------------------------
+// SAFETY OBSERVATIONS ROUTES
+// -----------------------------------------------------------------------------
+
+app.get('/api/observations', authenticate, async (req, res) => {
+  try {
+    const { page = 1, limit = 15, search } = req.query;
+    const query = { organization: req.organization._id };
+    if (search) query.$or = [
+      { description: { $regex: search, $options: 'i' } },
+      { observationNumber: { $regex: search, $options: 'i' } }
+    ];
+    const observations = await Observation.find(query)
+      .populate('reportedBy', 'firstName lastName')
+      .sort({ createdAt: -1 })
+      .skip((page - 1) * limit)
+      .limit(parseInt(limit));
+    const total = await Observation.countDocuments(query);
+    res.json({ observations, pagination: { page: parseInt(page), pages: Math.ceil(total / limit), total } });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to get observations' });
+  }
+});
+
+app.post('/api/observations', authenticate, async (req, res) => {
+  try {
+    const observationNumber = await generateNumber(Observation, 'OBS', req.organization._id);
+    const observation = await Observation.create({ ...req.body, organization: req.organization._id, reportedBy: req.user._id, observationNumber });
+    res.status(201).json({ observation });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to create observation' });
+  }
+});
+
+app.put('/api/observations/:id', authenticate, async (req, res) => {
+  try {
+    const observation = await Observation.findOneAndUpdate(
+      { _id: req.params.id, organization: req.organization._id },
+      { ...req.body, updatedAt: new Date() },
+      { new: true }
+    );
+    if (!observation) return res.status(404).json({ error: 'Observation not found' });
+    res.json({ observation });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to update observation' });
+  }
+});
+
+app.delete('/api/observations/:id', authenticate, async (req, res) => {
+  try {
+    await Observation.findOneAndDelete({ _id: req.params.id, organization: req.organization._id });
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to delete observation' });
+  }
+});
+
+// -----------------------------------------------------------------------------
+// MANAGEMENT OF CHANGE ROUTES
+// -----------------------------------------------------------------------------
+
+app.get('/api/moc', authenticate, requireFeature('moc'), async (req, res) => {
+  try {
+    const { page = 1, limit = 15, search } = req.query;
+    const query = { organization: req.organization._id };
+    if (search) query.$or = [
+      { title: { $regex: search, $options: 'i' } },
+      { mocNumber: { $regex: search, $options: 'i' } }
+    ];
+    const mocs = await MOC.find(query)
+      .populate('requestedBy', 'firstName lastName')
+      .sort({ createdAt: -1 })
+      .skip((page - 1) * limit)
+      .limit(parseInt(limit));
+    const total = await MOC.countDocuments(query);
+    res.json({ mocs, pagination: { page: parseInt(page), pages: Math.ceil(total / limit), total } });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to get MOCs' });
+  }
+});
+
+app.post('/api/moc', authenticate, requireFeature('moc'), async (req, res) => {
+  try {
+    const mocNumber = await generateNumber(MOC, 'MOC', req.organization._id);
+    const moc = await MOC.create({ ...req.body, organization: req.organization._id, requestedBy: req.user._id, mocNumber });
+    res.status(201).json({ moc });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to create MOC' });
+  }
+});
+
+app.put('/api/moc/:id', authenticate, requireFeature('moc'), async (req, res) => {
+  try {
+    const moc = await MOC.findOneAndUpdate(
+      { _id: req.params.id, organization: req.organization._id },
+      { ...req.body, updatedAt: new Date() },
+      { new: true }
+    );
+    if (!moc) return res.status(404).json({ error: 'MOC not found' });
+    res.json({ moc });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to update MOC' });
+  }
+});
+
+app.delete('/api/moc/:id', authenticate, requireFeature('moc'), async (req, res) => {
+  try {
+    await MOC.findOneAndDelete({ _id: req.params.id, organization: req.organization._id });
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to delete MOC' });
+  }
+});
+
+// -----------------------------------------------------------------------------
+// SUPPLIER MANAGEMENT ROUTES
+// -----------------------------------------------------------------------------
+
+app.get('/api/suppliers', authenticate, requireFeature('suppliers'), async (req, res) => {
+  try {
+    const { page = 1, limit = 15, search } = req.query;
+    const query = { organization: req.organization._id };
+    if (search) query.name = { $regex: search, $options: 'i' };
+    const suppliers = await Supplier.find(query)
+      .sort({ name: 1 })
+      .skip((page - 1) * limit)
+      .limit(parseInt(limit));
+    const total = await Supplier.countDocuments(query);
+    res.json({ suppliers, pagination: { page: parseInt(page), pages: Math.ceil(total / limit), total } });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to get suppliers' });
+  }
+});
+
+app.post('/api/suppliers', authenticate, requireFeature('suppliers'), async (req, res) => {
+  try {
+    const supplier = await Supplier.create({ ...req.body, organization: req.organization._id });
+    res.status(201).json({ supplier });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to create supplier' });
+  }
+});
+
+app.put('/api/suppliers/:id', authenticate, requireFeature('suppliers'), async (req, res) => {
+  try {
+    const supplier = await Supplier.findOneAndUpdate(
+      { _id: req.params.id, organization: req.organization._id },
+      { ...req.body, updatedAt: new Date() },
+      { new: true }
+    );
+    if (!supplier) return res.status(404).json({ error: 'Supplier not found' });
+    res.json({ supplier });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to update supplier' });
+  }
+});
+
+app.delete('/api/suppliers/:id', authenticate, requireFeature('suppliers'), async (req, res) => {
+  try {
+    await Supplier.findOneAndDelete({ _id: req.params.id, organization: req.organization._id });
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to delete supplier' });
+  }
+});
+
+// -----------------------------------------------------------------------------
+// ASSET MANAGEMENT ROUTES
+// -----------------------------------------------------------------------------
+
+app.get('/api/assets', authenticate, requireFeature('assets'), async (req, res) => {
+  try {
+    const { page = 1, limit = 15, search } = req.query;
+    const query = { organization: req.organization._id };
+    if (search) query.$or = [
+      { name: { $regex: search, $options: 'i' } },
+      { assetNumber: { $regex: search, $options: 'i' } }
+    ];
+    const assets = await Asset.find(query)
+      .sort({ name: 1 })
+      .skip((page - 1) * limit)
+      .limit(parseInt(limit));
+    const total = await Asset.countDocuments(query);
+    res.json({ assets, pagination: { page: parseInt(page), pages: Math.ceil(total / limit), total } });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to get assets' });
+  }
+});
+
+app.post('/api/assets', authenticate, requireFeature('assets'), async (req, res) => {
+  try {
+    const assetNumber = await generateNumber(Asset, 'AST', req.organization._id);
+    const asset = await Asset.create({ ...req.body, organization: req.organization._id, assetNumber });
+    res.status(201).json({ asset });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to create asset' });
+  }
+});
+
+app.put('/api/assets/:id', authenticate, requireFeature('assets'), async (req, res) => {
+  try {
+    const asset = await Asset.findOneAndUpdate(
+      { _id: req.params.id, organization: req.organization._id },
+      { ...req.body, updatedAt: new Date() },
+      { new: true }
+    );
+    if (!asset) return res.status(404).json({ error: 'Asset not found' });
+    res.json({ asset });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to update asset' });
+  }
+});
+
+app.delete('/api/assets/:id', authenticate, requireFeature('assets'), async (req, res) => {
+  try {
+    await Asset.findOneAndDelete({ _id: req.params.id, organization: req.organization._id });
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to delete asset' });
+  }
+});
+
+// -----------------------------------------------------------------------------
+// ENVIRONMENTAL MANAGEMENT ROUTES
+// -----------------------------------------------------------------------------
+
+app.get('/api/environmental', authenticate, requireFeature('environmental'), async (req, res) => {
+  try {
+    const { page = 1, limit = 15, search, type } = req.query;
+    const query = { organization: req.organization._id };
+    if (type) query.type = type;
+    if (search) query.source = { $regex: search, $options: 'i' };
+    const records = await Environmental.find(query)
+      .populate('reportedBy', 'firstName lastName')
+      .sort({ date: -1 })
+      .skip((page - 1) * limit)
+      .limit(parseInt(limit));
+    const total = await Environmental.countDocuments(query);
+    res.json({ records, pagination: { page: parseInt(page), pages: Math.ceil(total / limit), total } });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to get environmental records' });
+  }
+});
+
+app.post('/api/environmental', authenticate, requireFeature('environmental'), async (req, res) => {
+  try {
+    const recordNumber = await generateNumber(Environmental, 'ENV', req.organization._id);
+    const record = await Environmental.create({ ...req.body, organization: req.organization._id, reportedBy: req.user._id, recordNumber });
+    res.status(201).json({ record });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to create environmental record' });
+  }
+});
+
+app.put('/api/environmental/:id', authenticate, requireFeature('environmental'), async (req, res) => {
+  try {
+    const record = await Environmental.findOneAndUpdate(
+      { _id: req.params.id, organization: req.organization._id },
+      { ...req.body, updatedAt: new Date() },
+      { new: true }
+    );
+    if (!record) return res.status(404).json({ error: 'Record not found' });
+    res.json({ record });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to update environmental record' });
+  }
+});
+
+app.delete('/api/environmental/:id', authenticate, requireFeature('environmental'), async (req, res) => {
+  try {
+    await Environmental.findOneAndDelete({ _id: req.params.id, organization: req.organization._id });
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to delete environmental record' });
+  }
+});
+
+// -----------------------------------------------------------------------------
+// QUALITY/NCR ROUTES
+// -----------------------------------------------------------------------------
+
+app.get('/api/quality', authenticate, requireFeature('quality'), async (req, res) => {
+  try {
+    const { page = 1, limit = 15, search } = req.query;
+    const query = { organization: req.organization._id };
+    if (search) query.$or = [
+      { title: { $regex: search, $options: 'i' } },
+      { ncrNumber: { $regex: search, $options: 'i' } }
+    ];
+    const ncrs = await Quality.find(query)
+      .populate('detectedBy', 'firstName lastName')
+      .sort({ createdAt: -1 })
+      .skip((page - 1) * limit)
+      .limit(parseInt(limit));
+    const total = await Quality.countDocuments(query);
+    res.json({ ncrs, pagination: { page: parseInt(page), pages: Math.ceil(total / limit), total } });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to get NCRs' });
+  }
+});
+
+app.post('/api/quality', authenticate, requireFeature('quality'), async (req, res) => {
+  try {
+    const ncrNumber = await generateNumber(Quality, 'NCR', req.organization._id);
+    const ncr = await Quality.create({ ...req.body, organization: req.organization._id, detectedBy: req.user._id, ncrNumber });
+    res.status(201).json({ ncr });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to create NCR' });
+  }
+});
+
+app.put('/api/quality/:id', authenticate, requireFeature('quality'), async (req, res) => {
+  try {
+    const ncr = await Quality.findOneAndUpdate(
+      { _id: req.params.id, organization: req.organization._id },
+      { ...req.body, updatedAt: new Date() },
+      { new: true }
+    );
+    if (!ncr) return res.status(404).json({ error: 'NCR not found' });
+    res.json({ ncr });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to update NCR' });
+  }
+});
+
+app.delete('/api/quality/:id', authenticate, requireFeature('quality'), async (req, res) => {
+  try {
+    await Quality.findOneAndDelete({ _id: req.params.id, organization: req.organization._id });
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to delete NCR' });
+  }
+});
+
+// -----------------------------------------------------------------------------
+// CAPA ROUTES
+// -----------------------------------------------------------------------------
+
+app.get('/api/capa', authenticate, requireFeature('capa'), async (req, res) => {
+  try {
+    const { page = 1, limit = 15, search } = req.query;
+    const query = { organization: req.organization._id };
+    if (search) query.$or = [
+      { title: { $regex: search, $options: 'i' } },
+      { capaNumber: { $regex: search, $options: 'i' } }
+    ];
+    const capas = await CAPA.find(query)
+      .populate('responsible', 'firstName lastName')
+      .sort({ createdAt: -1 })
+      .skip((page - 1) * limit)
+      .limit(parseInt(limit));
+    const total = await CAPA.countDocuments(query);
+    res.json({ capas, pagination: { page: parseInt(page), pages: Math.ceil(total / limit), total } });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to get CAPAs' });
+  }
+});
+
+app.post('/api/capa', authenticate, requireFeature('capa'), async (req, res) => {
+  try {
+    const capaNumber = await generateNumber(CAPA, 'CAPA', req.organization._id);
+    const capa = await CAPA.create({ ...req.body, organization: req.organization._id, capaNumber });
+    res.status(201).json({ capa });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to create CAPA' });
+  }
+});
+
+app.put('/api/capa/:id', authenticate, requireFeature('capa'), async (req, res) => {
+  try {
+    const capa = await CAPA.findOneAndUpdate(
+      { _id: req.params.id, organization: req.organization._id },
+      { ...req.body, updatedAt: new Date() },
+      { new: true }
+    );
+    if (!capa) return res.status(404).json({ error: 'CAPA not found' });
+    res.json({ capa });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to update CAPA' });
+  }
+});
+
+app.delete('/api/capa/:id', authenticate, requireFeature('capa'), async (req, res) => {
+  try {
+    await CAPA.findOneAndDelete({ _id: req.params.id, organization: req.organization._id });
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to delete CAPA' });
+  }
+});
+
+// -----------------------------------------------------------------------------
+// MEETINGS ROUTES
+// -----------------------------------------------------------------------------
+
+app.get('/api/meetings', authenticate, async (req, res) => {
+  try {
+    const { page = 1, limit = 15, search } = req.query;
+    const query = { organization: req.organization._id };
+    if (search) query.title = { $regex: search, $options: 'i' };
+    const meetings = await Meeting.find(query)
+      .populate('facilitator', 'firstName lastName')
+      .sort({ date: -1 })
+      .skip((page - 1) * limit)
+      .limit(parseInt(limit));
+    const total = await Meeting.countDocuments(query);
+    res.json({ meetings, pagination: { page: parseInt(page), pages: Math.ceil(total / limit), total } });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to get meetings' });
+  }
+});
+
+app.post('/api/meetings', authenticate, async (req, res) => {
+  try {
+    const meeting = await Meeting.create({ ...req.body, organization: req.organization._id, facilitator: req.user._id });
+    res.status(201).json({ meeting });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to create meeting' });
+  }
+});
+
+app.put('/api/meetings/:id', authenticate, async (req, res) => {
+  try {
+    const meeting = await Meeting.findOneAndUpdate(
+      { _id: req.params.id, organization: req.organization._id },
+      { ...req.body, updatedAt: new Date() },
+      { new: true }
+    );
+    if (!meeting) return res.status(404).json({ error: 'Meeting not found' });
+    res.json({ meeting });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to update meeting' });
+  }
+});
+
+app.delete('/api/meetings/:id', authenticate, async (req, res) => {
+  try {
+    await Meeting.findOneAndDelete({ _id: req.params.id, organization: req.organization._id });
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to delete meeting' });
   }
 });
 
