@@ -1,0 +1,2812 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SafetyFirst EHS - Application</title>
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/prop-types@15/prop-types.min.js"></script>
+  <script src="https://unpkg.com/recharts@2.1.16/umd/Recharts.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            primary: { 50: '#eff6ff', 100: '#dbeafe', 200: '#bfdbfe', 300: '#93c5fd', 400: '#60a5fa', 500: '#3b82f6', 600: '#2563eb', 700: '#1d4ed8', 800: '#1e40af', 900: '#1e3a8a' },
+            success: { 50: '#f0fdf4', 100: '#dcfce7', 500: '#22c55e', 600: '#16a34a' },
+            warning: { 50: '#fffbeb', 100: '#fef3c7', 500: '#f59e0b', 600: '#d97706' },
+            danger: { 50: '#fef2f2', 100: '#fee2e2', 500: '#ef4444', 600: '#dc2626' }
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    * { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; box-sizing: border-box; }
+    .spin { animation: spin 1s linear infinite; }
+    @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+    .fade-in { animation: fadeIn 0.3s ease-out; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
+    .slide-up { animation: slideUp 0.4s ease-out; }
+    @keyframes slideUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+    .gradient-bg { background: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 50%, #06b6d4 100%); }
+    .gradient-card { background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%); }
+    .card-shadow { box-shadow: 0 1px 3px rgba(0,0,0,0.05), 0 1px 2px rgba(0,0,0,0.1); }
+    .card-shadow-lg { box-shadow: 0 10px 40px -10px rgba(0,0,0,0.1); }
+    .card-hover { transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
+    .card-hover:hover { transform: translateY(-2px); box-shadow: 0 20px 40px -15px rgba(0,0,0,0.15); }
+    ::-webkit-scrollbar { width: 8px; height: 8px; }
+    ::-webkit-scrollbar-track { background: #f1f5f9; border-radius: 4px; }
+    ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+    .sidebar-hidden { transform: translateX(-100%); }
+    @media (min-width: 1024px) { .sidebar-hidden { transform: translateX(0); } }
+    .tab-active { border-bottom: 2px solid #3b82f6; color: #1e40af; background: #eff6ff; }
+    input:focus, select:focus, textarea:focus { outline: none; box-shadow: 0 0 0 3px rgba(59,130,246,0.15); }
+    .btn-press:active { transform: scale(0.98); }
+    .risk-low { background: linear-gradient(135deg, #dcfce7, #bbf7d0); color: #166534; }
+    .risk-medium { background: linear-gradient(135deg, #fef3c7, #fde68a); color: #92400e; }
+    .risk-high { background: linear-gradient(135deg, #fed7aa, #fdba74); color: #9a3412; }
+    .risk-critical { background: linear-gradient(135deg, #fecaca, #fca5a5); color: #991b1b; }
+  </style>
+</head>
+<body class="bg-slate-50 antialiased">
+  <div id="root"></div>
+  <script type="text/babel">
+    const { useState, useEffect, createContext, useContext, useCallback, useMemo, useRef } = React;
+    const { LineChart, Line, AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, RadialBarChart, RadialBar } = Recharts;
+
+    // ========== CONFIGURATION ==========
+    const API = '/api';
+    const AuthContext = createContext(null);
+    const ToastContext = createContext(null);
+    const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4', '#84cc16'];
+    
+    const PRICING = {
+      starter: { name: 'Starter', price: 199, users: 10, color: 'blue' },
+      professional: { name: 'Professional', price: 499, users: 50, color: 'purple' },
+      enterprise: { name: 'Enterprise', price: 1299, users: 'Unlimited', color: 'amber' }
+    };
+
+    // ========== API HELPER ==========
+    const api = {
+      token: localStorage.getItem('ehs_token'),
+      setToken(t) { this.token = t; t ? localStorage.setItem('ehs_token', t) : localStorage.removeItem('ehs_token'); },
+      async req(ep, opt = {}) {
+        try {
+          const r = await fetch(API + ep, { 
+            ...opt, 
+            headers: { 'Content-Type': 'application/json', ...(this.token && { Authorization: 'Bearer ' + this.token }), ...opt.headers } 
+          });
+          if (r.status === 401) { this.setToken(null); window.location.reload(); return; }
+          const d = await r.json();
+          if (!r.ok) throw new Error(d.error || 'Request failed');
+          return d;
+        } catch (e) { throw e; }
+      },
+      get: (ep) => api.req(ep),
+      post: (ep, data) => api.req(ep, { method: 'POST', body: JSON.stringify(data) }),
+      put: (ep, data) => api.req(ep, { method: 'PUT', body: JSON.stringify(data) }),
+      del: (ep) => api.req(ep, { method: 'DELETE' })
+    };
+
+    // ========== ICONS ==========
+    const Icons = {
+      Dashboard: () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 5a1 1 0 011-1h4a1 1 0 011 1v5a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM14 5a1 1 0 011-1h4a1 1 0 011 1v2a1 1 0 01-1 1h-4a1 1 0 01-1-1V5zM4 15a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1H5a1 1 0 01-1-1v-4zM14 12a1 1 0 011-1h4a1 1 0 011 1v7a1 1 0 01-1 1h-4a1 1 0 01-1-1v-7z" /></svg>,
+      Incident: () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>,
+      Action: () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" /></svg>,
+      Inspection: () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" /></svg>,
+      Training: () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" /></svg>,
+      Document: () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>,
+      OSHA: () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>,
+      Risk: () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>,
+      JSA: () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" /></svg>,
+      Permit: () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" /></svg>,
+      Contractor: () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" /></svg>,
+      Chemical: () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" /></svg>,
+      Health: () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" /></svg>,
+      Emergency: () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" /></svg>,
+      Ergo: () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>,
+      Reports: () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>,
+      Users: () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" /></svg>,
+      Settings: () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>,
+      Audit: () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>,
+      Bell: () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" /></svg>,
+      Plus: () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>,
+      Download: () => <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>,
+      Menu: () => <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" /></svg>,
+      X: () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>,
+      Logout: () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" /></svg>,
+      Shield: () => <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" /></svg>,
+      Check: () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>,
+      Search: () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>,
+      Filter: () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" /></svg>,
+      Eye: () => <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>,
+      Edit: () => <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>,
+      Trash: () => <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>,
+      Observation: () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>,
+      Environment: () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>,
+      MOC: () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" /></svg>,
+      Quality: () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z" /></svg>,
+      Asset: () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>,
+      Supplier: () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M9 17a2 2 0 11-4 0 2 2 0 014 0zM19 17a2 2 0 11-4 0 2 2 0 014 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M13 16V6a1 1 0 00-1-1H4a1 1 0 00-1 1v10a1 1 0 001 1h1m8-1a1 1 0 01-1 1H9m4-1V8a1 1 0 011-1h2.586a1 1 0 01.707.293l3.414 3.414a1 1 0 01.293.707V16a1 1 0 01-1 1h-1m-6-1a1 1 0 001 1h1M5 17a2 2 0 104 0m-4 0a2 2 0 114 0m6 0a2 2 0 104 0m-4 0a2 2 0 114 0" /></svg>,
+      Meeting: () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" /></svg>,
+      CAPA: () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" /></svg>,
+    };
+
+    // ========== UI COMPONENTS ==========
+    const Spinner = ({ size = 'md', className = '' }) => {
+      const s = { sm: 'w-4 h-4 border-2', md: 'w-8 h-8 border-3', lg: 'w-12 h-12 border-4' };
+      return <div className={'spin ' + s[size] + ' border-primary-200 border-t-primary-600 rounded-full ' + className}></div>;
+    };
+
+    const Button = ({ children, variant = 'primary', size = 'md', loading, disabled, className = '', icon, ...props }) => {
+      const variants = {
+        primary: 'bg-gradient-to-r from-primary-600 to-primary-700 hover:from-primary-700 hover:to-primary-800 text-white shadow-lg shadow-primary-500/20',
+        secondary: 'bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 shadow-sm hover:shadow',
+        success: 'bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-white shadow-lg shadow-emerald-500/20',
+        danger: 'bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white shadow-lg shadow-red-500/20',
+        ghost: 'text-slate-600 hover:bg-slate-100 hover:text-slate-900',
+        outline: 'border-2 border-primary-500 text-primary-600 hover:bg-primary-50'
+      };
+      const sizes = { sm: 'px-3 py-1.5 text-xs', md: 'px-4 py-2.5 text-sm', lg: 'px-6 py-3 text-base' };
+      return (
+        <button 
+          className={variants[variant] + ' ' + sizes[size] + ' rounded-xl font-semibold transition-all duration-200 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed btn-press ' + className} 
+          disabled={loading || disabled} 
+          {...props}
+        >
+          {loading ? <Spinner size="sm" /> : icon}
+          {children}
+        </button>
+      );
+    };
+
+    const Input = ({ label, error, icon, helper, className = '', ...props }) => (
+      <div className={className}>
+        {label && <label className="block text-sm font-semibold text-slate-700 mb-1.5">{label}</label>}
+        <div className="relative">
+          {icon && <div className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">{icon}</div>}
+          <input 
+            className={'w-full ' + (icon ? 'pl-10' : 'px-4') + ' pr-4 py-2.5 bg-white border-2 rounded-xl transition-all ' + (error ? 'border-red-300 focus:border-red-500' : 'border-slate-200 focus:border-primary-500 hover:border-slate-300')} 
+            {...props} 
+          />
+        </div>
+        {helper && !error && <p className="mt-1 text-xs text-slate-500">{helper}</p>}
+        {error && <p className="mt-1 text-xs text-red-500 font-medium">{error}</p>}
+      </div>
+    );
+
+    const Select = ({ label, options, className = '', ...props }) => (
+      <div className={className}>
+        {label && <label className="block text-sm font-semibold text-slate-700 mb-1.5">{label}</label>}
+        <select className="w-full px-4 py-2.5 bg-white border-2 border-slate-200 rounded-xl focus:border-primary-500 hover:border-slate-300 transition-all appearance-none cursor-pointer" {...props}>
+          {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+        </select>
+      </div>
+    );
+
+    const Textarea = ({ label, className = '', ...props }) => (
+      <div className={className}>
+        {label && <label className="block text-sm font-semibold text-slate-700 mb-1.5">{label}</label>}
+        <textarea className="w-full px-4 py-2.5 bg-white border-2 border-slate-200 rounded-xl focus:border-primary-500 hover:border-slate-300 transition-all resize-none" {...props} />
+      </div>
+    );
+
+    const Checkbox = ({ label, checked, onChange, className = '' }) => (
+      <label className={'flex items-center gap-3 cursor-pointer group ' + className}>
+        <div className={'w-5 h-5 rounded-md border-2 flex items-center justify-center transition-all ' + (checked ? 'bg-primary-500 border-primary-500' : 'border-slate-300 group-hover:border-primary-400')}>
+          {checked && <Icons.Check />}
+        </div>
+        <span className="text-sm font-medium text-slate-700">{label}</span>
+      </label>
+    );
+
+    const Badge = ({ children, color = 'gray', size = 'sm' }) => {
+      const colors = {
+        gray: 'bg-slate-100 text-slate-700 border-slate-200',
+        blue: 'bg-blue-50 text-blue-700 border-blue-200',
+        green: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+        yellow: 'bg-amber-50 text-amber-700 border-amber-200',
+        red: 'bg-red-50 text-red-700 border-red-200',
+        purple: 'bg-purple-50 text-purple-700 border-purple-200',
+        orange: 'bg-orange-50 text-orange-700 border-orange-200',
+        cyan: 'bg-cyan-50 text-cyan-700 border-cyan-200',
+        pink: 'bg-pink-50 text-pink-700 border-pink-200'
+      };
+      const sizes = { sm: 'px-2.5 py-0.5 text-xs', md: 'px-3 py-1 text-sm' };
+      return <span className={colors[color] + ' ' + sizes[size] + ' font-semibold rounded-full border inline-flex items-center'}>{children}</span>;
+    };
+
+    const StatusBadge = ({ status }) => {
+      const map = {
+        draft: ['gray', 'Draft'], open: ['blue', 'Open'], investigating: ['orange', 'Investigating'],
+        pending_review: ['yellow', 'Pending Review'], closed: ['green', 'Closed'], reopened: ['red', 'Reopened'],
+        in_progress: ['blue', 'In Progress'], pending_verification: ['yellow', 'Pending Verification'],
+        completed: ['green', 'Completed'], overdue: ['red', 'Overdue'], cancelled: ['gray', 'Cancelled'],
+        scheduled: ['cyan', 'Scheduled'], assigned: ['orange', 'Assigned'], expired: ['red', 'Expired'],
+        active: ['green', 'Active'], approved: ['green', 'Approved'], pending: ['yellow', 'Pending'],
+        pending_approval: ['yellow', 'Pending Approval'], suspended: ['red', 'Suspended'], blacklisted: ['red', 'Blacklisted']
+      };
+      const [color, label] = map[status] || ['gray', status?.replace(/_/g, ' ') || 'Unknown'];
+      return <Badge color={color}>{label}</Badge>;
+    };
+
+    const RiskBadge = ({ level }) => {
+      const map = { low: 'risk-low', medium: 'risk-medium', high: 'risk-high', critical: 'risk-critical' };
+      return <span className={(map[level] || 'risk-low') + ' px-3 py-1 rounded-full text-xs font-bold uppercase'}>{level || 'N/A'}</span>;
+    };
+
+    const Card = ({ title, subtitle, children, actions, className = '', noPadding = false, icon }) => (
+      <div className={'bg-white rounded-2xl card-shadow border border-slate-100 overflow-hidden card-hover ' + className}>
+        {(title || actions) && (
+          <div className="px-5 py-4 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-gradient-to-r from-slate-50 to-white">
+            <div className="flex items-center gap-3">
+              {icon && <div className="w-10 h-10 rounded-xl bg-primary-100 text-primary-600 flex items-center justify-center">{icon}</div>}
+              <div>
+                {title && <h3 className="text-lg font-bold text-slate-800">{title}</h3>}
+                {subtitle && <p className="text-sm text-slate-500">{subtitle}</p>}
+              </div>
+            </div>
+            {actions && <div className="flex items-center gap-2 flex-wrap">{actions}</div>}
+          </div>
+        )}
+        <div className={noPadding ? '' : 'p-5'}>{children}</div>
+      </div>
+    );
+
+    const Modal = ({ isOpen, onClose, title, children, size = 'md', footer }) => {
+      if (!isOpen) return null;
+      const sizes = { sm: 'max-w-md', md: 'max-w-2xl', lg: 'max-w-4xl', xl: 'max-w-6xl', full: 'max-w-[95vw]' };
+      return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={onClose}>
+          <div className="absolute inset-0 bg-slate-900/70 backdrop-blur-sm"></div>
+          <div className={sizes[size] + ' relative bg-white rounded-2xl shadow-2xl w-full max-h-[90vh] overflow-hidden fade-in'} onClick={e => e.stopPropagation()}>
+            <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-gradient-to-r from-slate-50 to-white">
+              <h2 className="text-xl font-bold text-slate-800">{title}</h2>
+              <button onClick={onClose} className="p-2 hover:bg-slate-100 rounded-xl transition-colors text-slate-500 hover:text-slate-700"><Icons.X /></button>
+            </div>
+            <div className="p-6 overflow-y-auto max-h-[calc(90vh-140px)]">{children}</div>
+            {footer && <div className="px-6 py-4 border-t border-slate-100 bg-slate-50 flex justify-end gap-3">{footer}</div>}
+          </div>
+        </div>
+      );
+    };
+
+    const StatCard = ({ title, value, subtitle, icon, color = 'blue', trend, onClick }) => {
+      const colors = {
+        blue: 'from-primary-500 to-primary-600',
+        green: 'from-emerald-500 to-emerald-600',
+        yellow: 'from-amber-500 to-amber-600',
+        red: 'from-red-500 to-red-600',
+        purple: 'from-purple-500 to-purple-600',
+        cyan: 'from-cyan-500 to-cyan-600'
+      };
+      return (
+        <div className={'bg-white rounded-2xl card-shadow border border-slate-100 p-5 card-hover ' + (onClick ? 'cursor-pointer' : '')} onClick={onClick}>
+          <div className="flex items-start justify-between">
+            <div className="flex-1">
+              <p className="text-sm font-medium text-slate-500">{title}</p>
+              <p className="text-3xl font-bold text-slate-800 mt-1">{value}</p>
+              {subtitle && <p className="text-sm text-slate-500 mt-1">{subtitle}</p>}
+              {trend !== undefined && (
+                <div className={'flex items-center gap-1 mt-2 text-sm font-semibold ' + (trend >= 0 ? 'text-emerald-600' : 'text-red-600')}>
+                  <span>{trend >= 0 ? '↑' : '↓'}</span>
+                  <span>{Math.abs(trend)}% vs last month</span>
+                </div>
+              )}
+            </div>
+            <div className={'bg-gradient-to-br ' + colors[color] + ' p-3 rounded-xl text-white shadow-lg'}>{icon}</div>
+          </div>
+        </div>
+      );
+    };
+
+    const EmptyState = ({ icon, title, description, action }) => (
+      <div className="flex flex-col items-center justify-center py-16 px-4">
+        <div className="w-16 h-16 rounded-2xl bg-slate-100 flex items-center justify-center text-slate-400 mb-4">{icon || <Icons.Document />}</div>
+        <h3 className="text-lg font-semibold text-slate-800 mb-1">{title || 'No data found'}</h3>
+        {description && <p className="text-slate-500 text-center max-w-sm mb-4">{description}</p>}
+        {action}
+      </div>
+    );
+
+    const Table = ({ columns, data, loading, onRowClick, emptyMessage = 'No data found', emptyIcon }) => {
+      if (loading) return <div className="flex flex-col items-center justify-center py-16"><Spinner size="lg" /><p className="mt-4 text-slate-500">Loading...</p></div>;
+      if (!data?.length) return <EmptyState icon={emptyIcon} title={emptyMessage} />;
+      return (
+        <div className="overflow-x-auto">
+          <table className="w-full">
+            <thead>
+              <tr className="bg-gradient-to-r from-slate-50 to-slate-100 border-b border-slate-200">
+                {columns.map((c, i) => <th key={i} className="px-4 py-3.5 text-left text-xs font-bold text-slate-600 uppercase tracking-wider whitespace-nowrap">{c.header}</th>)}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {data.map((row, i) => (
+                <tr key={row._id || i} className={'transition-colors ' + (onRowClick ? 'cursor-pointer hover:bg-primary-50' : 'hover:bg-slate-50')} onClick={() => onRowClick?.(row)}>
+                  {columns.map((c, j) => <td key={j} className="px-4 py-4 text-sm text-slate-700 whitespace-nowrap">{c.render ? c.render(row) : row[c.accessor]}</td>)}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      );
+    };
+
+    const Pagination = ({ page, pages, total, onChange }) => {
+      if (pages <= 1) return null;
+      return (
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-4 py-4 border-t border-slate-100 bg-slate-50/50">
+          <span className="text-sm text-slate-500">Showing page {page} of {pages} {total && `(${total} total)`}</span>
+          <div className="flex gap-2">
+            <Button variant="secondary" size="sm" disabled={page === 1} onClick={() => onChange(page - 1)}>← Previous</Button>
+            <Button variant="secondary" size="sm" disabled={page === pages} onClick={() => onChange(page + 1)}>Next →</Button>
+          </div>
+        </div>
+      );
+    };
+
+    const Tabs = ({ tabs, active, onChange }) => (
+      <div className="flex gap-1 p-1 bg-slate-100 rounded-xl overflow-x-auto">
+        {tabs.map(t => (
+          <button
+            key={t.id}
+            onClick={() => onChange(t.id)}
+            className={'px-4 py-2 rounded-lg font-medium text-sm transition-all whitespace-nowrap ' + (active === t.id ? 'bg-white text-primary-700 shadow-sm' : 'text-slate-600 hover:text-slate-900 hover:bg-white/50')}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+    );
+
+    const Toast = ({ toasts, removeToast }) => (
+      <div className="fixed bottom-4 right-4 z-50 space-y-2 max-w-sm">
+        {toasts.map(t => (
+          <div key={t.id} className={'px-4 py-3 rounded-xl shadow-xl text-white flex items-center gap-3 fade-in ' + (t.type === 'success' ? 'bg-gradient-to-r from-emerald-500 to-emerald-600' : t.type === 'error' ? 'bg-gradient-to-r from-red-500 to-red-600' : 'bg-gradient-to-r from-primary-500 to-primary-600')}>
+            <span className="flex-1 font-medium">{t.message}</span>
+            <button onClick={() => removeToast(t.id)} className="p-1 hover:bg-white/20 rounded-lg transition-colors"><Icons.X /></button>
+          </div>
+        ))}
+      </div>
+    );
+
+    // ========== AUTH PAGES ==========
+    const LoginPage = ({ onLogin, isSuperAdmin = false }) => {
+      const [email, setEmail] = useState('');
+      const [password, setPassword] = useState('');
+      const [loading, setLoading] = useState(false);
+      const [error, setError] = useState('');
+
+      const handleSubmit = async (e) => {
+        e.preventDefault();
+        setLoading(true);
+        setError('');
+        try {
+          const endpoint = isSuperAdmin ? '/auth/superadmin/login' : '/auth/login';
+          const data = await api.post(endpoint, { email, password });
+          api.setToken(data.token);
+          onLogin(data.user);
+        } catch (err) { setError(err.message); } 
+        finally { setLoading(false); }
+      };
+
+      const bgClass = isSuperAdmin ? 'bg-gradient-to-br from-slate-800 to-slate-900' : 'gradient-bg';
+      const iconBg = isSuperAdmin ? 'from-red-500 to-red-600' : 'from-primary-500 to-primary-700';
+
+      return (
+        <div className={'min-h-screen flex items-center justify-center p-4 ' + bgClass}>
+          <div className="absolute inset-0 overflow-hidden pointer-events-none">
+            <div className="absolute -top-40 -right-40 w-96 h-96 bg-white/10 rounded-full blur-3xl"></div>
+            <div className="absolute -bottom-40 -left-40 w-96 h-96 bg-white/10 rounded-full blur-3xl"></div>
+            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] bg-white/5 rounded-full blur-3xl"></div>
+          </div>
+          <div className="relative bg-white rounded-3xl shadow-2xl w-full max-w-md p-8 slide-up">
+            <div className="text-center mb-8">
+              <div className={'w-20 h-20 bg-gradient-to-br rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-xl rotate-3 hover:rotate-0 transition-transform ' + iconBg + (isSuperAdmin ? ' shadow-red-500/30' : ' shadow-primary-500/30')}>
+                <Icons.Shield />
+              </div>
+              <h1 className="text-2xl font-bold text-slate-800">{isSuperAdmin ? 'SafetyFirst Admin' : 'SafetyFirst EHS'}</h1>
+              <p className="text-slate-500 mt-2">{isSuperAdmin ? 'Platform Administration Portal' : 'Enterprise Safety Management Platform'}</p>
+            </div>
+            {error && <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl mb-6 text-sm font-medium">{error}</div>}
+            <form onSubmit={handleSubmit} className="space-y-5">
+              <Input label="Email Address" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder={isSuperAdmin ? 'admin@safetyfirst.com' : 'you@company.com'} icon={<Icons.Users />} required />
+              <Input label="Password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Enter your password" required />
+              <Button type="submit" loading={loading} className="w-full" size="lg">Sign In</Button>
+            </form>
+            {!isSuperAdmin && (
+              <div className="mt-6 text-center">
+                <p className="text-sm text-slate-500">Don't have an account? <a href="/register" className="text-primary-600 font-semibold hover:underline">Start 14-day trial</a></p>
+              </div>
+            )}
+            {isSuperAdmin && (
+              <div className="mt-6 text-center">
+                <a href="/" className="text-sm text-slate-500 hover:text-slate-700">← Back to main site</a>
+              </div>
+            )}
+          </div>
+        </div>
+      );
+    };
+
+    const RegisterPage = ({ onRegister }) => {
+      const [form, setForm] = useState({ organizationName: '', firstName: '', lastName: '', email: '', phone: '', password: '', confirmPassword: '', industry: '' });
+      const [loading, setLoading] = useState(false);
+      const [error, setError] = useState('');
+      const handleChange = (f) => (e) => setForm(p => ({ ...p, [f]: e.target.value }));
+      
+      const handleSubmit = async (e) => {
+        e.preventDefault();
+        if (form.password !== form.confirmPassword) { setError('Passwords do not match'); return; }
+        if (form.password.length < 8) { setError('Password must be at least 8 characters'); return; }
+        setLoading(true); setError('');
+        try { 
+          const data = await api.post('/auth/register', form); 
+          api.setToken(data.token); 
+          onRegister(data.user); 
+        } catch (err) { setError(err.message); } 
+        finally { setLoading(false); }
+      };
+      
+      return (
+        <div className="min-h-screen gradient-bg flex items-center justify-center p-4">
+          <div className="relative bg-white rounded-3xl shadow-2xl w-full max-w-2xl p-8 slide-up my-8">
+            <div className="text-center mb-8">
+              <div className="w-16 h-16 bg-gradient-to-br from-primary-500 to-primary-700 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-xl"><Icons.Shield /></div>
+              <h1 className="text-2xl font-bold text-slate-800">Start Your Free Trial</h1>
+              <p className="text-slate-500 mt-2">14 days free • No credit card required • Cancel anytime</p>
+            </div>
+            {error && <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl mb-6 text-sm font-medium">{error}</div>}
+            <form onSubmit={handleSubmit} className="space-y-5">
+              <Input label="Organization Name" value={form.organizationName} onChange={handleChange('organizationName')} placeholder="Acme Safety Corp" required />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <Input label="First Name" value={form.firstName} onChange={handleChange('firstName')} placeholder="John" required />
+                <Input label="Last Name" value={form.lastName} onChange={handleChange('lastName')} placeholder="Smith" required />
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <Input label="Work Email" type="email" value={form.email} onChange={handleChange('email')} placeholder="john@company.com" required />
+                <Input label="Phone (Optional)" type="tel" value={form.phone} onChange={handleChange('phone')} placeholder="+1 (555) 000-0000" />
+              </div>
+              <Select label="Industry" value={form.industry} onChange={handleChange('industry')} options={[
+                { value: '', label: 'Select your industry' },
+                { value: 'manufacturing', label: '🏭 Manufacturing' },
+                { value: 'construction', label: '🏗️ Construction' },
+                { value: 'healthcare', label: '🏥 Healthcare' },
+                { value: 'logistics', label: '📦 Logistics & Distribution' },
+                { value: 'energy', label: '⚡ Energy & Utilities' },
+                { value: 'mining', label: '⛏️ Mining' },
+                { value: 'oil_gas', label: '🛢️ Oil & Gas' },
+                { value: 'other', label: 'Other' }
+              ]} />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <Input label="Password" type="password" value={form.password} onChange={handleChange('password')} placeholder="Min 8 characters" helper="Must be at least 8 characters" required />
+                <Input label="Confirm Password" type="password" value={form.confirmPassword} onChange={handleChange('confirmPassword')} placeholder="Confirm password" required />
+              </div>
+              <Button type="submit" loading={loading} className="w-full" size="lg">Create Account & Start Trial</Button>
+            </form>
+            <p className="mt-6 text-center text-sm text-slate-500">Already have an account? <a href="/login" className="text-primary-600 font-semibold hover:underline">Sign in</a></p>
+          </div>
+        </div>
+      );
+    };
+
+    // ========== SIDEBAR ==========
+    const Sidebar = ({ page, setPage, user, onLogout, mobileOpen, setMobileOpen }) => {
+      const tier = user?.organization?.subscription?.tier || 'starter';
+      const features = {
+        starter: { risk: false, jsa: false, permit: false, contractor: false, chemical: false, health: false, emergency: false, ergo: false, reports: false, moc: false, supplier: false, asset: false, environmental: false, quality: false, capa: false },
+        professional: { risk: true, jsa: true, permit: true, contractor: true, chemical: false, health: false, emergency: true, ergo: false, reports: true, moc: true, supplier: true, asset: true, environmental: false, quality: true, capa: true },
+        enterprise: { risk: true, jsa: true, permit: true, contractor: true, chemical: true, health: true, emergency: true, ergo: true, reports: true, moc: true, supplier: true, asset: true, environmental: true, quality: true, capa: true }
+      }[tier] || {};
+
+      const sections = [
+        { title: 'Overview', items: [{ id: 'dashboard', label: 'Dashboard', icon: Icons.Dashboard }] },
+        { title: 'Core Safety', items: [
+          { id: 'incidents', label: 'Incidents', icon: Icons.Incident },
+          { id: 'observations', label: 'Safety Observations', icon: Icons.Observation },
+          { id: 'actions', label: 'Action Items', icon: Icons.Action },
+          { id: 'inspections', label: 'Inspections', icon: Icons.Inspection },
+          { id: 'training', label: 'Training', icon: Icons.Training },
+        ]},
+        { title: 'Risk & Compliance', items: [
+          { id: 'risk', label: 'Risk Assessments', icon: Icons.Risk, req: 'risk' },
+          { id: 'jsa', label: 'Job Safety Analysis', icon: Icons.JSA, req: 'jsa' },
+          { id: 'permits', label: 'Permits to Work', icon: Icons.Permit, req: 'permit' },
+          { id: 'moc', label: 'Management of Change', icon: Icons.MOC, req: 'moc' },
+          { id: 'osha', label: 'OSHA Logs', icon: Icons.OSHA },
+        ]},
+        { title: 'Operations', items: [
+          { id: 'contractors', label: 'Contractors', icon: Icons.Contractor, req: 'contractor' },
+          { id: 'suppliers', label: 'Supplier Management', icon: Icons.Supplier, req: 'supplier' },
+          { id: 'assets', label: 'Asset Management', icon: Icons.Asset, req: 'asset' },
+          { id: 'chemicals', label: 'Chemical/SDS', icon: Icons.Chemical, req: 'chemical' },
+          { id: 'health', label: 'Occupational Health', icon: Icons.Health, req: 'health' },
+          { id: 'emergency', label: 'Emergency Plans', icon: Icons.Emergency, req: 'emergency' },
+          { id: 'ergonomics', label: 'Ergonomics', icon: Icons.Ergo, req: 'ergo' },
+        ]},
+        { title: 'Environment & Quality', items: [
+          { id: 'environmental', label: 'Environmental', icon: Icons.Environment, req: 'environmental' },
+          { id: 'quality', label: 'Quality/NCR', icon: Icons.Quality, req: 'quality' },
+          { id: 'capa', label: 'CAPA', icon: Icons.CAPA, req: 'capa' },
+        ]},
+        { title: 'Resources', items: [
+          { id: 'documents', label: 'Documents', icon: Icons.Document },
+          { id: 'meetings', label: 'Safety Meetings', icon: Icons.Meeting },
+          { id: 'reports', label: 'Reports', icon: Icons.Reports, req: 'reports' },
+        ]},
+        { title: 'Admin', items: [
+          { id: 'users', label: 'Users', icon: Icons.Users, role: ['admin', 'superadmin'] },
+          { id: 'audit', label: 'Audit Logs', icon: Icons.Audit, role: ['admin', 'superadmin'] },
+          { id: 'settings', label: 'Settings', icon: Icons.Settings, role: ['admin', 'superadmin'] },
+        ]},
+      ];
+
+      const filteredSections = sections
+        .map(s => ({ ...s, items: s.items.filter(i => (!i.req || features[i.req]) && (!i.role || i.role.includes(user?.role))) }))
+        .filter(s => s.items.length > 0);
+
+      const tierColors = { starter: 'blue', professional: 'purple', enterprise: 'yellow' };
+
+      return (
+        <>
+          {mobileOpen && <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40 lg:hidden" onClick={() => setMobileOpen(false)}></div>}
+          <aside className={'fixed lg:static inset-y-0 left-0 z-50 w-72 bg-slate-900 text-white flex flex-col transition-transform duration-300 lg:translate-x-0 ' + (mobileOpen ? 'translate-x-0' : 'sidebar-hidden')}>
+            <div className="p-5 border-b border-slate-800/50">
+              <div className="flex items-center gap-3">
+                <div className="w-11 h-11 bg-gradient-to-br from-primary-400 to-primary-600 rounded-xl flex items-center justify-center shadow-lg shadow-primary-500/30">
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" /></svg>
+                </div>
+                <div>
+                  <div className="font-bold text-lg">SafetyFirst</div>
+                  <Badge color={tierColors[tier]} size="sm">{tier.toUpperCase()}</Badge>
+                </div>
+              </div>
+            </div>
+            <nav className="flex-1 overflow-y-auto py-4 px-3">
+              {filteredSections.map((section, idx) => (
+                <div key={idx} className="mb-5">
+                  <p className="px-3 mb-2 text-xs font-bold text-slate-500 uppercase tracking-wider">{section.title}</p>
+                  {section.items.map(item => (
+                    <button
+                      key={item.id}
+                      onClick={() => { setPage(item.id); setMobileOpen(false); }}
+                      className={'w-full flex items-center gap-3 px-3 py-2.5 rounded-xl mb-1 transition-all font-medium ' + (page === item.id ? 'bg-gradient-to-r from-primary-600 to-primary-700 text-white shadow-lg shadow-primary-600/30' : 'text-slate-400 hover:bg-slate-800 hover:text-white')}
+                    >
+                      <item.icon /><span>{item.label}</span>
+                    </button>
+                  ))}
+                </div>
+              ))}
+            </nav>
+            <div className="p-4 border-t border-slate-800/50">
+              <div className="flex items-center gap-3 mb-4 p-2 rounded-xl bg-slate-800/50">
+                <div className="w-10 h-10 bg-gradient-to-br from-primary-400 to-primary-600 rounded-full flex items-center justify-center font-bold text-sm">{user?.firstName?.[0]}{user?.lastName?.[0]}</div>
+                <div className="flex-1 min-w-0">
+                  <p className="font-semibold truncate text-sm">{user?.firstName} {user?.lastName}</p>
+                  <p className="text-xs text-slate-400 truncate capitalize">{user?.role?.replace('_', ' ')}</p>
+                </div>
+              </div>
+              <button onClick={onLogout} className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-slate-800 hover:bg-red-600 rounded-xl transition-all font-medium text-sm">
+                <Icons.Logout /><span>Sign Out</span>
+              </button>
+            </div>
+          </aside>
+        </>
+      );
+    };
+
+    // ========== HEADER ==========
+    const Header = ({ user, setMobileOpen }) => {
+      const [showNotifs, setShowNotifs] = useState(false);
+      return (
+        <header className="bg-white/80 backdrop-blur-lg border-b border-slate-200/50 px-4 lg:px-6 py-4 sticky top-0 z-30">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <button onClick={() => setMobileOpen(true)} className="lg:hidden p-2 hover:bg-slate-100 rounded-xl transition-colors"><Icons.Menu /></button>
+              <div>
+                <h1 className="text-lg font-bold text-slate-800 truncate max-w-[200px] sm:max-w-none">{user?.organization?.name || 'Organization'}</h1>
+                <p className="text-sm text-slate-500 hidden sm:block">{new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="relative">
+                <button onClick={() => setShowNotifs(!showNotifs)} className="p-2.5 hover:bg-slate-100 rounded-xl relative transition-colors">
+                  <Icons.Bell />
+                  <span className="absolute top-1.5 right-1.5 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-white"></span>
+                </button>
+              </div>
+              <div className="hidden sm:flex items-center gap-3 pl-3 ml-2 border-l border-slate-200">
+                <div className="w-10 h-10 bg-gradient-to-br from-primary-500 to-primary-600 rounded-full flex items-center justify-center text-white font-bold shadow-lg shadow-primary-500/20">
+                  {user?.firstName?.[0]}{user?.lastName?.[0]}
+                </div>
+                <div className="hidden md:block">
+                  <p className="text-sm font-semibold text-slate-800">{user?.firstName} {user?.lastName}</p>
+                  <p className="text-xs text-slate-500 capitalize">{user?.role?.replace('_', ' ')}</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </header>
+      );
+    };
+
+    // ========== DASHBOARD ==========
+    const DashboardPage = () => {
+      const [data, setData] = useState(null);
+      const [loading, setLoading] = useState(true);
+      
+      useEffect(() => { 
+        api.get('/dashboard')
+          .then(setData)
+          .catch(console.error)
+          .finally(() => setLoading(false)); 
+      }, []);
+      
+      if (loading) return <div className="flex items-center justify-center h-96"><Spinner size="lg" /></div>;
+
+      const chartData = data?.trends?.incidents?.map(i => ({ month: ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][i._id?.month - 1] || 'N/A', incidents: i.count, recordable: i.recordable })) || [];
+
+      return (
+        <div className="space-y-6 slide-up">
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+            <div>
+              <h2 className="text-2xl lg:text-3xl font-bold text-slate-800">Safety Dashboard</h2>
+              <p className="text-slate-500 mt-1">Real-time overview of your safety performance</p>
+            </div>
+            <div className="flex gap-3">
+              <Button variant="secondary" icon={<Icons.Download />}>Export</Button>
+              <Button icon={<Icons.Plus />}>Quick Report</Button>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 lg:gap-6">
+            <StatCard title="Open Incidents" value={data?.incidents?.open || 0} subtitle={(data?.incidents?.ytd || 0) + ' total YTD'} icon={<Icons.Incident />} color="red" trend={-12} />
+            <StatCard title="Overdue Actions" value={data?.actionItems?.overdue || 0} subtitle={(data?.actionItems?.open || 0) + ' actions open'} icon={<Icons.Action />} color="yellow" />
+            <StatCard title="OSHA Recordables" value={data?.incidents?.recordable || 0} subtitle="Year to date" icon={<Icons.OSHA />} color="blue" />
+            <StatCard title="Training Compliance" value={data?.training?.completionRate ? (data.training.completionRate + '%') : '0%'} subtitle={(data?.training?.overdueTraining || 0) + ' overdue'} icon={<Icons.Training />} color="green" />
+          </div>
+
+          <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+            <Card title="Incident Trends" subtitle="Monthly incident overview" className="xl:col-span-2" icon={<Icons.Reports />}>
+              <ResponsiveContainer width="100%" height={300}>
+                <AreaChart data={chartData}>
+                  <defs>
+                    <linearGradient id="incidentGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3}/>
+                      <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/>
+                    </linearGradient>
+                    <linearGradient id="recordableGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#ef4444" stopOpacity={0.3}/>
+                      <stop offset="95%" stopColor="#ef4444" stopOpacity={0}/>
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
+                  <XAxis dataKey="month" stroke="#94a3b8" fontSize={12} tickLine={false} axisLine={false} />
+                  <YAxis stroke="#94a3b8" fontSize={12} tickLine={false} axisLine={false} />
+                  <Tooltip contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 40px rgba(0,0,0,0.15)', padding: '12px' }} />
+                  <Area type="monotone" dataKey="incidents" stroke="#3b82f6" strokeWidth={2} fillOpacity={1} fill="url(#incidentGrad)" name="Total Incidents" />
+                  <Area type="monotone" dataKey="recordable" stroke="#ef4444" strokeWidth={2} fillOpacity={1} fill="url(#recordableGrad)" name="Recordable" />
+                </AreaChart>
+              </ResponsiveContainer>
+            </Card>
+
+            <Card title="By Incident Type" subtitle="Distribution breakdown" icon={<Icons.Incident />}>
+              <ResponsiveContainer width="100%" height={300}>
+                <PieChart>
+                  <Pie 
+                    data={data?.trends?.byType || []} 
+                    cx="50%" cy="50%" 
+                    innerRadius={60} outerRadius={90} 
+                    paddingAngle={4} 
+                    dataKey="count"
+                    label={({ _id, percent }) => `${(_id || '').slice(0,6)}... ${(percent * 100).toFixed(0)}%`}
+                    labelLine={false}
+                  >
+                    {(data?.trends?.byType || []).map((e, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
+                  </Pie>
+                  <Tooltip formatter={(v, n, p) => [v, p.payload._id]} />
+                </PieChart>
+              </ResponsiveContainer>
+            </Card>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <Card title="Recent Incidents" subtitle="Latest reported incidents" noPadding icon={<Icons.Incident />}>
+              {data?.recentActivity?.incidents?.length ? (
+                <div className="divide-y divide-slate-100">
+                  {data.recentActivity.incidents.slice(0, 5).map(i => (
+                    <div key={i._id} className="flex items-center justify-between p-4 hover:bg-slate-50 transition-colors">
+                      <div className="flex items-center gap-4 min-w-0">
+                        <div className="w-11 h-11 bg-red-100 text-red-600 rounded-xl flex items-center justify-center flex-shrink-0"><Icons.Incident /></div>
+                        <div className="min-w-0">
+                          <p className="font-semibold text-slate-800 truncate">{i.incidentNumber}</p>
+                          <p className="text-sm text-slate-500 truncate">{i.title}</p>
+                        </div>
+                      </div>
+                      <StatusBadge status={i.status} />
+                    </div>
+                  ))}
+                </div>
+              ) : <EmptyState title="No recent incidents" description="Great job maintaining safety!" />}
+            </Card>
+
+            <Card title="Action Items Due" subtitle="Requires immediate attention" noPadding icon={<Icons.Action />}>
+              {data?.recentActivity?.actionItems?.filter(a => new Date(a.dueDate) < new Date() && a.status !== 'completed').length ? (
+                <div className="divide-y divide-slate-100">
+                  {data.recentActivity.actionItems.filter(a => new Date(a.dueDate) < new Date() && a.status !== 'completed').slice(0, 5).map(a => (
+                    <div key={a._id} className="flex items-center justify-between p-4 hover:bg-slate-50 transition-colors">
+                      <div className="flex items-center gap-4 min-w-0">
+                        <div className="w-11 h-11 bg-amber-100 text-amber-600 rounded-xl flex items-center justify-center flex-shrink-0"><Icons.Action /></div>
+                        <div className="min-w-0">
+                          <p className="font-semibold text-slate-800 truncate">{a.actionNumber}</p>
+                          <p className="text-sm text-slate-500 truncate">{a.title}</p>
+                        </div>
+                      </div>
+                      <span className="text-sm font-bold text-red-600 whitespace-nowrap">Due: {new Date(a.dueDate).toLocaleDateString()}</span>
+                    </div>
+                  ))}
+                </div>
+              ) : <EmptyState title="No overdue actions" description="All action items are on track!" icon={<Icons.Check />} />}
+            </Card>
+          </div>
+        </div>
+      );
+    };
+
+    // ========== GENERIC LIST PAGE ==========
+    const ListPage = ({ title, subtitle, endpoint, columns, ModalComp, createLabel, icon: PageIcon, emptyDesc }) => {
+      const [items, setItems] = useState([]);
+      const [loading, setLoading] = useState(true);
+      const [modal, setModal] = useState(false);
+      const [selected, setSelected] = useState(null);
+      const [pagination, setPagination] = useState({ page: 1, pages: 1, total: 0 });
+      const [search, setSearch] = useState('');
+      const { addToast } = useContext(ToastContext) || {};
+
+      const fetchData = useCallback(async () => {
+        setLoading(true);
+        try {
+          const data = await api.get(endpoint + '?page=' + pagination.page + '&limit=15' + (search ? '&search=' + search : ''));
+          const key = Object.keys(data).find(k => Array.isArray(data[k]));
+          setItems(data[key] || []);
+          if (data.pagination) setPagination(data.pagination);
+        } catch (e) { 
+          console.error(e);
+          if (e.message?.includes('Feature not available')) {
+            addToast?.('This feature requires a higher subscription tier', 'error');
+          }
+        } finally { setLoading(false); }
+      }, [endpoint, pagination.page, search]);
+
+      useEffect(() => { fetchData(); }, [fetchData]);
+
+      const handleSave = () => {
+        setModal(false);
+        setSelected(null);
+        fetchData();
+        addToast?.('Saved successfully!', 'success');
+      };
+
+      const handleDelete = async (id) => {
+        if (!confirm('Are you sure you want to delete this item?')) return;
+        try {
+          await api.del(endpoint + '/' + id);
+          fetchData();
+          addToast?.('Deleted successfully', 'success');
+        } catch (e) {
+          addToast?.('Failed to delete: ' + e.message, 'error');
+        }
+      };
+
+      return (
+        <div className="space-y-6 slide-up">
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+            <div>
+              <h2 className="text-2xl lg:text-3xl font-bold text-slate-800">{title}</h2>
+              {subtitle && <p className="text-slate-500 mt-1">{subtitle}</p>}
+            </div>
+            <div className="flex flex-col sm:flex-row gap-3">
+              <div className="relative">
+                <div className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"><Icons.Search /></div>
+                <input 
+                  type="text" 
+                  placeholder="Search..." 
+                  value={search}
+                  onChange={e => setSearch(e.target.value)}
+                  className="pl-10 pr-4 py-2.5 bg-white border-2 border-slate-200 rounded-xl focus:border-primary-500 w-full sm:w-64 transition-colors"
+                />
+              </div>
+              <Button onClick={() => { setSelected(null); setModal(true); }} icon={<Icons.Plus />}>{createLabel || 'Create New'}</Button>
+            </div>
+          </div>
+          
+          <Card noPadding icon={PageIcon && <PageIcon />}>
+            <Table 
+              columns={columns} 
+              data={items} 
+              loading={loading} 
+              onRowClick={r => { setSelected(r); setModal(true); }} 
+              emptyMessage={'No ' + title.toLowerCase() + ' found'}
+              emptyIcon={PageIcon && <PageIcon />}
+            />
+            <Pagination page={pagination.page} pages={pagination.pages} total={pagination.total} onChange={p => setPagination(prev => ({ ...prev, page: p }))} />
+          </Card>
+          
+          {ModalComp && (
+            <ModalComp 
+              isOpen={modal} 
+              onClose={() => { setModal(false); setSelected(null); }} 
+              item={selected} 
+              onSave={handleSave}
+              onDelete={selected?._id ? () => handleDelete(selected._id) : undefined}
+            />
+          )}
+        </div>
+      );
+    };
+
+    // ========== INCIDENT MODAL ==========
+    const IncidentModal = ({ isOpen, onClose, item, onSave, onDelete }) => {
+      const [form, setForm] = useState({});
+      const [loading, setLoading] = useState(false);
+      const [tab, setTab] = useState('details');
+      
+      useEffect(() => { 
+        if (item) {
+          setForm({ 
+            ...item, 
+            dateOccurred: item.dateOccurred ? new Date(item.dateOccurred).toISOString().split('T')[0] : '',
+            location: item.location || {}
+          }); 
+        } else {
+          setForm({ 
+            title: '', description: '', type: 'injury', severity: 'minor', status: 'draft', 
+            dateOccurred: new Date().toISOString().split('T')[0], 
+            oshaRecordable: false, oshaClassification: '',
+            location: { site: '', department: '', specificLocation: '' }
+          }); 
+        }
+        setTab('details');
+      }, [item, isOpen]);
+      
+      const handleSubmit = async () => { 
+        if (!form.title) return;
+        setLoading(true); 
+        try { 
+          item?._id ? await api.put('/incidents/' + item._id, form) : await api.post('/incidents', form); 
+          onSave(); 
+        } catch (e) { console.error(e); } 
+        finally { setLoading(false); } 
+      };
+
+      const types = [{ value: 'injury', label: 'Injury' }, { value: 'illness', label: 'Illness' }, { value: 'near_miss', label: 'Near Miss' }, { value: 'property_damage', label: 'Property Damage' }, { value: 'environmental', label: 'Environmental' }, { value: 'security', label: 'Security' }, { value: 'vehicle', label: 'Vehicle' }, { value: 'other', label: 'Other' }];
+      const severities = [{ value: 'minor', label: 'Minor' }, { value: 'moderate', label: 'Moderate' }, { value: 'serious', label: 'Serious' }, { value: 'severe', label: 'Severe' }, { value: 'catastrophic', label: 'Catastrophic' }];
+      const statuses = [{ value: 'draft', label: 'Draft' }, { value: 'open', label: 'Open' }, { value: 'investigating', label: 'Investigating' }, { value: 'pending_review', label: 'Pending Review' }, { value: 'closed', label: 'Closed' }];
+
+      return (
+        <Modal 
+          isOpen={isOpen} 
+          onClose={onClose} 
+          title={item ? 'Edit Incident ' + (item.incidentNumber || '') : 'Report New Incident'} 
+          size="lg"
+          footer={
+            <>
+              {item && onDelete && <Button variant="danger" onClick={onDelete} icon={<Icons.Trash />}>Delete</Button>}
+              <div className="flex-1" />
+              <Button variant="secondary" onClick={onClose}>Cancel</Button>
+              <Button onClick={handleSubmit} loading={loading}>{item ? 'Update Incident' : 'Create Incident'}</Button>
+            </>
+          }
+        >
+          <Tabs 
+            tabs={[{ id: 'details', label: 'Details' }, { id: 'location', label: 'Location' }, { id: 'osha', label: 'OSHA' }]} 
+            active={tab} 
+            onChange={setTab} 
+          />
+          
+          <div className="mt-6 space-y-5">
+            {tab === 'details' && (
+              <>
+                <Input label="Incident Title *" value={form.title || ''} onChange={e => setForm(p => ({ ...p, title: e.target.value }))} placeholder="Brief description of the incident" />
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <Select label="Type" value={form.type || 'injury'} onChange={e => setForm(p => ({ ...p, type: e.target.value }))} options={types} />
+                  <Select label="Severity" value={form.severity || 'minor'} onChange={e => setForm(p => ({ ...p, severity: e.target.value }))} options={severities} />
+                  <Select label="Status" value={form.status || 'draft'} onChange={e => setForm(p => ({ ...p, status: e.target.value }))} options={statuses} />
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <Input label="Date Occurred *" type="date" value={form.dateOccurred || ''} onChange={e => setForm(p => ({ ...p, dateOccurred: e.target.value }))} />
+                  <Input label="Time Occurred" type="time" value={form.timeOccurred || ''} onChange={e => setForm(p => ({ ...p, timeOccurred: e.target.value }))} />
+                </div>
+                <Textarea label="Description" value={form.description || ''} onChange={e => setForm(p => ({ ...p, description: e.target.value }))} rows={4} placeholder="Describe what happened, who was involved, and any immediate actions taken..." />
+              </>
+            )}
+            {tab === 'location' && (
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <Input label="Site/Facility" value={form.location?.site || ''} onChange={e => setForm(p => ({ ...p, location: { ...p.location, site: e.target.value } }))} placeholder="Main Plant" />
+                <Input label="Department" value={form.location?.department || ''} onChange={e => setForm(p => ({ ...p, location: { ...p.location, department: e.target.value } }))} placeholder="Operations" />
+                <Input label="Specific Location" value={form.location?.specificLocation || ''} onChange={e => setForm(p => ({ ...p, location: { ...p.location, specificLocation: e.target.value } }))} placeholder="Loading Dock A" />
+              </div>
+            )}
+            {tab === 'osha' && (
+              <div className="space-y-5">
+                <div className="flex items-center gap-4 p-4 bg-slate-50 rounded-xl border-2 border-slate-200">
+                  <input type="checkbox" id="oshaRecordable" checked={form.oshaRecordable || false} onChange={e => setForm(p => ({ ...p, oshaRecordable: e.target.checked }))} className="w-5 h-5 text-primary-600 rounded" />
+                  <label htmlFor="oshaRecordable" className="font-semibold text-slate-700 cursor-pointer">This is an OSHA Recordable Incident</label>
+                </div>
+                {form.oshaRecordable && (
+                  <Select label="OSHA Classification" value={form.oshaClassification || ''} onChange={e => setForm(p => ({ ...p, oshaClassification: e.target.value }))} options={[
+                    { value: '', label: 'Select Classification' },
+                    { value: 'death', label: 'Death' },
+                    { value: 'days_away', label: 'Days Away from Work' },
+                    { value: 'restricted_transfer', label: 'Job Transfer or Restriction' },
+                    { value: 'other_recordable', label: 'Other Recordable Case' }
+                  ]} />
+                )}
+              </div>
+            )}
+          </div>
+        </Modal>
+      );
+    };
+
+    // ========== ACTION ITEM MODAL ==========
+    const ActionModal = ({ isOpen, onClose, item, onSave, onDelete }) => {
+      const [form, setForm] = useState({});
+      const [loading, setLoading] = useState(false);
+      
+      useEffect(() => { 
+        if (item) {
+          setForm({ ...item, dueDate: item.dueDate ? new Date(item.dueDate).toISOString().split('T')[0] : '' }); 
+        } else {
+          setForm({ title: '', description: '', type: 'corrective', priority: 'medium', status: 'open', dueDate: '' }); 
+        }
+      }, [item, isOpen]);
+
+      const handleSubmit = async () => { 
+        if (!form.title) return;
+        setLoading(true); 
+        try { 
+          item?._id ? await api.put('/action-items/' + item._id, form) : await api.post('/action-items', form); 
+          onSave(); 
+        } catch (e) { console.error(e); } 
+        finally { setLoading(false); } 
+      };
+
+      return (
+        <Modal 
+          isOpen={isOpen} 
+          onClose={onClose} 
+          title={item ? 'Edit Action Item' : 'New Action Item'}
+          footer={
+            <>
+              {item && onDelete && <Button variant="danger" onClick={onDelete} icon={<Icons.Trash />}>Delete</Button>}
+              <div className="flex-1" />
+              <Button variant="secondary" onClick={onClose}>Cancel</Button>
+              <Button onClick={handleSubmit} loading={loading}>{item ? 'Update' : 'Create'}</Button>
+            </>
+          }
+        >
+          <div className="space-y-5">
+            <Input label="Title *" value={form.title || ''} onChange={e => setForm(p => ({ ...p, title: e.target.value }))} placeholder="Action item title" />
+            <Textarea label="Description" value={form.description || ''} onChange={e => setForm(p => ({ ...p, description: e.target.value }))} rows={3} placeholder="Detailed description of the action required..." />
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <Select label="Type" value={form.type || 'corrective'} onChange={e => setForm(p => ({ ...p, type: e.target.value }))} options={[
+                { value: 'corrective', label: 'Corrective' }, 
+                { value: 'preventive', label: 'Preventive' }, 
+                { value: 'improvement', label: 'Improvement' }
+              ]} />
+              <Select label="Priority" value={form.priority || 'medium'} onChange={e => setForm(p => ({ ...p, priority: e.target.value }))} options={[
+                { value: 'low', label: 'Low' }, 
+                { value: 'medium', label: 'Medium' }, 
+                { value: 'high', label: 'High' }, 
+                { value: 'critical', label: 'Critical' }
+              ]} />
+              <Select label="Status" value={form.status || 'open'} onChange={e => setForm(p => ({ ...p, status: e.target.value }))} options={[
+                { value: 'open', label: 'Open' }, 
+                { value: 'in_progress', label: 'In Progress' }, 
+                { value: 'pending_verification', label: 'Pending Verification' },
+                { value: 'completed', label: 'Completed' }
+              ]} />
+              <Input label="Due Date" type="date" value={form.dueDate || ''} onChange={e => setForm(p => ({ ...p, dueDate: e.target.value }))} />
+            </div>
+          </div>
+        </Modal>
+      );
+    };
+
+    // ========== RISK ASSESSMENT MODAL ==========
+    const RiskModal = ({ isOpen, onClose, item, onSave }) => {
+      const [form, setForm] = useState({});
+      const [loading, setLoading] = useState(false);
+      
+      useEffect(() => { 
+        setForm(item || { title: '', description: '', type: 'general', status: 'draft', location: '', department: '' }); 
+      }, [item, isOpen]);
+
+      const handleSubmit = async () => { 
+        setLoading(true); 
+        try { 
+          item?._id ? await api.put('/risk-assessments/' + item._id, form) : await api.post('/risk-assessments', form); 
+          onSave(); 
+        } catch (e) { console.error(e); } 
+        finally { setLoading(false); } 
+      };
+
+      return (
+        <Modal isOpen={isOpen} onClose={onClose} title={item ? 'Edit Risk Assessment' : 'New Risk Assessment'} size="lg"
+          footer={<><Button variant="secondary" onClick={onClose}>Cancel</Button><Button onClick={handleSubmit} loading={loading}>{item ? 'Update' : 'Create'}</Button></>}
+        >
+          <div className="space-y-5">
+            <Input label="Assessment Title *" value={form.title || ''} onChange={e => setForm(p => ({ ...p, title: e.target.value }))} />
+            <Textarea label="Description" value={form.description || ''} onChange={e => setForm(p => ({ ...p, description: e.target.value }))} rows={3} />
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <Select label="Type" value={form.type || 'general'} onChange={e => setForm(p => ({ ...p, type: e.target.value }))} options={[
+                { value: 'general', label: 'General' }, { value: 'job_task', label: 'Job/Task' }, { value: 'process', label: 'Process' },
+                { value: 'equipment', label: 'Equipment' }, { value: 'chemical', label: 'Chemical' }, { value: 'ergonomic', label: 'Ergonomic' }
+              ]} />
+              <Select label="Status" value={form.status || 'draft'} onChange={e => setForm(p => ({ ...p, status: e.target.value }))} options={[
+                { value: 'draft', label: 'Draft' }, { value: 'pending_review', label: 'Pending Review' }, 
+                { value: 'approved', label: 'Approved' }, { value: 'active', label: 'Active' }
+              ]} />
+              <Select label="Risk Level" value={form.overallRiskLevel || ''} onChange={e => setForm(p => ({ ...p, overallRiskLevel: e.target.value }))} options={[
+                { value: '', label: 'Select Level' }, { value: 'low', label: 'Low' }, { value: 'medium', label: 'Medium' }, 
+                { value: 'high', label: 'High' }, { value: 'critical', label: 'Critical' }
+              ]} />
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <Input label="Location" value={form.location || ''} onChange={e => setForm(p => ({ ...p, location: e.target.value }))} />
+              <Input label="Department" value={form.department || ''} onChange={e => setForm(p => ({ ...p, department: e.target.value }))} />
+            </div>
+          </div>
+        </Modal>
+      );
+    };
+
+    // ========== JSA MODAL ==========
+    const JSAModal = ({ isOpen, onClose, item, onSave }) => {
+      const [form, setForm] = useState({});
+      const [loading, setLoading] = useState(false);
+      
+      useEffect(() => { setForm(item || { title: '', jobDescription: '', department: '', location: '', status: 'draft' }); }, [item, isOpen]);
+
+      const handleSubmit = async () => { 
+        setLoading(true); 
+        try { item?._id ? await api.put('/jsa/' + item._id, form) : await api.post('/jsa', form); onSave(); } 
+        catch (e) { console.error(e); } finally { setLoading(false); } 
+      };
+
+      return (
+        <Modal isOpen={isOpen} onClose={onClose} title={item ? 'Edit JSA' : 'New Job Safety Analysis'} size="lg"
+          footer={<><Button variant="secondary" onClick={onClose}>Cancel</Button><Button onClick={handleSubmit} loading={loading}>{item ? 'Update' : 'Create'}</Button></>}
+        >
+          <div className="space-y-5">
+            <Input label="JSA Title *" value={form.title || ''} onChange={e => setForm(p => ({ ...p, title: e.target.value }))} placeholder="e.g., Forklift Operation" />
+            <Textarea label="Job Description" value={form.jobDescription || ''} onChange={e => setForm(p => ({ ...p, jobDescription: e.target.value }))} rows={3} />
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <Input label="Department" value={form.department || ''} onChange={e => setForm(p => ({ ...p, department: e.target.value }))} />
+              <Input label="Location" value={form.location || ''} onChange={e => setForm(p => ({ ...p, location: e.target.value }))} />
+              <Select label="Status" value={form.status || 'draft'} onChange={e => setForm(p => ({ ...p, status: e.target.value }))} options={[
+                { value: 'draft', label: 'Draft' }, { value: 'pending_review', label: 'Pending Review' }, 
+                { value: 'approved', label: 'Approved' }, { value: 'active', label: 'Active' }
+              ]} />
+            </div>
+          </div>
+        </Modal>
+      );
+    };
+
+    // ========== PERMIT MODAL ==========
+    const PermitModal = ({ isOpen, onClose, item, onSave }) => {
+      const [form, setForm] = useState({});
+      const [loading, setLoading] = useState(false);
+      
+      useEffect(() => { 
+        setForm(item || { 
+          title: '', type: 'general', status: 'draft', workDescription: '', 
+          startDateTime: '', endDateTime: '', priority: 'routine',
+          location: { site: '', area: '', specificLocation: '' }
+        }); 
+      }, [item, isOpen]);
+
+      const handleSubmit = async () => { 
+        setLoading(true); 
+        try { item?._id ? await api.put('/permits/' + item._id, form) : await api.post('/permits', form); onSave(); } 
+        catch (e) { console.error(e); } finally { setLoading(false); } 
+      };
+
+      return (
+        <Modal isOpen={isOpen} onClose={onClose} title={item ? 'Edit Permit' : 'New Permit to Work'} size="lg"
+          footer={<><Button variant="secondary" onClick={onClose}>Cancel</Button><Button onClick={handleSubmit} loading={loading}>{item ? 'Update' : 'Create'}</Button></>}
+        >
+          <div className="space-y-5">
+            <Input label="Permit Title *" value={form.title || ''} onChange={e => setForm(p => ({ ...p, title: e.target.value }))} />
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <Select label="Permit Type" value={form.type || 'general'} onChange={e => setForm(p => ({ ...p, type: e.target.value }))} options={[
+                { value: 'general', label: 'General' }, { value: 'hot_work', label: 'Hot Work' }, { value: 'confined_space', label: 'Confined Space' },
+                { value: 'electrical', label: 'Electrical' }, { value: 'excavation', label: 'Excavation' }, { value: 'height_work', label: 'Working at Height' },
+                { value: 'lockout_tagout', label: 'Lockout/Tagout' }, { value: 'chemical', label: 'Chemical' }
+              ]} />
+              <Select label="Priority" value={form.priority || 'routine'} onChange={e => setForm(p => ({ ...p, priority: e.target.value }))} options={[
+                { value: 'routine', label: 'Routine' }, { value: 'urgent', label: 'Urgent' }, { value: 'emergency', label: 'Emergency' }
+              ]} />
+              <Select label="Status" value={form.status || 'draft'} onChange={e => setForm(p => ({ ...p, status: e.target.value }))} options={[
+                { value: 'draft', label: 'Draft' }, { value: 'pending_approval', label: 'Pending Approval' }, 
+                { value: 'approved', label: 'Approved' }, { value: 'active', label: 'Active' }, { value: 'completed', label: 'Completed' }
+              ]} />
+            </div>
+            <Textarea label="Work Description" value={form.workDescription || ''} onChange={e => setForm(p => ({ ...p, workDescription: e.target.value }))} rows={3} />
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <Input label="Start Date/Time" type="datetime-local" value={form.startDateTime || ''} onChange={e => setForm(p => ({ ...p, startDateTime: e.target.value }))} />
+              <Input label="End Date/Time" type="datetime-local" value={form.endDateTime || ''} onChange={e => setForm(p => ({ ...p, endDateTime: e.target.value }))} />
+            </div>
+          </div>
+        </Modal>
+      );
+    };
+
+    // ========== CONTRACTOR MODAL ==========
+    const ContractorModal = ({ isOpen, onClose, item, onSave }) => {
+      const [form, setForm] = useState({});
+      const [loading, setLoading] = useState(false);
+      
+      useEffect(() => { 
+        setForm(item || { 
+          companyName: '', type: 'general', status: 'pending',
+          contact: { primaryName: '', primaryEmail: '', primaryPhone: '' }
+        }); 
+      }, [item, isOpen]);
+
+      const handleSubmit = async () => { 
+        setLoading(true); 
+        try { item?._id ? await api.put('/contractors/' + item._id, form) : await api.post('/contractors', form); onSave(); } 
+        catch (e) { console.error(e); } finally { setLoading(false); } 
+      };
+
+      return (
+        <Modal isOpen={isOpen} onClose={onClose} title={item ? 'Edit Contractor' : 'Add Contractor'} size="lg"
+          footer={<><Button variant="secondary" onClick={onClose}>Cancel</Button><Button onClick={handleSubmit} loading={loading}>{item ? 'Update' : 'Create'}</Button></>}
+        >
+          <div className="space-y-5">
+            <Input label="Company Name *" value={form.companyName || ''} onChange={e => setForm(p => ({ ...p, companyName: e.target.value }))} />
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <Select label="Type" value={form.type || 'general'} onChange={e => setForm(p => ({ ...p, type: e.target.value }))} options={[
+                { value: 'general', label: 'General' }, { value: 'electrical', label: 'Electrical' }, { value: 'mechanical', label: 'Mechanical' },
+                { value: 'construction', label: 'Construction' }, { value: 'cleaning', label: 'Cleaning' }, { value: 'security', label: 'Security' }
+              ]} />
+              <Select label="Status" value={form.status || 'pending'} onChange={e => setForm(p => ({ ...p, status: e.target.value }))} options={[
+                { value: 'pending', label: 'Pending' }, { value: 'approved', label: 'Approved' }, 
+                { value: 'suspended', label: 'Suspended' }, { value: 'expired', label: 'Expired' }
+              ]} />
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <Input label="Contact Name" value={form.contact?.primaryName || ''} onChange={e => setForm(p => ({ ...p, contact: { ...p.contact, primaryName: e.target.value } }))} />
+              <Input label="Contact Email" type="email" value={form.contact?.primaryEmail || ''} onChange={e => setForm(p => ({ ...p, contact: { ...p.contact, primaryEmail: e.target.value } }))} />
+              <Input label="Contact Phone" type="tel" value={form.contact?.primaryPhone || ''} onChange={e => setForm(p => ({ ...p, contact: { ...p.contact, primaryPhone: e.target.value } }))} />
+            </div>
+          </div>
+        </Modal>
+      );
+    };
+
+    // ========== CHEMICAL MODAL ==========
+    const ChemicalModal = ({ isOpen, onClose, item, onSave }) => {
+      const [form, setForm] = useState({});
+      const [loading, setLoading] = useState(false);
+      
+      useEffect(() => { setForm(item || { productName: '', manufacturer: '', casNumber: '', status: 'active' }); }, [item, isOpen]);
+
+      const handleSubmit = async () => { 
+        setLoading(true); 
+        try { item?._id ? await api.put('/chemicals/' + item._id, form) : await api.post('/chemicals', form); onSave(); } 
+        catch (e) { console.error(e); } finally { setLoading(false); } 
+      };
+
+      return (
+        <Modal isOpen={isOpen} onClose={onClose} title={item ? 'Edit Chemical' : 'Add Chemical'} size="lg"
+          footer={<><Button variant="secondary" onClick={onClose}>Cancel</Button><Button onClick={handleSubmit} loading={loading}>{item ? 'Update' : 'Create'}</Button></>}
+        >
+          <div className="space-y-5">
+            <Input label="Product Name *" value={form.productName || ''} onChange={e => setForm(p => ({ ...p, productName: e.target.value }))} />
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <Input label="Manufacturer" value={form.manufacturer || ''} onChange={e => setForm(p => ({ ...p, manufacturer: e.target.value }))} />
+              <Input label="CAS Number" value={form.casNumber || ''} onChange={e => setForm(p => ({ ...p, casNumber: e.target.value }))} />
+              <Select label="Status" value={form.status || 'active'} onChange={e => setForm(p => ({ ...p, status: e.target.value }))} options={[
+                { value: 'active', label: 'Active' }, { value: 'inactive', label: 'Inactive' }, { value: 'discontinued', label: 'Discontinued' }
+              ]} />
+            </div>
+            <Input label="Supplier" value={form.supplier || ''} onChange={e => setForm(p => ({ ...p, supplier: e.target.value }))} />
+          </div>
+        </Modal>
+      );
+    };
+
+    // ========== EMERGENCY PLAN MODAL ==========
+    const EmergencyModal = ({ isOpen, onClose, item, onSave }) => {
+      const [form, setForm] = useState({});
+      const [loading, setLoading] = useState(false);
+      
+      useEffect(() => { setForm(item || { title: '', type: 'general', status: 'draft', location: '', purpose: '' }); }, [item, isOpen]);
+
+      const handleSubmit = async () => { 
+        setLoading(true); 
+        try { item?._id ? await api.put('/emergency-plans/' + item._id, form) : await api.post('/emergency-plans', form); onSave(); } 
+        catch (e) { console.error(e); } finally { setLoading(false); } 
+      };
+
+      return (
+        <Modal isOpen={isOpen} onClose={onClose} title={item ? 'Edit Emergency Plan' : 'New Emergency Plan'} size="lg"
+          footer={<><Button variant="secondary" onClick={onClose}>Cancel</Button><Button onClick={handleSubmit} loading={loading}>{item ? 'Update' : 'Create'}</Button></>}
+        >
+          <div className="space-y-5">
+            <Input label="Plan Title *" value={form.title || ''} onChange={e => setForm(p => ({ ...p, title: e.target.value }))} />
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <Select label="Type" value={form.type || 'general'} onChange={e => setForm(p => ({ ...p, type: e.target.value }))} options={[
+                { value: 'general', label: 'General' }, { value: 'fire', label: 'Fire' }, { value: 'chemical_spill', label: 'Chemical Spill' },
+                { value: 'medical', label: 'Medical' }, { value: 'natural_disaster', label: 'Natural Disaster' }, { value: 'active_shooter', label: 'Active Shooter' },
+                { value: 'evacuation', label: 'Evacuation' }, { value: 'pandemic', label: 'Pandemic' }
+              ]} />
+              <Select label="Status" value={form.status || 'draft'} onChange={e => setForm(p => ({ ...p, status: e.target.value }))} options={[
+                { value: 'draft', label: 'Draft' }, { value: 'active', label: 'Active' }, { value: 'under_review', label: 'Under Review' }
+              ]} />
+              <Input label="Location" value={form.location || ''} onChange={e => setForm(p => ({ ...p, location: e.target.value }))} />
+            </div>
+            <Textarea label="Purpose" value={form.purpose || ''} onChange={e => setForm(p => ({ ...p, purpose: e.target.value }))} rows={3} />
+          </div>
+        </Modal>
+      );
+    };
+
+    // ========== INSPECTION MODAL ==========
+    const InspectionModal = ({ isOpen, onClose, item, onSave }) => {
+      const [form, setForm] = useState({});
+      const [saving, setSaving] = useState(false);
+
+      useEffect(() => {
+        setForm(item || { title: '', type: 'safety', location: '', scheduledDate: '', status: 'scheduled', findings: '' });
+      }, [item, isOpen]);
+
+      const handleSave = async () => {
+        if (!form.title) return;
+        setSaving(true);
+        try {
+          item?._id ? await api.put('/inspections/' + item._id, form) : await api.post('/inspections', form);
+          onSave();
+          onClose();
+        } catch (e) { console.error(e); }
+        setSaving(false);
+      };
+
+      return (
+        <Modal isOpen={isOpen} onClose={onClose} title={item ? 'Edit Inspection' : 'New Inspection'} size="lg"
+          footer={<><Button variant="secondary" onClick={onClose}>Cancel</Button><Button onClick={handleSave} loading={saving}>{item ? 'Save Changes' : 'Create Inspection'}</Button></>}>
+          <div className="space-y-4">
+            <Input label="Title *" value={form.title || ''} onChange={e => setForm(p => ({ ...p, title: e.target.value }))} placeholder="Inspection title" />
+            <div className="grid grid-cols-2 gap-4">
+              <Select label="Type" value={form.type || 'safety'} onChange={e => setForm(p => ({ ...p, type: e.target.value }))} options={[
+                { value: 'safety', label: 'Safety Inspection' }, { value: 'environmental', label: 'Environmental' },
+                { value: 'equipment', label: 'Equipment' }, { value: 'facility', label: 'Facility' },
+                { value: 'fire', label: 'Fire Safety' }, { value: 'electrical', label: 'Electrical' }
+              ]} />
+              <Select label="Status" value={form.status || 'scheduled'} onChange={e => setForm(p => ({ ...p, status: e.target.value }))} options={[
+                { value: 'scheduled', label: 'Scheduled' }, { value: 'in_progress', label: 'In Progress' },
+                { value: 'completed', label: 'Completed' }, { value: 'cancelled', label: 'Cancelled' }
+              ]} />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <Input label="Location" value={form.location || ''} onChange={e => setForm(p => ({ ...p, location: e.target.value }))} placeholder="Inspection location" />
+              <Input label="Scheduled Date" type="date" value={form.scheduledDate?.split('T')[0] || ''} onChange={e => setForm(p => ({ ...p, scheduledDate: e.target.value }))} />
+            </div>
+            <Textarea label="Findings / Notes" value={form.findings || ''} onChange={e => setForm(p => ({ ...p, findings: e.target.value }))} rows={4} placeholder="Document any findings or observations..." />
+          </div>
+        </Modal>
+      );
+    };
+
+    // ========== TRAINING MODAL ==========
+    const TrainingModal = ({ isOpen, onClose, item, onSave }) => {
+      const [form, setForm] = useState({});
+      const [saving, setSaving] = useState(false);
+
+      useEffect(() => {
+        setForm(item || { title: '', type: 'safety', description: '', duration: { hours: 1, minutes: 0 }, isRequired: true, recurrenceMonths: 12 });
+      }, [item, isOpen]);
+
+      const handleSave = async () => {
+        if (!form.title) return;
+        setSaving(true);
+        try {
+          item?._id ? await api.put('/training/' + item._id, form) : await api.post('/training', form);
+          onSave();
+          onClose();
+        } catch (e) { console.error(e); }
+        setSaving(false);
+      };
+
+      return (
+        <Modal isOpen={isOpen} onClose={onClose} title={item ? 'Edit Training Course' : 'New Training Course'} size="lg"
+          footer={<><Button variant="secondary" onClick={onClose}>Cancel</Button><Button onClick={handleSave} loading={saving}>{item ? 'Save Changes' : 'Create Course'}</Button></>}>
+          <div className="space-y-4">
+            <Input label="Course Title *" value={form.title || ''} onChange={e => setForm(p => ({ ...p, title: e.target.value }))} placeholder="Training course title" />
+            <div className="grid grid-cols-2 gap-4">
+              <Select label="Type" value={form.type || 'safety'} onChange={e => setForm(p => ({ ...p, type: e.target.value }))} options={[
+                { value: 'safety', label: 'Safety' }, { value: 'compliance', label: 'Compliance' },
+                { value: 'technical', label: 'Technical' }, { value: 'onboarding', label: 'Onboarding' },
+                { value: 'certification', label: 'Certification' }, { value: 'emergency', label: 'Emergency Response' }
+              ]} />
+              <Input label="Recurrence (months)" type="number" value={form.recurrenceMonths || 12} onChange={e => setForm(p => ({ ...p, recurrenceMonths: parseInt(e.target.value) }))} />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <Input label="Duration (hours)" type="number" value={form.duration?.hours || 1} onChange={e => setForm(p => ({ ...p, duration: { ...p.duration, hours: parseInt(e.target.value) } }))} />
+              <Input label="Duration (minutes)" type="number" value={form.duration?.minutes || 0} onChange={e => setForm(p => ({ ...p, duration: { ...p.duration, minutes: parseInt(e.target.value) } }))} />
+            </div>
+            <Textarea label="Description" value={form.description || ''} onChange={e => setForm(p => ({ ...p, description: e.target.value }))} rows={3} placeholder="Course description and learning objectives..." />
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input type="checkbox" checked={form.isRequired || false} onChange={e => setForm(p => ({ ...p, isRequired: e.target.checked }))} className="w-4 h-4 rounded border-slate-300" />
+              <span className="text-sm text-slate-700">Required training for all employees</span>
+            </label>
+          </div>
+        </Modal>
+      );
+    };
+
+    // ========== DOCUMENT MODAL ==========
+    const DocumentModal = ({ isOpen, onClose, item, onSave }) => {
+      const [form, setForm] = useState({});
+      const [saving, setSaving] = useState(false);
+
+      useEffect(() => {
+        setForm(item || { title: '', category: 'policy', description: '', version: '1.0', status: 'draft' });
+      }, [item, isOpen]);
+
+      const handleSave = async () => {
+        if (!form.title) return;
+        setSaving(true);
+        try {
+          item?._id ? await api.put('/documents/' + item._id, form) : await api.post('/documents', form);
+          onSave();
+          onClose();
+        } catch (e) { console.error(e); }
+        setSaving(false);
+      };
+
+      return (
+        <Modal isOpen={isOpen} onClose={onClose} title={item ? 'Edit Document' : 'New Document'} size="lg"
+          footer={<><Button variant="secondary" onClick={onClose}>Cancel</Button><Button onClick={handleSave} loading={saving}>{item ? 'Save Changes' : 'Create Document'}</Button></>}>
+          <div className="space-y-4">
+            <Input label="Document Title *" value={form.title || ''} onChange={e => setForm(p => ({ ...p, title: e.target.value }))} placeholder="Document title" />
+            <div className="grid grid-cols-2 gap-4">
+              <Select label="Category" value={form.category || 'policy'} onChange={e => setForm(p => ({ ...p, category: e.target.value }))} options={[
+                { value: 'policy', label: 'Policy' }, { value: 'procedure', label: 'Procedure' },
+                { value: 'sds', label: 'Safety Data Sheet' }, { value: 'form', label: 'Form/Template' },
+                { value: 'manual', label: 'Manual' }, { value: 'guideline', label: 'Guideline' }
+              ]} />
+              <Select label="Status" value={form.status || 'draft'} onChange={e => setForm(p => ({ ...p, status: e.target.value }))} options={[
+                { value: 'draft', label: 'Draft' }, { value: 'review', label: 'Under Review' },
+                { value: 'approved', label: 'Approved' }, { value: 'archived', label: 'Archived' }
+              ]} />
+            </div>
+            <Input label="Version" value={form.version || '1.0'} onChange={e => setForm(p => ({ ...p, version: e.target.value }))} placeholder="1.0" />
+            <Textarea label="Description" value={form.description || ''} onChange={e => setForm(p => ({ ...p, description: e.target.value }))} rows={3} placeholder="Document description..." />
+          </div>
+        </Modal>
+      );
+    };
+
+    // ========== HEALTH MODAL ==========
+    const HealthModal = ({ isOpen, onClose, item, onSave }) => {
+      const [form, setForm] = useState({});
+      const [saving, setSaving] = useState(false);
+
+      useEffect(() => {
+        setForm(item || { employeeName: '', recordType: 'medical_exam', date: '', status: 'scheduled', notes: '' });
+      }, [item, isOpen]);
+
+      const handleSave = async () => {
+        if (!form.employeeName || !form.recordType) return;
+        setSaving(true);
+        try {
+          item?._id ? await api.put('/occupational-health/' + item._id, form) : await api.post('/occupational-health', form);
+          onSave();
+          onClose();
+        } catch (e) { console.error(e); }
+        setSaving(false);
+      };
+
+      return (
+        <Modal isOpen={isOpen} onClose={onClose} title={item ? 'Edit Health Record' : 'New Health Record'} size="lg"
+          footer={<><Button variant="secondary" onClick={onClose}>Cancel</Button><Button onClick={handleSave} loading={saving}>{item ? 'Save Changes' : 'Create Record'}</Button></>}>
+          <div className="space-y-4">
+            <Input label="Employee Name *" value={form.employeeName || ''} onChange={e => setForm(p => ({ ...p, employeeName: e.target.value }))} placeholder="Employee full name" />
+            <div className="grid grid-cols-2 gap-4">
+              <Select label="Record Type *" value={form.recordType || 'medical_exam'} onChange={e => setForm(p => ({ ...p, recordType: e.target.value }))} options={[
+                { value: 'medical_exam', label: 'Medical Examination' }, { value: 'drug_test', label: 'Drug Test' },
+                { value: 'hearing_test', label: 'Hearing Test' }, { value: 'vision_test', label: 'Vision Test' },
+                { value: 'respiratory_fit', label: 'Respiratory Fit Test' }, { value: 'vaccination', label: 'Vaccination' },
+                { value: 'injury_followup', label: 'Injury Follow-up' }
+              ]} />
+              <Select label="Status" value={form.status || 'scheduled'} onChange={e => setForm(p => ({ ...p, status: e.target.value }))} options={[
+                { value: 'scheduled', label: 'Scheduled' }, { value: 'completed', label: 'Completed' },
+                { value: 'pending_results', label: 'Pending Results' }, { value: 'cancelled', label: 'Cancelled' }
+              ]} />
+            </div>
+            <Input label="Date" type="date" value={form.date?.split('T')[0] || ''} onChange={e => setForm(p => ({ ...p, date: e.target.value }))} />
+            <Textarea label="Notes" value={form.notes || ''} onChange={e => setForm(p => ({ ...p, notes: e.target.value }))} rows={3} placeholder="Additional notes..." />
+          </div>
+        </Modal>
+      );
+    };
+
+    // ========== ERGONOMIC MODAL ==========
+    const ErgonomicModal = ({ isOpen, onClose, item, onSave }) => {
+      const [form, setForm] = useState({});
+      const [saving, setSaving] = useState(false);
+
+      useEffect(() => {
+        setForm(item || { employeeName: '', type: 'workstation', location: '', status: 'scheduled', findings: '', recommendations: '' });
+      }, [item, isOpen]);
+
+      const handleSave = async () => {
+        if (!form.employeeName) return;
+        setSaving(true);
+        try {
+          item?._id ? await api.put('/ergonomic-assessments/' + item._id, form) : await api.post('/ergonomic-assessments', form);
+          onSave();
+          onClose();
+        } catch (e) { console.error(e); }
+        setSaving(false);
+      };
+
+      return (
+        <Modal isOpen={isOpen} onClose={onClose} title={item ? 'Edit Ergonomic Assessment' : 'New Ergonomic Assessment'} size="lg"
+          footer={<><Button variant="secondary" onClick={onClose}>Cancel</Button><Button onClick={handleSave} loading={saving}>{item ? 'Save Changes' : 'Create Assessment'}</Button></>}>
+          <div className="space-y-4">
+            <Input label="Employee Name *" value={form.employeeName || ''} onChange={e => setForm(p => ({ ...p, employeeName: e.target.value }))} placeholder="Employee full name" />
+            <div className="grid grid-cols-2 gap-4">
+              <Select label="Assessment Type" value={form.type || 'workstation'} onChange={e => setForm(p => ({ ...p, type: e.target.value }))} options={[
+                { value: 'workstation', label: 'Workstation' }, { value: 'task', label: 'Task Analysis' },
+                { value: 'lifting', label: 'Lifting Analysis' }, { value: 'repetitive_motion', label: 'Repetitive Motion' },
+                { value: 'posture', label: 'Posture Assessment' }
+              ]} />
+              <Select label="Status" value={form.status || 'scheduled'} onChange={e => setForm(p => ({ ...p, status: e.target.value }))} options={[
+                { value: 'scheduled', label: 'Scheduled' }, { value: 'in_progress', label: 'In Progress' },
+                { value: 'completed', label: 'Completed' }, { value: 'follow_up', label: 'Follow-up Required' }
+              ]} />
+            </div>
+            <Input label="Location / Workstation" value={form.location || ''} onChange={e => setForm(p => ({ ...p, location: e.target.value }))} placeholder="Office, warehouse, etc." />
+            <Textarea label="Findings" value={form.findings || ''} onChange={e => setForm(p => ({ ...p, findings: e.target.value }))} rows={3} placeholder="Assessment findings..." />
+            <Textarea label="Recommendations" value={form.recommendations || ''} onChange={e => setForm(p => ({ ...p, recommendations: e.target.value }))} rows={3} placeholder="Recommended actions..." />
+          </div>
+        </Modal>
+      );
+    };
+
+    // ========== OBSERVATION MODAL ==========
+    const ObservationModal = ({ isOpen, onClose, item, onSave }) => {
+      const [form, setForm] = useState({});
+      const [saving, setSaving] = useState(false);
+      useEffect(() => {
+        setForm(item || { description: '', type: 'unsafe_condition', location: '', status: 'open', priority: 'medium', immediateAction: '' });
+      }, [item, isOpen]);
+      const handleSave = async () => {
+        if (!form.description) return;
+        setSaving(true);
+        try { item?._id ? await api.put('/observations/' + item._id, form) : await api.post('/observations', form); onSave(); onClose(); }
+        catch (e) { console.error(e); }
+        setSaving(false);
+      };
+      return (
+        <Modal isOpen={isOpen} onClose={onClose} title={item ? 'Edit Observation' : 'Report Safety Observation'} size="lg"
+          footer={<><Button variant="secondary" onClick={onClose}>Cancel</Button><Button onClick={handleSave} loading={saving}>{item ? 'Save Changes' : 'Submit Observation'}</Button></>}>
+          <div className="space-y-4">
+            <Textarea label="Description *" value={form.description || ''} onChange={e => setForm(p => ({ ...p, description: e.target.value }))} rows={3} placeholder="Describe what you observed..." />
+            <div className="grid grid-cols-2 gap-4">
+              <Select label="Type" value={form.type || 'unsafe_condition'} onChange={e => setForm(p => ({ ...p, type: e.target.value }))} options={[
+                { value: 'unsafe_condition', label: 'Unsafe Condition' }, { value: 'unsafe_act', label: 'Unsafe Act' },
+                { value: 'near_miss', label: 'Near Miss' }, { value: 'positive', label: 'Positive Observation' }, { value: 'hazard', label: 'Hazard' }
+              ]} />
+              <Select label="Priority" value={form.priority || 'medium'} onChange={e => setForm(p => ({ ...p, priority: e.target.value }))} options={[
+                { value: 'low', label: 'Low' }, { value: 'medium', label: 'Medium' }, { value: 'high', label: 'High' }, { value: 'critical', label: 'Critical' }
+              ]} />
+            </div>
+            <Input label="Location" value={form.location || ''} onChange={e => setForm(p => ({ ...p, location: e.target.value }))} placeholder="Where did this occur?" />
+            <Textarea label="Immediate Action Taken" value={form.immediateAction || ''} onChange={e => setForm(p => ({ ...p, immediateAction: e.target.value }))} rows={2} placeholder="What actions were taken immediately?" />
+            <Select label="Status" value={form.status || 'open'} onChange={e => setForm(p => ({ ...p, status: e.target.value }))} options={[
+              { value: 'open', label: 'Open' }, { value: 'in_progress', label: 'In Progress' }, { value: 'closed', label: 'Closed' }
+            ]} />
+          </div>
+        </Modal>
+      );
+    };
+
+    // ========== MOC MODAL ==========
+    const MOCModal = ({ isOpen, onClose, item, onSave }) => {
+      const [form, setForm] = useState({});
+      const [saving, setSaving] = useState(false);
+      useEffect(() => {
+        setForm(item || { title: '', changeType: 'process', description: '', justification: '', priority: 'medium', status: 'draft', riskAssessment: '' });
+      }, [item, isOpen]);
+      const handleSave = async () => {
+        if (!form.title) return;
+        setSaving(true);
+        try { item?._id ? await api.put('/moc/' + item._id, form) : await api.post('/moc', form); onSave(); onClose(); }
+        catch (e) { console.error(e); }
+        setSaving(false);
+      };
+      return (
+        <Modal isOpen={isOpen} onClose={onClose} title={item ? 'Edit Management of Change' : 'New Management of Change'} size="lg"
+          footer={<><Button variant="secondary" onClick={onClose}>Cancel</Button><Button onClick={handleSave} loading={saving}>{item ? 'Save Changes' : 'Create MOC'}</Button></>}>
+          <div className="space-y-4">
+            <Input label="Title *" value={form.title || ''} onChange={e => setForm(p => ({ ...p, title: e.target.value }))} placeholder="Brief description of change" />
+            <div className="grid grid-cols-2 gap-4">
+              <Select label="Change Type" value={form.changeType || 'process'} onChange={e => setForm(p => ({ ...p, changeType: e.target.value }))} options={[
+                { value: 'process', label: 'Process Change' }, { value: 'equipment', label: 'Equipment Change' },
+                { value: 'personnel', label: 'Personnel Change' }, { value: 'procedure', label: 'Procedure Change' },
+                { value: 'material', label: 'Material Change' }, { value: 'software', label: 'Software/Technology' }
+              ]} />
+              <Select label="Priority" value={form.priority || 'medium'} onChange={e => setForm(p => ({ ...p, priority: e.target.value }))} options={[
+                { value: 'low', label: 'Low' }, { value: 'medium', label: 'Medium' }, { value: 'high', label: 'High' }, { value: 'critical', label: 'Critical' }
+              ]} />
+            </div>
+            <Textarea label="Description" value={form.description || ''} onChange={e => setForm(p => ({ ...p, description: e.target.value }))} rows={3} placeholder="Detailed description of the proposed change..." />
+            <Textarea label="Justification" value={form.justification || ''} onChange={e => setForm(p => ({ ...p, justification: e.target.value }))} rows={2} placeholder="Why is this change needed?" />
+            <Textarea label="Risk Assessment" value={form.riskAssessment || ''} onChange={e => setForm(p => ({ ...p, riskAssessment: e.target.value }))} rows={2} placeholder="Potential risks and mitigation measures..." />
+            <Select label="Status" value={form.status || 'draft'} onChange={e => setForm(p => ({ ...p, status: e.target.value }))} options={[
+              { value: 'draft', label: 'Draft' }, { value: 'pending_review', label: 'Pending Review' }, { value: 'approved', label: 'Approved' },
+              { value: 'in_progress', label: 'In Progress' }, { value: 'completed', label: 'Completed' }, { value: 'rejected', label: 'Rejected' }
+            ]} />
+          </div>
+        </Modal>
+      );
+    };
+
+    // ========== SUPPLIER MODAL ==========
+    const SupplierModal = ({ isOpen, onClose, item, onSave }) => {
+      const [form, setForm] = useState({});
+      const [saving, setSaving] = useState(false);
+      useEffect(() => {
+        setForm(item || { name: '', category: 'materials', contactName: '', email: '', phone: '', address: '', status: 'pending', rating: 0, certifications: '' });
+      }, [item, isOpen]);
+      const handleSave = async () => {
+        if (!form.name) return;
+        setSaving(true);
+        try { item?._id ? await api.put('/suppliers/' + item._id, form) : await api.post('/suppliers', form); onSave(); onClose(); }
+        catch (e) { console.error(e); }
+        setSaving(false);
+      };
+      return (
+        <Modal isOpen={isOpen} onClose={onClose} title={item ? 'Edit Supplier' : 'Add Supplier'} size="lg"
+          footer={<><Button variant="secondary" onClick={onClose}>Cancel</Button><Button onClick={handleSave} loading={saving}>{item ? 'Save Changes' : 'Add Supplier'}</Button></>}>
+          <div className="space-y-4">
+            <Input label="Supplier Name *" value={form.name || ''} onChange={e => setForm(p => ({ ...p, name: e.target.value }))} placeholder="Company name" />
+            <div className="grid grid-cols-2 gap-4">
+              <Select label="Category" value={form.category || 'materials'} onChange={e => setForm(p => ({ ...p, category: e.target.value }))} options={[
+                { value: 'materials', label: 'Materials' }, { value: 'equipment', label: 'Equipment' },
+                { value: 'services', label: 'Services' }, { value: 'ppe', label: 'PPE' }, { value: 'chemicals', label: 'Chemicals' }
+              ]} />
+              <Select label="Status" value={form.status || 'pending'} onChange={e => setForm(p => ({ ...p, status: e.target.value }))} options={[
+                { value: 'pending', label: 'Pending Approval' }, { value: 'approved', label: 'Approved' },
+                { value: 'probation', label: 'On Probation' }, { value: 'suspended', label: 'Suspended' }
+              ]} />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <Input label="Contact Name" value={form.contactName || ''} onChange={e => setForm(p => ({ ...p, contactName: e.target.value }))} placeholder="Primary contact" />
+              <Input label="Email" type="email" value={form.email || ''} onChange={e => setForm(p => ({ ...p, email: e.target.value }))} placeholder="contact@supplier.com" />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <Input label="Phone" value={form.phone || ''} onChange={e => setForm(p => ({ ...p, phone: e.target.value }))} placeholder="+1 (555) 000-0000" />
+              <Input label="Rating (1-5)" type="number" min="1" max="5" value={form.rating || ''} onChange={e => setForm(p => ({ ...p, rating: parseInt(e.target.value) || 0 }))} />
+            </div>
+            <Input label="Address" value={form.address || ''} onChange={e => setForm(p => ({ ...p, address: e.target.value }))} placeholder="Full address" />
+            <Textarea label="Certifications" value={form.certifications || ''} onChange={e => setForm(p => ({ ...p, certifications: e.target.value }))} rows={2} placeholder="ISO 9001, ISO 14001, etc." />
+          </div>
+        </Modal>
+      );
+    };
+
+    // ========== ASSET MODAL ==========
+    const AssetModal = ({ isOpen, onClose, item, onSave }) => {
+      const [form, setForm] = useState({});
+      const [saving, setSaving] = useState(false);
+      useEffect(() => {
+        setForm(item || { name: '', category: 'equipment', location: '', serialNumber: '', manufacturer: '', purchaseDate: '', lastInspection: '', nextInspection: '', status: 'active' });
+      }, [item, isOpen]);
+      const handleSave = async () => {
+        if (!form.name) return;
+        setSaving(true);
+        try { item?._id ? await api.put('/assets/' + item._id, form) : await api.post('/assets', form); onSave(); onClose(); }
+        catch (e) { console.error(e); }
+        setSaving(false);
+      };
+      return (
+        <Modal isOpen={isOpen} onClose={onClose} title={item ? 'Edit Asset' : 'Add Asset'} size="lg"
+          footer={<><Button variant="secondary" onClick={onClose}>Cancel</Button><Button onClick={handleSave} loading={saving}>{item ? 'Save Changes' : 'Add Asset'}</Button></>}>
+          <div className="space-y-4">
+            <Input label="Asset Name *" value={form.name || ''} onChange={e => setForm(p => ({ ...p, name: e.target.value }))} placeholder="Equipment/asset name" />
+            <div className="grid grid-cols-2 gap-4">
+              <Select label="Category" value={form.category || 'equipment'} onChange={e => setForm(p => ({ ...p, category: e.target.value }))} options={[
+                { value: 'equipment', label: 'Equipment' }, { value: 'vehicle', label: 'Vehicle' }, { value: 'tool', label: 'Tool' },
+                { value: 'ppe', label: 'PPE' }, { value: 'safety_device', label: 'Safety Device' }, { value: 'instrument', label: 'Instrument' }
+              ]} />
+              <Select label="Status" value={form.status || 'active'} onChange={e => setForm(p => ({ ...p, status: e.target.value }))} options={[
+                { value: 'active', label: 'Active' }, { value: 'maintenance', label: 'Under Maintenance' },
+                { value: 'retired', label: 'Retired' }, { value: 'disposed', label: 'Disposed' }
+              ]} />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <Input label="Serial Number" value={form.serialNumber || ''} onChange={e => setForm(p => ({ ...p, serialNumber: e.target.value }))} placeholder="S/N or Asset ID" />
+              <Input label="Manufacturer" value={form.manufacturer || ''} onChange={e => setForm(p => ({ ...p, manufacturer: e.target.value }))} placeholder="Brand/Manufacturer" />
+            </div>
+            <Input label="Location" value={form.location || ''} onChange={e => setForm(p => ({ ...p, location: e.target.value }))} placeholder="Current location" />
+            <div className="grid grid-cols-3 gap-4">
+              <Input label="Purchase Date" type="date" value={form.purchaseDate?.split('T')[0] || ''} onChange={e => setForm(p => ({ ...p, purchaseDate: e.target.value }))} />
+              <Input label="Last Inspection" type="date" value={form.lastInspection?.split('T')[0] || ''} onChange={e => setForm(p => ({ ...p, lastInspection: e.target.value }))} />
+              <Input label="Next Inspection" type="date" value={form.nextInspection?.split('T')[0] || ''} onChange={e => setForm(p => ({ ...p, nextInspection: e.target.value }))} />
+            </div>
+          </div>
+        </Modal>
+      );
+    };
+
+    // ========== ENVIRONMENTAL MODAL ==========
+    const EnvironmentalModal = ({ isOpen, onClose, item, onSave }) => {
+      const [form, setForm] = useState({});
+      const [saving, setSaving] = useState(false);
+      useEffect(() => {
+        setForm(item || { type: 'air', source: '', date: '', value: '', unit: '', permitLimit: '', status: 'compliant', notes: '' });
+      }, [item, isOpen]);
+      const handleSave = async () => {
+        if (!form.source) return;
+        setSaving(true);
+        try { item?._id ? await api.put('/environmental/' + item._id, form) : await api.post('/environmental', form); onSave(); onClose(); }
+        catch (e) { console.error(e); }
+        setSaving(false);
+      };
+      return (
+        <Modal isOpen={isOpen} onClose={onClose} title={item ? 'Edit Environmental Record' : 'New Environmental Record'} size="lg"
+          footer={<><Button variant="secondary" onClick={onClose}>Cancel</Button><Button onClick={handleSave} loading={saving}>{item ? 'Save Changes' : 'Create Record'}</Button></>}>
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <Select label="Type" value={form.type || 'air'} onChange={e => setForm(p => ({ ...p, type: e.target.value }))} options={[
+                { value: 'air', label: 'Air Emissions' }, { value: 'water', label: 'Water Discharge' },
+                { value: 'waste', label: 'Waste' }, { value: 'noise', label: 'Noise' }, { value: 'spill', label: 'Spill' }
+              ]} />
+              <Input label="Date" type="date" value={form.date?.split('T')[0] || ''} onChange={e => setForm(p => ({ ...p, date: e.target.value }))} />
+            </div>
+            <Input label="Source *" value={form.source || ''} onChange={e => setForm(p => ({ ...p, source: e.target.value }))} placeholder="Emission source or location" />
+            <div className="grid grid-cols-3 gap-4">
+              <Input label="Value" type="number" value={form.value || ''} onChange={e => setForm(p => ({ ...p, value: e.target.value }))} placeholder="Measured value" />
+              <Input label="Unit" value={form.unit || ''} onChange={e => setForm(p => ({ ...p, unit: e.target.value }))} placeholder="ppm, mg/L, kg, etc." />
+              <Input label="Permit Limit" value={form.permitLimit || ''} onChange={e => setForm(p => ({ ...p, permitLimit: e.target.value }))} placeholder="Regulatory limit" />
+            </div>
+            <Select label="Compliance Status" value={form.status || 'compliant'} onChange={e => setForm(p => ({ ...p, status: e.target.value }))} options={[
+              { value: 'compliant', label: 'Compliant' }, { value: 'non_compliant', label: 'Non-Compliant' },
+              { value: 'exceedance', label: 'Exceedance' }, { value: 'pending', label: 'Pending Review' }
+            ]} />
+            <Textarea label="Notes" value={form.notes || ''} onChange={e => setForm(p => ({ ...p, notes: e.target.value }))} rows={2} placeholder="Additional notes..." />
+          </div>
+        </Modal>
+      );
+    };
+
+    // ========== QUALITY/NCR MODAL ==========
+    const QualityModal = ({ isOpen, onClose, item, onSave }) => {
+      const [form, setForm] = useState({});
+      const [saving, setSaving] = useState(false);
+      useEffect(() => {
+        setForm(item || { title: '', type: 'product', description: '', severity: 'minor', source: '', affectedProduct: '', status: 'open', rootCause: '', containmentAction: '' });
+      }, [item, isOpen]);
+      const handleSave = async () => {
+        if (!form.title) return;
+        setSaving(true);
+        try { item?._id ? await api.put('/quality/' + item._id, form) : await api.post('/quality', form); onSave(); onClose(); }
+        catch (e) { console.error(e); }
+        setSaving(false);
+      };
+      return (
+        <Modal isOpen={isOpen} onClose={onClose} title={item ? 'Edit NCR' : 'New Nonconformance Report'} size="lg"
+          footer={<><Button variant="secondary" onClick={onClose}>Cancel</Button><Button onClick={handleSave} loading={saving}>{item ? 'Save Changes' : 'Create NCR'}</Button></>}>
+          <div className="space-y-4">
+            <Input label="Title *" value={form.title || ''} onChange={e => setForm(p => ({ ...p, title: e.target.value }))} placeholder="Brief description of nonconformance" />
+            <div className="grid grid-cols-3 gap-4">
+              <Select label="Type" value={form.type || 'product'} onChange={e => setForm(p => ({ ...p, type: e.target.value }))} options={[
+                { value: 'product', label: 'Product' }, { value: 'process', label: 'Process' },
+                { value: 'service', label: 'Service' }, { value: 'supplier', label: 'Supplier' }, { value: 'documentation', label: 'Documentation' }
+              ]} />
+              <Select label="Severity" value={form.severity || 'minor'} onChange={e => setForm(p => ({ ...p, severity: e.target.value }))} options={[
+                { value: 'minor', label: 'Minor' }, { value: 'major', label: 'Major' }, { value: 'critical', label: 'Critical' }
+              ]} />
+              <Select label="Status" value={form.status || 'open'} onChange={e => setForm(p => ({ ...p, status: e.target.value }))} options={[
+                { value: 'open', label: 'Open' }, { value: 'investigating', label: 'Investigating' },
+                { value: 'containment', label: 'Containment' }, { value: 'closed', label: 'Closed' }
+              ]} />
+            </div>
+            <Textarea label="Description" value={form.description || ''} onChange={e => setForm(p => ({ ...p, description: e.target.value }))} rows={3} placeholder="Detailed description of the nonconformance..." />
+            <div className="grid grid-cols-2 gap-4">
+              <Input label="Source" value={form.source || ''} onChange={e => setForm(p => ({ ...p, source: e.target.value }))} placeholder="How was it discovered?" />
+              <Input label="Affected Product/Process" value={form.affectedProduct || ''} onChange={e => setForm(p => ({ ...p, affectedProduct: e.target.value }))} placeholder="What was affected?" />
+            </div>
+            <Textarea label="Root Cause" value={form.rootCause || ''} onChange={e => setForm(p => ({ ...p, rootCause: e.target.value }))} rows={2} placeholder="Root cause analysis..." />
+            <Textarea label="Containment Action" value={form.containmentAction || ''} onChange={e => setForm(p => ({ ...p, containmentAction: e.target.value }))} rows={2} placeholder="Immediate containment actions..." />
+          </div>
+        </Modal>
+      );
+    };
+
+    // ========== CAPA MODAL ==========
+    const CAPAModal = ({ isOpen, onClose, item, onSave }) => {
+      const [form, setForm] = useState({});
+      const [saving, setSaving] = useState(false);
+      useEffect(() => {
+        setForm(item || { title: '', type: 'corrective', source: 'ncr', description: '', rootCause: '', action: '', dueDate: '', status: 'open', effectiveness: '' });
+      }, [item, isOpen]);
+      const handleSave = async () => {
+        if (!form.title) return;
+        setSaving(true);
+        try { item?._id ? await api.put('/capa/' + item._id, form) : await api.post('/capa', form); onSave(); onClose(); }
+        catch (e) { console.error(e); }
+        setSaving(false);
+      };
+      return (
+        <Modal isOpen={isOpen} onClose={onClose} title={item ? 'Edit CAPA' : 'New CAPA'} size="lg"
+          footer={<><Button variant="secondary" onClick={onClose}>Cancel</Button><Button onClick={handleSave} loading={saving}>{item ? 'Save Changes' : 'Create CAPA'}</Button></>}>
+          <div className="space-y-4">
+            <Input label="Title *" value={form.title || ''} onChange={e => setForm(p => ({ ...p, title: e.target.value }))} placeholder="CAPA title" />
+            <div className="grid grid-cols-3 gap-4">
+              <Select label="Type" value={form.type || 'corrective'} onChange={e => setForm(p => ({ ...p, type: e.target.value }))} options={[
+                { value: 'corrective', label: 'Corrective Action' }, { value: 'preventive', label: 'Preventive Action' }
+              ]} />
+              <Select label="Source" value={form.source || 'ncr'} onChange={e => setForm(p => ({ ...p, source: e.target.value }))} options={[
+                { value: 'ncr', label: 'NCR' }, { value: 'audit', label: 'Audit' }, { value: 'inspection', label: 'Inspection' },
+                { value: 'incident', label: 'Incident' }, { value: 'customer_complaint', label: 'Customer Complaint' }
+              ]} />
+              <Input label="Due Date" type="date" value={form.dueDate?.split('T')[0] || ''} onChange={e => setForm(p => ({ ...p, dueDate: e.target.value }))} />
+            </div>
+            <Textarea label="Description" value={form.description || ''} onChange={e => setForm(p => ({ ...p, description: e.target.value }))} rows={2} placeholder="Describe the issue..." />
+            <Textarea label="Root Cause Analysis" value={form.rootCause || ''} onChange={e => setForm(p => ({ ...p, rootCause: e.target.value }))} rows={2} placeholder="What caused this issue?" />
+            <Textarea label="Corrective/Preventive Action" value={form.action || ''} onChange={e => setForm(p => ({ ...p, action: e.target.value }))} rows={2} placeholder="Actions to be taken..." />
+            <div className="grid grid-cols-2 gap-4">
+              <Select label="Status" value={form.status || 'open'} onChange={e => setForm(p => ({ ...p, status: e.target.value }))} options={[
+                { value: 'open', label: 'Open' }, { value: 'in_progress', label: 'In Progress' },
+                { value: 'pending_verification', label: 'Pending Verification' }, { value: 'closed', label: 'Closed' }
+              ]} />
+              <Select label="Effectiveness" value={form.effectiveness || ''} onChange={e => setForm(p => ({ ...p, effectiveness: e.target.value }))} options={[
+                { value: '', label: 'Not Yet Verified' }, { value: 'effective', label: 'Effective' }, { value: 'not_effective', label: 'Not Effective' }
+              ]} />
+            </div>
+          </div>
+        </Modal>
+      );
+    };
+
+    // ========== MEETING MODAL ==========
+    const MeetingModal = ({ isOpen, onClose, item, onSave }) => {
+      const [form, setForm] = useState({});
+      const [saving, setSaving] = useState(false);
+      useEffect(() => {
+        setForm(item || { title: '', type: 'safety_committee', date: '', location: '', agenda: '', minutes: '', attendees: [], status: 'scheduled' });
+      }, [item, isOpen]);
+      const handleSave = async () => {
+        if (!form.title) return;
+        setSaving(true);
+        try { item?._id ? await api.put('/meetings/' + item._id, form) : await api.post('/meetings', form); onSave(); onClose(); }
+        catch (e) { console.error(e); }
+        setSaving(false);
+      };
+      return (
+        <Modal isOpen={isOpen} onClose={onClose} title={item ? 'Edit Meeting' : 'Schedule Meeting'} size="lg"
+          footer={<><Button variant="secondary" onClick={onClose}>Cancel</Button><Button onClick={handleSave} loading={saving}>{item ? 'Save Changes' : 'Schedule Meeting'}</Button></>}>
+          <div className="space-y-4">
+            <Input label="Meeting Title *" value={form.title || ''} onChange={e => setForm(p => ({ ...p, title: e.target.value }))} placeholder="Meeting title" />
+            <div className="grid grid-cols-2 gap-4">
+              <Select label="Type" value={form.type || 'safety_committee'} onChange={e => setForm(p => ({ ...p, type: e.target.value }))} options={[
+                { value: 'safety_committee', label: 'Safety Committee' }, { value: 'toolbox_talk', label: 'Toolbox Talk' },
+                { value: 'safety_stand_down', label: 'Safety Stand Down' }, { value: 'training_session', label: 'Training Session' },
+                { value: 'incident_review', label: 'Incident Review' }, { value: 'management_review', label: 'Management Review' }
+              ]} />
+              <Select label="Status" value={form.status || 'scheduled'} onChange={e => setForm(p => ({ ...p, status: e.target.value }))} options={[
+                { value: 'scheduled', label: 'Scheduled' }, { value: 'in_progress', label: 'In Progress' },
+                { value: 'completed', label: 'Completed' }, { value: 'cancelled', label: 'Cancelled' }
+              ]} />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <Input label="Date & Time" type="datetime-local" value={form.date ? form.date.slice(0, 16) : ''} onChange={e => setForm(p => ({ ...p, date: e.target.value }))} />
+              <Input label="Location" value={form.location || ''} onChange={e => setForm(p => ({ ...p, location: e.target.value }))} placeholder="Conference Room A" />
+            </div>
+            <Textarea label="Agenda" value={form.agenda || ''} onChange={e => setForm(p => ({ ...p, agenda: e.target.value }))} rows={3} placeholder="Meeting agenda items..." />
+            <Textarea label="Minutes" value={form.minutes || ''} onChange={e => setForm(p => ({ ...p, minutes: e.target.value }))} rows={4} placeholder="Meeting minutes and action items..." />
+          </div>
+        </Modal>
+      );
+    };
+
+    // ========== OSHA PAGE ==========
+    const OSHAPage = () => {
+      const [log, setLog] = useState(null);
+      const [year, setYear] = useState(new Date().getFullYear());
+      const [loading, setLoading] = useState(true);
+      const [syncing, setSyncing] = useState(false);
+      
+      useEffect(() => { 
+        setLoading(true); 
+        api.get('/osha-logs/' + year).then(d => setLog(d.log)).catch(console.error).finally(() => setLoading(false)); 
+      }, [year]);
+      
+      const handleSync = async () => { 
+        setSyncing(true); 
+        try { const d = await api.post('/osha-logs/' + year + '/sync'); setLog(d.log); } 
+        catch (e) { console.error(e); } 
+        finally { setSyncing(false); } 
+      };
+      
+      return (
+        <div className="space-y-6 slide-up">
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+            <div>
+              <h2 className="text-2xl lg:text-3xl font-bold text-slate-800">OSHA Recordkeeping</h2>
+              <p className="text-slate-500">Manage OSHA 300, 300A, and 301 forms</p>
+            </div>
+            <div className="flex gap-3">
+              <Select value={year} onChange={e => setYear(parseInt(e.target.value))} options={[...Array(5)].map((_, i) => ({ value: new Date().getFullYear() - i, label: (new Date().getFullYear() - i).toString() }))} className="w-32" />
+              <Button variant="secondary" onClick={handleSync} loading={syncing} icon={<Icons.Download />}>Sync Incidents</Button>
+            </div>
+          </div>
+          
+          {loading ? <div className="flex justify-center py-20"><Spinner size="lg" /></div> : (
+            <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+              <Card title={'OSHA 300 Log - ' + year} subtitle="Summary of work-related injuries and illnesses" className="xl:col-span-2" icon={<Icons.OSHA />}>
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+                  {[['Deaths', log?.summary?.totalDeaths, 'red'], ['Days Away', log?.summary?.totalDaysAway, 'orange'], ['Restricted', log?.summary?.totalDaysTransferRestriction, 'yellow'], ['Other', log?.summary?.totalOtherRecordable, 'blue']].map(([label, val, color]) => (
+                    <div key={label} className="text-center p-4 bg-gradient-to-br from-slate-50 to-slate-100 rounded-xl border border-slate-200">
+                      <p className="text-3xl font-bold text-slate-800">{val || 0}</p>
+                      <p className="text-sm font-medium text-slate-500">{label}</p>
+                    </div>
+                  ))}
+                </div>
+                <h4 className="font-bold text-slate-800 mb-4">Log Entries ({log?.entries?.length || 0})</h4>
+                {log?.entries?.length ? (
+                  <div className="overflow-x-auto border border-slate-200 rounded-xl">
+                    <table className="w-full text-sm">
+                      <thead><tr className="bg-slate-50 border-b border-slate-200">
+                        <th className="px-4 py-3 text-left font-bold text-slate-600">Case #</th>
+                        <th className="px-4 py-3 text-left font-bold text-slate-600">Employee</th>
+                        <th className="px-4 py-3 text-left font-bold text-slate-600">Date</th>
+                        <th className="px-4 py-3 text-left font-bold text-slate-600 hidden md:table-cell">Description</th>
+                      </tr></thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {log.entries.map((e, i) => (
+                          <tr key={i} className="hover:bg-slate-50">
+                            <td className="px-4 py-3 font-mono text-xs">{e.caseNumber}</td>
+                            <td className="px-4 py-3 font-medium">{e.employeeName}</td>
+                            <td className="px-4 py-3 text-slate-500">{new Date(e.dateOfInjury).toLocaleDateString()}</td>
+                            <td className="px-4 py-3 text-slate-500 truncate max-w-xs hidden md:table-cell">{e.describeInjury}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : <EmptyState title="No OSHA entries" description="Sync incidents to populate this log" />}
+              </Card>
+              
+              <Card title="Export Forms" subtitle="Generate official OSHA forms" icon={<Icons.Download />}>
+                <div className="space-y-3">
+                  {[['300', 'OSHA Form 300', 'Log of Work-Related Injuries and Illnesses', 'blue'], 
+                    ['300a', 'OSHA Form 300A', 'Summary of Work-Related Injuries and Illnesses', 'green'], 
+                    ['301', 'OSHA Form 301', 'Injury and Illness Incident Report', 'purple']].map(([form, title, desc, color]) => (
+                    <button 
+                      key={form} 
+                      onClick={() => window.open(API + '/osha-logs/' + year + '/export/' + form, '_blank')} 
+                      className="w-full p-4 bg-gradient-to-r from-slate-50 to-slate-100 hover:from-primary-50 hover:to-primary-100 rounded-xl text-left transition-all border border-slate-200 hover:border-primary-300 group"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className={'w-10 h-10 rounded-xl flex items-center justify-center bg-' + color + '-100 text-' + color + '-600 group-hover:scale-110 transition-transform'}>
+                          <Icons.Document />
+                        </div>
+                        <div>
+                          <p className="font-bold text-slate-800">{title}</p>
+                          <p className="text-sm text-slate-500">{desc}</p>
+                        </div>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </Card>
+            </div>
+          )}
+        </div>
+      );
+    };
+
+    // ========== SETTINGS PAGE ==========
+    const SettingsPage = () => {
+      const { user } = useContext(AuthContext);
+      const [org, setOrg] = useState(null);
+      const [sub, setSub] = useState(null);
+      const [loading, setLoading] = useState(true);
+      const [saving, setSaving] = useState(false);
+      const [tab, setTab] = useState('organization');
+      const { addToast } = useContext(ToastContext) || {};
+
+      useEffect(() => { 
+        Promise.all([api.get('/organization'), api.get('/subscription')])
+          .then(([o, s]) => { setOrg(o.organization); setSub(s); })
+          .catch(console.error)
+          .finally(() => setLoading(false)); 
+      }, []);
+
+      const handleSave = async () => { 
+        setSaving(true); 
+        try { 
+          await api.put('/organization', org); 
+          addToast?.('Settings saved successfully!', 'success'); 
+        } catch (e) { 
+          addToast?.('Failed to save settings', 'error'); 
+        } finally { setSaving(false); } 
+      };
+
+      if (loading) return <div className="flex justify-center py-20"><Spinner size="lg" /></div>;
+
+      return (
+        <div className="space-y-6 slide-up">
+          <div>
+            <h2 className="text-2xl lg:text-3xl font-bold text-slate-800">Settings</h2>
+            <p className="text-slate-500 mt-1">Manage your organization and subscription</p>
+          </div>
+          
+          <Tabs tabs={[{ id: 'organization', label: 'Organization' }, { id: 'subscription', label: 'Subscription' }, { id: 'notifications', label: 'Notifications' }]} active={tab} onChange={setTab} />
+          
+          {tab === 'organization' && (
+            <Card title="Organization Details" icon={<Icons.Contractor />}>
+              <div className="space-y-5 max-w-2xl">
+                <Input label="Organization Name" value={org?.name || ''} onChange={e => setOrg(p => ({ ...p, name: e.target.value }))} />
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <Input label="Phone" type="tel" value={org?.phone || ''} onChange={e => setOrg(p => ({ ...p, phone: e.target.value }))} />
+                  <Input label="Email" type="email" value={org?.email || ''} onChange={e => setOrg(p => ({ ...p, email: e.target.value }))} />
+                </div>
+                <Input label="NAICS Code" value={org?.settings?.naicsCode || ''} onChange={e => setOrg(p => ({ ...p, settings: { ...p.settings, naicsCode: e.target.value } }))} helper="North American Industry Classification System code" />
+                <Button onClick={handleSave} loading={saving}>Save Changes</Button>
+              </div>
+            </Card>
+          )}
+          
+          {tab === 'subscription' && sub && (
+            <div className="space-y-6">
+              <div className="bg-gradient-to-r from-primary-600 to-primary-700 rounded-2xl p-6 text-white">
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                  <div>
+                    <p className="text-primary-100 font-medium">Current Plan</p>
+                    <h3 className="text-2xl font-bold mt-1">{PRICING[sub.subscription?.tier]?.name || 'Starter'}</h3>
+                    <p className="text-primary-100 mt-2">${PRICING[sub.subscription?.tier]?.price || 199}/month • {PRICING[sub.subscription?.tier]?.users || 10} users</p>
+                  </div>
+                  <Button variant="secondary" className="!bg-white !text-primary-700">Manage Billing</Button>
+                </div>
+              </div>
+              
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                {Object.entries(sub.availableTiers || PRICING).map(([k, t]) => {
+                  const isCurrent = sub.subscription?.tier === k;
+                  return (
+                    <Card key={k} className={isCurrent ? 'ring-2 ring-primary-500 shadow-lg shadow-primary-500/20' : ''}>
+                      <div className="text-center">
+                        {isCurrent && <Badge color="blue">Current Plan</Badge>}
+                        <h3 className="text-xl font-bold text-slate-800 mt-3">{t.name}</h3>
+                        <div className="mt-4">
+                          <span className="text-4xl font-bold text-slate-800">${t.price}</span>
+                          <span className="text-slate-500">/month</span>
+                        </div>
+                        <p className="text-slate-500 mt-2">{t.maxUsers === -1 ? 'Unlimited' : t.maxUsers} users</p>
+                        
+                        <div className="mt-6 space-y-3 text-left">
+                          {[
+                            ['Incidents & Actions', true],
+                            ['Inspections & Training', true],
+                            ['OSHA 300 Logs', true],
+                            ['Risk Assessments', t.riskAssessment],
+                            ['Job Safety Analysis', t.jsaModule],
+                            ['Permits to Work', t.permitToWork],
+                            ['Contractor Management', t.contractorManagement],
+                            ['Chemical/SDS', t.chemicalManagement],
+                            ['SSO Integration', t.ssoIntegration],
+                          ].map(([f, has]) => (
+                            <div key={f} className="flex items-center gap-2 text-sm">
+                              <span className={has ? 'text-emerald-500' : 'text-slate-300'}>{has ? '✓' : '✗'}</span>
+                              <span className={has ? 'text-slate-700' : 'text-slate-400'}>{f}</span>
+                            </div>
+                          ))}
+                        </div>
+                        
+                        {!isCurrent && (
+                          <Button 
+                            className="w-full mt-6" 
+                            variant={k === 'enterprise' ? 'primary' : 'outline'}
+                            onClick={async () => { 
+                              if (confirm('Upgrade to ' + t.name + ' ($' + t.price + '/mo)?')) { 
+                                await api.post('/subscription/upgrade', { tier: k }); 
+                                window.location.reload(); 
+                              } 
+                            }}
+                          >
+                            {t.price > (PRICING[sub.subscription?.tier]?.price || 0) ? 'Upgrade' : 'Switch'} to {t.name}
+                          </Button>
+                        )}
+                      </div>
+                    </Card>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+          
+          {tab === 'notifications' && (
+            <Card title="Notification Preferences" icon={<Icons.Bell />}>
+              <div className="space-y-4 max-w-xl">
+                <Checkbox label="Email notifications for new incidents" checked={true} onChange={() => {}} />
+                <Checkbox label="Email notifications for overdue action items" checked={true} onChange={() => {}} />
+                <Checkbox label="Daily summary digest" checked={false} onChange={() => {}} />
+                <Checkbox label="Weekly safety report" checked={true} onChange={() => {}} />
+                <Button className="mt-4">Save Preferences</Button>
+              </div>
+            </Card>
+          )}
+        </div>
+      );
+    };
+
+    // ========== USER MODAL ==========
+    const UserModal = ({ isOpen, onClose, user: editUser, onSave }) => {
+      const [form, setForm] = useState({});
+      const [loading, setLoading] = useState(false);
+      const [errors, setErrors] = useState({});
+      
+      useEffect(() => {
+        if (editUser) {
+          setForm({ ...editUser, password: '' });
+        } else {
+          setForm({ firstName: '', lastName: '', email: '', password: '', role: 'employee', department: '', phone: '', isActive: true });
+        }
+        setErrors({});
+      }, [editUser, isOpen]);
+
+      const validate = () => {
+        const errs = {};
+        if (!form.firstName?.trim()) errs.firstName = 'First name is required';
+        if (!form.lastName?.trim()) errs.lastName = 'Last name is required';
+        if (!form.email?.trim()) errs.email = 'Email is required';
+        else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) errs.email = 'Invalid email format';
+        if (!editUser && !form.password) errs.password = 'Password is required for new users';
+        else if (form.password && form.password.length < 8) errs.password = 'Password must be at least 8 characters';
+        setErrors(errs);
+        return Object.keys(errs).length === 0;
+      };
+
+      const handleSubmit = async () => {
+        if (!validate()) return;
+        setLoading(true);
+        try {
+          const payload = { ...form };
+          if (!payload.password) delete payload.password;
+          if (editUser?._id) {
+            await api.put('/users/' + editUser._id, payload);
+          } else {
+            await api.post('/users', payload);
+          }
+          onSave();
+        } catch (e) {
+          setErrors({ submit: e.message });
+        } finally {
+          setLoading(false);
+        }
+      };
+
+      const roles = [
+        { value: 'employee', label: 'Employee', desc: 'Can report incidents and view assigned items' },
+        { value: 'safety_officer', label: 'Safety Officer', desc: 'Can manage incidents, inspections, and training' },
+        { value: 'supervisor', label: 'Supervisor', desc: 'Can manage team safety and approve actions' },
+        { value: 'manager', label: 'Manager', desc: 'Full department access and reporting' },
+        { value: 'admin', label: 'Administrator', desc: 'Full system access including user management' }
+      ];
+
+      return (
+        <Modal isOpen={isOpen} onClose={onClose} title={editUser ? 'Edit User' : 'Add New User'} size="lg"
+          footer={
+            <>
+              <Button variant="secondary" onClick={onClose}>Cancel</Button>
+              <Button onClick={handleSubmit} loading={loading}>{editUser ? 'Update User' : 'Create User'}</Button>
+            </>
+          }
+        >
+          {errors.submit && <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-700 rounded-xl text-sm">{errors.submit}</div>}
+          <div className="space-y-5">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <Input label="First Name *" value={form.firstName || ''} onChange={e => setForm(p => ({ ...p, firstName: e.target.value }))} error={errors.firstName} placeholder="John" />
+              <Input label="Last Name *" value={form.lastName || ''} onChange={e => setForm(p => ({ ...p, lastName: e.target.value }))} error={errors.lastName} placeholder="Smith" />
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <Input label="Email Address *" type="email" value={form.email || ''} onChange={e => setForm(p => ({ ...p, email: e.target.value }))} error={errors.email} placeholder="john@company.com" />
+              <Input label="Phone" type="tel" value={form.phone || ''} onChange={e => setForm(p => ({ ...p, phone: e.target.value }))} placeholder="+1 (555) 000-0000" />
+            </div>
+            <Input label={editUser ? 'New Password (leave blank to keep current)' : 'Password *'} type="password" value={form.password || ''} onChange={e => setForm(p => ({ ...p, password: e.target.value }))} error={errors.password} placeholder="Min 8 characters" />
+            <Input label="Department" value={form.department || ''} onChange={e => setForm(p => ({ ...p, department: e.target.value }))} placeholder="Operations, Safety, etc." />
+            
+            <div>
+              <label className="block text-sm font-semibold text-slate-700 mb-3">User Role *</label>
+              <div className="grid gap-3">
+                {roles.map(r => (
+                  <label key={r.value} className={'flex items-start gap-3 p-4 border-2 rounded-xl cursor-pointer transition-all ' + (form.role === r.value ? 'border-primary-500 bg-primary-50' : 'border-slate-200 hover:border-slate-300')}>
+                    <input type="radio" name="role" value={r.value} checked={form.role === r.value} onChange={e => setForm(p => ({ ...p, role: e.target.value }))} className="mt-1" />
+                    <div>
+                      <p className="font-semibold text-slate-800">{r.label}</p>
+                      <p className="text-sm text-slate-500">{r.desc}</p>
+                    </div>
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3 p-4 bg-slate-50 rounded-xl">
+              <input type="checkbox" id="isActive" checked={form.isActive !== false} onChange={e => setForm(p => ({ ...p, isActive: e.target.checked }))} className="w-5 h-5 text-primary-600 rounded" />
+              <label htmlFor="isActive" className="font-medium text-slate-700 cursor-pointer">User account is active</label>
+            </div>
+          </div>
+        </Modal>
+      );
+    };
+
+    // ========== USERS PAGE ==========
+    const UsersPage = () => {
+      const [users, setUsers] = useState([]);
+      const [loading, setLoading] = useState(true);
+      const [modal, setModal] = useState(false);
+      const [selected, setSelected] = useState(null);
+      const [search, setSearch] = useState('');
+      const { addToast } = useContext(ToastContext) || {};
+
+      const fetchUsers = useCallback(() => {
+        setLoading(true);
+        api.get('/users').then(d => setUsers(d.users || [])).catch(console.error).finally(() => setLoading(false));
+      }, []);
+
+      useEffect(() => { fetchUsers(); }, [fetchUsers]);
+
+      const handleSave = () => {
+        setModal(false);
+        setSelected(null);
+        fetchUsers();
+        addToast?.('User saved successfully!', 'success');
+      };
+
+      const handleDelete = async (user) => {
+        if (!confirm('Are you sure you want to delete ' + user.firstName + ' ' + user.lastName + '?')) return;
+        try {
+          await api.del('/users/' + user._id);
+          fetchUsers();
+          addToast?.('User deleted', 'success');
+        } catch (e) {
+          addToast?.('Failed to delete user: ' + e.message, 'error');
+        }
+      };
+
+      const handleToggleActive = async (user) => {
+        try {
+          await api.put('/users/' + user._id, { isActive: !user.isActive });
+          fetchUsers();
+          addToast?.(user.isActive ? 'User deactivated' : 'User activated', 'success');
+        } catch (e) {
+          addToast?.('Failed to update user', 'error');
+        }
+      };
+
+      const filteredUsers = users.filter(u => 
+        !search || 
+        (u.firstName + ' ' + u.lastName).toLowerCase().includes(search.toLowerCase()) ||
+        u.email.toLowerCase().includes(search.toLowerCase()) ||
+        u.role?.toLowerCase().includes(search.toLowerCase())
+      );
+
+      const roleColors = { employee: 'gray', safety_officer: 'blue', supervisor: 'cyan', manager: 'purple', admin: 'red' };
+
+      return (
+        <div className="space-y-6 slide-up">
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+            <div>
+              <h2 className="text-2xl lg:text-3xl font-bold text-slate-800">Team Members</h2>
+              <p className="text-slate-500">Manage users and their access permissions</p>
+            </div>
+            <div className="flex gap-3">
+              <div className="relative">
+                <input type="text" placeholder="Search users..." value={search} onChange={e => setSearch(e.target.value)} className="pl-10 pr-4 py-2.5 bg-white border-2 border-slate-200 rounded-xl focus:border-primary-500 w-full sm:w-64" />
+                <div className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"><Icons.Search /></div>
+              </div>
+              <Button onClick={() => { setSelected(null); setModal(true); }} icon={<Icons.Plus />}>Add User</Button>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <StatCard title="Total Users" value={users.length} icon={<Icons.Users />} color="blue" />
+            <StatCard title="Admins" value={users.filter(u => u.role === 'admin').length} icon={<Icons.Settings />} color="purple" />
+            <StatCard title="Active" value={users.filter(u => u.isActive).length} icon={<Icons.Check />} color="green" />
+            <StatCard title="Inactive" value={users.filter(u => !u.isActive).length} icon={<Icons.X />} color="gray" />
+          </div>
+
+          <Card noPadding>
+            {loading ? (
+              <div className="flex justify-center py-16"><Spinner size="lg" /></div>
+            ) : filteredUsers.length === 0 ? (
+              <EmptyState title="No users found" description={search ? 'Try a different search term' : 'Add your first team member to get started'} action={<Button onClick={() => setModal(true)} icon={<Icons.Plus />}>Add User</Button>} />
+            ) : (
+              <div className="divide-y divide-slate-100">
+                {filteredUsers.map(user => (
+                  <div key={user._id} className="flex items-center justify-between p-4 hover:bg-slate-50 transition-colors">
+                    <div className="flex items-center gap-4">
+                      <div className={'w-12 h-12 rounded-full flex items-center justify-center font-bold text-white ' + (user.isActive ? 'bg-gradient-to-br from-primary-400 to-primary-600' : 'bg-slate-400')}>
+                        {user.firstName?.[0]}{user.lastName?.[0]}
+                      </div>
+                      <div>
+                        <p className="font-semibold text-slate-800">{user.firstName} {user.lastName}</p>
+                        <p className="text-sm text-slate-500">{user.email}</p>
+                        {user.department && <p className="text-xs text-slate-400">{user.department}</p>}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <Badge color={roleColors[user.role] || 'gray'}>{user.role?.replace('_', ' ')}</Badge>
+                      <Badge color={user.isActive ? 'green' : 'gray'}>{user.isActive ? 'Active' : 'Inactive'}</Badge>
+                      <div className="flex gap-1">
+                        <button onClick={() => { setSelected(user); setModal(true); }} className="p-2 hover:bg-primary-100 rounded-lg text-slate-500 hover:text-primary-600 transition-colors" title="Edit"><Icons.Edit /></button>
+                        <button onClick={() => handleToggleActive(user)} className="p-2 hover:bg-slate-100 rounded-lg text-slate-500 hover:text-slate-700 transition-colors" title={user.isActive ? 'Deactivate' : 'Activate'}>{user.isActive ? <Icons.X /> : <Icons.Check />}</button>
+                        <button onClick={() => handleDelete(user)} className="p-2 hover:bg-red-100 rounded-lg text-slate-500 hover:text-red-600 transition-colors" title="Delete"><Icons.Trash /></button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </Card>
+
+          <UserModal isOpen={modal} onClose={() => { setModal(false); setSelected(null); }} user={selected} onSave={handleSave} />
+        </div>
+      );
+    };
+
+    // ========== AUDIT PAGE ==========
+    const AuditPage = () => {
+      const [logs, setLogs] = useState([]);
+      const [loading, setLoading] = useState(true);
+      useEffect(() => { api.get('/audit-logs').then(d => setLogs(d.logs || [])).catch(console.error).finally(() => setLoading(false)); }, []);
+      
+      return (
+        <div className="space-y-6 slide-up">
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+            <div>
+              <h2 className="text-2xl lg:text-3xl font-bold text-slate-800">Audit Logs</h2>
+              <p className="text-slate-500">Complete activity history and compliance trail</p>
+            </div>
+            <Button variant="secondary" icon={<Icons.Download />} onClick={() => window.open(API + '/audit-logs/export?format=xlsx', '_blank')}>Export Logs</Button>
+          </div>
+          <Card noPadding icon={<Icons.Audit />}>
+            <Table 
+              columns={[
+                { header: 'Timestamp', render: r => <span className="text-slate-600 text-sm font-mono">{new Date(r.timestamp).toLocaleString()}</span> },
+                { header: 'User', render: r => r.user ? r.user.firstName + ' ' + r.user.lastName : 'System' },
+                { header: 'Action', render: r => <Badge color="blue">{r.action}</Badge> },
+                { header: 'Module', render: r => <Badge color="gray">{r.module}</Badge> },
+                { header: 'Entity', accessor: 'entityName' },
+              ]} 
+              data={logs} 
+              loading={loading} 
+            />
+          </Card>
+        </div>
+      );
+    };
+
+    // ========== REPORTS PAGE ==========
+    const ReportsPage = () => {
+      const [type, setType] = useState('incidents');
+      const [data, setData] = useState(null);
+      const [loading, setLoading] = useState(false);
+      
+      const generate = async () => { 
+        setLoading(true); 
+        try { const d = await api.get('/reports/' + type); setData(d.report); } 
+        catch (e) { console.error(e); } 
+        finally { setLoading(false); } 
+      };
+      
+      return (
+        <div className="space-y-6 slide-up">
+          <div>
+            <h2 className="text-2xl lg:text-3xl font-bold text-slate-800">Reports</h2>
+            <p className="text-slate-500">Generate and export safety reports</p>
+          </div>
+          <Card icon={<Icons.Reports />}>
+            <div className="flex flex-wrap gap-4 items-end">
+              <Select label="Report Type" value={type} onChange={e => setType(e.target.value)} options={[
+                { value: 'incidents', label: 'Incidents Report' }, 
+                { value: 'action-items', label: 'Action Items Report' }, 
+                { value: 'training', label: 'Training Report' }, 
+                { value: 'inspections', label: 'Inspections Report' }
+              ]} className="w-64" />
+              <Button onClick={generate} loading={loading}>Generate Report</Button>
+              <Button variant="secondary" icon={<Icons.Download />} onClick={() => window.open(API + '/reports/' + type + '?format=xlsx', '_blank')}>Export Excel</Button>
+            </div>
+            {data && (
+              <div className="mt-6 p-4 bg-slate-50 rounded-xl border border-slate-200">
+                <pre className="overflow-auto max-h-96 text-xs text-slate-600">{JSON.stringify(data, null, 2)}</pre>
+              </div>
+            )}
+          </Card>
+        </div>
+      );
+    };
+
+    // ========== SUPER ADMIN PAGE (SafetyFirst Platform Admin) ==========
+    const SuperAdminPage = ({ onLogout }) => {
+      const [tab, setTab] = useState('organizations');
+      const [orgs, setOrgs] = useState([]);
+      const [loading, setLoading] = useState(true);
+      const [modal, setModal] = useState(false);
+      const [selected, setSelected] = useState(null);
+      const [stats, setStats] = useState({ totalOrgs: 0, totalUsers: 0, activeTrials: 0, revenue: 0 });
+
+      useEffect(() => {
+        fetchData();
+      }, []);
+
+      const fetchData = async () => {
+        setLoading(true);
+        try {
+          const [orgsData, statsData] = await Promise.all([
+            api.get('/superadmin/organizations'),
+            api.get('/superadmin/stats')
+          ]);
+          setOrgs(orgsData.organizations || []);
+          setStats(statsData || {});
+        } catch (e) {
+          console.error(e);
+          // Demo data if API not available
+          setOrgs([
+            { _id: '1', name: 'Acme Manufacturing', industry: 'manufacturing', subscription: { tier: 'professional' }, userCount: 45, createdAt: '2024-01-15' },
+            { _id: '2', name: 'BuildRight Construction', industry: 'construction', subscription: { tier: 'starter' }, userCount: 12, createdAt: '2024-03-22' },
+            { _id: '3', name: 'MedCare Hospital', industry: 'healthcare', subscription: { tier: 'enterprise' }, userCount: 250, createdAt: '2024-02-10' },
+          ]);
+          setStats({ totalOrgs: 3, totalUsers: 307, activeTrials: 5, revenue: 45800 });
+        }
+        setLoading(false);
+      };
+
+      const OrgModal = ({ isOpen, onClose, org }) => {
+        const [form, setForm] = useState({});
+        const [saving, setSaving] = useState(false);
+
+        useEffect(() => {
+          setForm(org || { name: '', industry: '', email: '', phone: '', subscription: { tier: 'starter' } });
+        }, [org, isOpen]);
+
+        const handleSave = async () => {
+          setSaving(true);
+          try {
+            if (org?._id) {
+              await api.put('/superadmin/organizations/' + org._id, form);
+            } else {
+              await api.post('/superadmin/organizations', form);
+            }
+            fetchData();
+            onClose();
+          } catch (e) { console.error(e); }
+          setSaving(false);
+        };
+
+        return (
+          <Modal isOpen={isOpen} onClose={onClose} title={org ? 'Edit Organization' : 'Add Organization'} size="lg"
+            footer={<><Button variant="secondary" onClick={onClose}>Cancel</Button><Button onClick={handleSave} loading={saving}>Save</Button></>}
+          >
+            <div className="space-y-5">
+              <Input label="Organization Name *" value={form.name || ''} onChange={e => setForm(p => ({ ...p, name: e.target.value }))} />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <Select label="Industry" value={form.industry || ''} onChange={e => setForm(p => ({ ...p, industry: e.target.value }))} options={[
+                  { value: '', label: 'Select Industry' },
+                  { value: 'manufacturing', label: 'Manufacturing' },
+                  { value: 'construction', label: 'Construction' },
+                  { value: 'healthcare', label: 'Healthcare' },
+                  { value: 'logistics', label: 'Logistics' },
+                  { value: 'energy', label: 'Energy' },
+                  { value: 'other', label: 'Other' }
+                ]} />
+                <Select label="Subscription Tier" value={form.subscription?.tier || 'starter'} onChange={e => setForm(p => ({ ...p, subscription: { ...p.subscription, tier: e.target.value } }))} options={[
+                  { value: 'starter', label: 'Starter ($199/mo)' },
+                  { value: 'professional', label: 'Professional ($499/mo)' },
+                  { value: 'enterprise', label: 'Enterprise ($1,299/mo)' }
+                ]} />
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <Input label="Contact Email" type="email" value={form.email || ''} onChange={e => setForm(p => ({ ...p, email: e.target.value }))} />
+                <Input label="Contact Phone" type="tel" value={form.phone || ''} onChange={e => setForm(p => ({ ...p, phone: e.target.value }))} />
+              </div>
+            </div>
+          </Modal>
+        );
+      };
+
+      const tierColors = { starter: 'blue', professional: 'purple', enterprise: 'amber' };
+
+      return (
+        <div className="min-h-screen bg-slate-100">
+          {/* Header */}
+          <header className="bg-slate-900 text-white px-6 py-4">
+            <div className="max-w-7xl mx-auto flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <div className="w-10 h-10 bg-gradient-to-br from-red-500 to-red-600 rounded-xl flex items-center justify-center">
+                  <Icons.Shield />
+                </div>
+                <div>
+                  <h1 className="font-bold text-lg">SafetyFirst Admin</h1>
+                  <p className="text-sm text-slate-400">Platform Administration</p>
+                </div>
+              </div>
+              <Button variant="ghost" className="!text-white hover:!bg-slate-800" onClick={onLogout} icon={<Icons.Logout />}>
+                Sign Out
+              </Button>
+            </div>
+          </header>
+
+          <div className="max-w-7xl mx-auto px-6 py-8">
+            {/* Stats */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+              <StatCard title="Total Organizations" value={stats.totalOrgs} icon={<Icons.Contractor />} color="blue" />
+              <StatCard title="Total Users" value={stats.totalUsers} icon={<Icons.Users />} color="green" />
+              <StatCard title="Active Trials" value={stats.activeTrials} icon={<Icons.Training />} color="yellow" />
+              <StatCard title="Monthly Revenue" value={'$' + (stats.revenue || 0).toLocaleString()} icon={<Icons.Reports />} color="purple" />
+            </div>
+
+            {/* Tabs */}
+            <Tabs 
+              tabs={[
+                { id: 'organizations', label: 'Organizations' },
+                { id: 'subscriptions', label: 'Subscriptions' },
+                { id: 'system', label: 'System Health' }
+              ]} 
+              active={tab} 
+              onChange={setTab} 
+            />
+
+            <div className="mt-6">
+              {tab === 'organizations' && (
+                <Card title="All Organizations" actions={<Button onClick={() => { setSelected(null); setModal(true); }} icon={<Icons.Plus />}>Add Organization</Button>} noPadding>
+                  {loading ? (
+                    <div className="flex justify-center py-16"><Spinner size="lg" /></div>
+                  ) : (
+                    <div className="divide-y divide-slate-100">
+                      {orgs.map(org => (
+                        <div key={org._id} className="flex items-center justify-between p-4 hover:bg-slate-50 transition-colors">
+                          <div className="flex items-center gap-4">
+                            <div className="w-12 h-12 bg-gradient-to-br from-slate-600 to-slate-700 text-white rounded-xl flex items-center justify-center font-bold text-lg">
+                              {org.name?.[0]}
+                            </div>
+                            <div>
+                              <p className="font-semibold text-slate-800">{org.name}</p>
+                              <p className="text-sm text-slate-500">{org.industry} • {org.userCount || 0} users</p>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <Badge color={tierColors[org.subscription?.tier] || 'gray'}>{org.subscription?.tier}</Badge>
+                            <span className="text-sm text-slate-500">{new Date(org.createdAt).toLocaleDateString()}</span>
+                            <button onClick={() => { setSelected(org); setModal(true); }} className="p-2 hover:bg-primary-100 rounded-lg text-slate-500 hover:text-primary-600"><Icons.Edit /></button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </Card>
+              )}
+
+              {tab === 'subscriptions' && (
+                <Card title="Subscription Overview">
+                  <div className="grid md:grid-cols-3 gap-6">
+                    {['starter', 'professional', 'enterprise'].map(tier => {
+                      const count = orgs.filter(o => o.subscription?.tier === tier).length;
+                      const prices = { starter: 199, professional: 499, enterprise: 1299 };
+                      return (
+                        <div key={tier} className="p-6 bg-slate-50 rounded-xl">
+                          <Badge color={tierColors[tier]} size="md">{tier}</Badge>
+                          <p className="text-3xl font-bold text-slate-800 mt-4">{count}</p>
+                          <p className="text-slate-500">organizations</p>
+                          <p className="text-lg font-semibold text-emerald-600 mt-2">${(count * prices[tier]).toLocaleString()}/mo</p>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </Card>
+              )}
+
+              {tab === 'system' && (
+                <div className="grid md:grid-cols-2 gap-6">
+                  <Card title="System Status">
+                    <div className="space-y-4">
+                      {[
+                        ['API Server', 'Operational', 'green'],
+                        ['Database', 'Operational', 'green'],
+                        ['File Storage', 'Operational', 'green'],
+                        ['Email Service', 'Operational', 'green']
+                      ].map(([name, status, color]) => (
+                        <div key={name} className="flex items-center justify-between p-3 bg-slate-50 rounded-xl">
+                          <span className="font-medium text-slate-700">{name}</span>
+                          <Badge color={color}>{status}</Badge>
+                        </div>
+                      ))}
+                    </div>
+                  </Card>
+                  <Card title="Quick Actions">
+                    <div className="space-y-3">
+                      <Button variant="secondary" className="w-full justify-start" icon={<Icons.Download />}>Export All Data</Button>
+                      <Button variant="secondary" className="w-full justify-start" icon={<Icons.Reports />}>Generate Reports</Button>
+                      <Button variant="secondary" className="w-full justify-start" icon={<Icons.Settings />}>System Settings</Button>
+                    </div>
+                  </Card>
+                </div>
+              )}
+            </div>
+          </div>
+
+          <OrgModal isOpen={modal} onClose={() => { setModal(false); setSelected(null); }} org={selected} />
+        </div>
+      );
+    };
+
+    // ========== MAIN APP ==========
+    const App = () => {
+      const [user, setUser] = useState(null);
+      const [loading, setLoading] = useState(true);
+      const [page, setPage] = useState('dashboard');
+      const [mobileOpen, setMobileOpen] = useState(false);
+      const [toasts, setToasts] = useState([]);
+
+      const addToast = (message, type = 'info') => { 
+        const id = Date.now(); 
+        setToasts(p => [...p, { id, message, type }]); 
+        setTimeout(() => setToasts(p => p.filter(t => t.id !== id)), 5000); 
+      };
+      const removeToast = (id) => setToasts(p => p.filter(t => t.id !== id));
+
+      useEffect(() => {
+        const token = localStorage.getItem('ehs_token');
+        if (token) { 
+          api.setToken(token); 
+          api.get('/auth/me')
+            .then(d => setUser(d.user))
+            .catch(() => api.setToken(null))
+            .finally(() => setLoading(false)); 
+        } else {
+          setLoading(false);
+        }
+      }, []);
+
+      const handleLogin = u => setUser(u);
+      const handleLogout = () => { api.setToken(null); setUser(null); };
+
+      // Column definitions
+      const incidentCols = [
+        { header: 'ID', render: r => <span className="font-mono text-xs bg-slate-100 px-2 py-1 rounded-lg">{r.incidentNumber}</span> },
+        { header: 'Title', render: r => <span className="font-semibold text-slate-800 max-w-[200px] truncate block">{r.title}</span> },
+        { header: 'Type', render: r => <Badge color="blue">{r.type?.replace('_', ' ')}</Badge> },
+        { header: 'Severity', render: r => <Badge color={r.severity === 'severe' || r.severity === 'catastrophic' ? 'red' : r.severity === 'serious' ? 'orange' : 'yellow'}>{r.severity}</Badge> },
+        { header: 'Status', render: r => <StatusBadge status={r.status} /> },
+        { header: 'Date', render: r => <span className="text-slate-500">{new Date(r.dateOccurred).toLocaleDateString()}</span> },
+      ];
+
+      const actionCols = [
+        { header: 'ID', render: r => <span className="font-mono text-xs bg-slate-100 px-2 py-1 rounded-lg">{r.actionNumber}</span> },
+        { header: 'Title', render: r => <span className="font-semibold text-slate-800">{r.title}</span> },
+        { header: 'Priority', render: r => <Badge color={r.priority === 'critical' ? 'red' : r.priority === 'high' ? 'orange' : r.priority === 'medium' ? 'yellow' : 'gray'}>{r.priority}</Badge> },
+        { header: 'Status', render: r => <StatusBadge status={r.status} /> },
+        { header: 'Due', render: r => { const d = new Date(r.dueDate); const overdue = d < new Date() && r.status !== 'completed'; return <span className={overdue ? 'text-red-600 font-bold' : 'text-slate-500'}>{d.toLocaleDateString()}</span>; } },
+      ];
+
+      const riskCols = [
+        { header: 'ID', render: r => <span className="font-mono text-xs bg-slate-100 px-2 py-1 rounded-lg">{r.assessmentNumber}</span> },
+        { header: 'Title', render: r => <span className="font-semibold text-slate-800">{r.title}</span> },
+        { header: 'Type', render: r => <Badge color="purple">{r.type?.replace('_', ' ')}</Badge> },
+        { header: 'Risk Level', render: r => <RiskBadge level={r.overallRiskLevel} /> },
+        { header: 'Status', render: r => <StatusBadge status={r.status} /> },
+      ];
+
+      const jsaCols = [
+        { header: 'ID', render: r => <span className="font-mono text-xs bg-slate-100 px-2 py-1 rounded-lg">{r.jsaNumber}</span> },
+        { header: 'Title', render: r => <span className="font-semibold text-slate-800">{r.title}</span> },
+        { header: 'Department', render: r => r.department || '-' },
+        { header: 'Status', render: r => <StatusBadge status={r.status} /> },
+      ];
+
+      const permitCols = [
+        { header: 'ID', render: r => <span className="font-mono text-xs bg-slate-100 px-2 py-1 rounded-lg">{r.permitNumber}</span> },
+        { header: 'Title', render: r => <span className="font-semibold text-slate-800">{r.title}</span> },
+        { header: 'Type', render: r => <Badge color="orange">{r.type?.replace('_', ' ')}</Badge> },
+        { header: 'Priority', render: r => <Badge color={r.priority === 'emergency' ? 'red' : r.priority === 'urgent' ? 'orange' : 'gray'}>{r.priority}</Badge> },
+        { header: 'Status', render: r => <StatusBadge status={r.status} /> },
+      ];
+
+      const contractorCols = [
+        { header: 'Company', render: r => <span className="font-semibold text-slate-800">{r.companyName}</span> },
+        { header: 'Type', render: r => <Badge color="cyan">{r.type}</Badge> },
+        { header: 'Contact', render: r => r.contact?.primaryName || '-' },
+        { header: 'Status', render: r => <StatusBadge status={r.status} /> },
+      ];
+
+      const chemicalCols = [
+        { header: 'Product', render: r => <span className="font-semibold text-slate-800">{r.productName}</span> },
+        { header: 'Manufacturer', accessor: 'manufacturer' },
+        { header: 'CAS #', render: r => <span className="font-mono text-xs">{r.casNumber || '-'}</span> },
+        { header: 'Status', render: r => <StatusBadge status={r.status} /> },
+      ];
+
+      const emergencyCols = [
+        { header: 'Title', render: r => <span className="font-semibold text-slate-800">{r.title}</span> },
+        { header: 'Type', render: r => <Badge color="red">{r.type?.replace('_', ' ')}</Badge> },
+        { header: 'Location', accessor: 'location' },
+        { header: 'Status', render: r => <StatusBadge status={r.status} /> },
+      ];
+
+      const renderPage = () => {
+        switch (page) {
+          case 'dashboard': return <DashboardPage />;
+          case 'incidents': return <ListPage title="Incidents" subtitle="Track and investigate workplace incidents" endpoint="/incidents" columns={incidentCols} ModalComp={IncidentModal} createLabel="Report Incident" icon={Icons.Incident} />;
+          case 'observations': return <ListPage title="Safety Observations" subtitle="Near misses, hazards, and safety observations" endpoint="/observations" columns={[
+            { header: 'ID', render: r => <span className="font-mono text-xs bg-slate-100 px-2 py-1 rounded-lg">{r.observationNumber}</span> },
+            { header: 'Description', render: r => <span className="font-semibold text-slate-800 truncate max-w-xs block">{r.description}</span> },
+            { header: 'Type', render: r => <Badge color={r.type === 'unsafe_act' ? 'red' : r.type === 'unsafe_condition' ? 'yellow' : r.type === 'near_miss' ? 'orange' : 'green'}>{r.type?.replace(/_/g, ' ')}</Badge> },
+            { header: 'Status', render: r => <StatusBadge status={r.status} /> },
+          ]} ModalComp={ObservationModal} createLabel="Report Observation" icon={Icons.Observation} />;
+          case 'actions': return <ListPage title="Action Items" subtitle="Corrective and preventive actions" endpoint="/action-items" columns={actionCols} ModalComp={ActionModal} createLabel="New Action" icon={Icons.Action} />;
+          case 'inspections': return <ListPage title="Inspections" subtitle="Safety inspections and audits" endpoint="/inspections" columns={[
+            { header: 'ID', render: r => <span className="font-mono text-xs bg-slate-100 px-2 py-1 rounded-lg">{r.inspectionNumber}</span> },
+            { header: 'Title', render: r => <span className="font-semibold text-slate-800">{r.title}</span> },
+            { header: 'Type', render: r => <Badge color="cyan">{r.type}</Badge> },
+            { header: 'Status', render: r => <StatusBadge status={r.status} /> },
+          ]} ModalComp={InspectionModal} createLabel="New Inspection" icon={Icons.Inspection} />;
+          case 'training': return <ListPage title="Training" subtitle="Training courses and compliance" endpoint="/training" columns={[
+            { header: 'Title', render: r => <span className="font-semibold text-slate-800">{r.title}</span> },
+            { header: 'Type', render: r => <Badge color="purple">{r.type}</Badge> },
+            { header: 'Duration', render: r => r.duration ? r.duration.hours + 'h ' + (r.duration.minutes || 0) + 'm' : '-' },
+          ]} ModalComp={TrainingModal} createLabel="New Course" icon={Icons.Training} />;
+          case 'documents': return <ListPage title="Documents" subtitle="Policies, procedures, and SDS" endpoint="/documents" columns={[
+            { header: 'Title', render: r => <span className="font-semibold text-slate-800">{r.title}</span> },
+            { header: 'Category', render: r => <Badge color="purple">{r.category}</Badge> },
+            { header: 'Version', accessor: 'version' },
+            { header: 'Status', render: r => <StatusBadge status={r.status} /> },
+          ]} ModalComp={DocumentModal} createLabel="Upload Document" icon={Icons.Document} />;
+          case 'risk': return <ListPage title="Risk Assessments" subtitle="Identify and control workplace hazards" endpoint="/risk-assessments" columns={riskCols} ModalComp={RiskModal} createLabel="New Assessment" icon={Icons.Risk} />;
+          case 'jsa': return <ListPage title="Job Safety Analysis" subtitle="Step-by-step task hazard analysis" endpoint="/jsa" columns={jsaCols} ModalComp={JSAModal} createLabel="New JSA" icon={Icons.JSA} />;
+          case 'permits': return <ListPage title="Permits to Work" subtitle="High-risk work authorization" endpoint="/permits" columns={permitCols} ModalComp={PermitModal} createLabel="New Permit" icon={Icons.Permit} />;
+          case 'moc': return <ListPage title="Management of Change" subtitle="Track and approve operational changes" endpoint="/moc" columns={[
+            { header: 'ID', render: r => <span className="font-mono text-xs bg-slate-100 px-2 py-1 rounded-lg">{r.mocNumber}</span> },
+            { header: 'Title', render: r => <span className="font-semibold text-slate-800">{r.title}</span> },
+            { header: 'Type', render: r => <Badge color="purple">{r.changeType?.replace(/_/g, ' ')}</Badge> },
+            { header: 'Priority', render: r => <Badge color={r.priority === 'critical' ? 'red' : r.priority === 'high' ? 'orange' : r.priority === 'medium' ? 'yellow' : 'green'}>{r.priority}</Badge> },
+            { header: 'Status', render: r => <StatusBadge status={r.status} /> },
+          ]} ModalComp={MOCModal} createLabel="New MOC" icon={Icons.MOC} />;
+          case 'contractors': return <ListPage title="Contractors" subtitle="Contractor safety management" endpoint="/contractors" columns={contractorCols} ModalComp={ContractorModal} createLabel="Add Contractor" icon={Icons.Contractor} />;
+          case 'suppliers': return <ListPage title="Supplier Management" subtitle="Supplier qualification and performance" endpoint="/suppliers" columns={[
+            { header: 'Name', render: r => <span className="font-semibold text-slate-800">{r.name}</span> },
+            { header: 'Category', render: r => <Badge color="blue">{r.category}</Badge> },
+            { header: 'Rating', render: r => <Badge color={r.rating >= 4 ? 'green' : r.rating >= 3 ? 'yellow' : 'red'}>{r.rating ? r.rating + '/5' : 'N/A'}</Badge> },
+            { header: 'Status', render: r => <StatusBadge status={r.status} /> },
+          ]} ModalComp={SupplierModal} createLabel="Add Supplier" icon={Icons.Supplier} />;
+          case 'assets': return <ListPage title="Asset Management" subtitle="Equipment and asset tracking" endpoint="/assets" columns={[
+            { header: 'Asset ID', render: r => <span className="font-mono text-xs bg-slate-100 px-2 py-1 rounded-lg">{r.assetNumber}</span> },
+            { header: 'Name', render: r => <span className="font-semibold text-slate-800">{r.name}</span> },
+            { header: 'Category', render: r => <Badge color="blue">{r.category}</Badge> },
+            { header: 'Location', accessor: 'location' },
+            { header: 'Status', render: r => <StatusBadge status={r.status} /> },
+          ]} ModalComp={AssetModal} createLabel="Add Asset" icon={Icons.Asset} />;
+          case 'chemicals': return <ListPage title="Chemical/SDS Management" subtitle="Safety Data Sheets and chemical inventory" endpoint="/chemicals" columns={chemicalCols} ModalComp={ChemicalModal} createLabel="Add Chemical" icon={Icons.Chemical} />;
+          case 'health': return <ListPage title="Occupational Health" subtitle="Employee health monitoring and records" endpoint="/occupational-health" columns={[
+            { header: 'Employee', render: r => r.employee ? r.employee.firstName + ' ' + r.employee.lastName : (r.employeeName || '-') },
+            { header: 'Type', render: r => <Badge color="green">{r.recordType?.replace(/_/g, ' ')}</Badge> },
+            { header: 'Date', render: r => r.date ? new Date(r.date).toLocaleDateString() : '-' },
+            { header: 'Status', render: r => <StatusBadge status={r.status} /> },
+          ]} ModalComp={HealthModal} createLabel="New Record" icon={Icons.Health} />;
+          case 'emergency': return <ListPage title="Emergency Response Plans" subtitle="Emergency procedures and drill records" endpoint="/emergency-plans" columns={emergencyCols} ModalComp={EmergencyModal} createLabel="New Plan" icon={Icons.Emergency} />;
+          case 'ergonomics': return <ListPage title="Ergonomic Assessments" subtitle="Workstation and task evaluations" endpoint="/ergonomic-assessments" columns={[
+            { header: 'ID', render: r => <span className="font-mono text-xs bg-slate-100 px-2 py-1 rounded-lg">{r.assessmentNumber}</span> },
+            { header: 'Employee', render: r => r.employeeName || '-' },
+            { header: 'Type', render: r => <Badge color="purple">{r.type}</Badge> },
+            { header: 'Status', render: r => <StatusBadge status={r.status} /> },
+          ]} ModalComp={ErgonomicModal} createLabel="New Assessment" icon={Icons.Ergo} />;
+          case 'environmental': return <ListPage title="Environmental Management" subtitle="Air, water, waste, and emissions tracking" endpoint="/environmental" columns={[
+            { header: 'ID', render: r => <span className="font-mono text-xs bg-slate-100 px-2 py-1 rounded-lg">{r.recordNumber}</span> },
+            { header: 'Type', render: r => <Badge color={r.type === 'air' ? 'blue' : r.type === 'water' ? 'cyan' : r.type === 'waste' ? 'yellow' : 'green'}>{r.type}</Badge> },
+            { header: 'Source', render: r => <span className="font-semibold text-slate-800">{r.source}</span> },
+            { header: 'Date', render: r => r.date ? new Date(r.date).toLocaleDateString() : '-' },
+            { header: 'Status', render: r => <StatusBadge status={r.status} /> },
+          ]} ModalComp={EnvironmentalModal} createLabel="New Record" icon={Icons.Environment} />;
+          case 'quality': return <ListPage title="Quality/NCR Management" subtitle="Nonconformance reports and quality issues" endpoint="/quality" columns={[
+            { header: 'NCR #', render: r => <span className="font-mono text-xs bg-slate-100 px-2 py-1 rounded-lg">{r.ncrNumber}</span> },
+            { header: 'Title', render: r => <span className="font-semibold text-slate-800">{r.title}</span> },
+            { header: 'Type', render: r => <Badge color="purple">{r.type?.replace(/_/g, ' ')}</Badge> },
+            { header: 'Severity', render: r => <Badge color={r.severity === 'critical' ? 'red' : r.severity === 'major' ? 'orange' : 'yellow'}>{r.severity}</Badge> },
+            { header: 'Status', render: r => <StatusBadge status={r.status} /> },
+          ]} ModalComp={QualityModal} createLabel="New NCR" icon={Icons.Quality} />;
+          case 'capa': return <ListPage title="CAPA Management" subtitle="Corrective and preventive action tracking" endpoint="/capa" columns={[
+            { header: 'CAPA #', render: r => <span className="font-mono text-xs bg-slate-100 px-2 py-1 rounded-lg">{r.capaNumber}</span> },
+            { header: 'Title', render: r => <span className="font-semibold text-slate-800">{r.title}</span> },
+            { header: 'Type', render: r => <Badge color={r.type === 'corrective' ? 'red' : 'blue'}>{r.type}</Badge> },
+            { header: 'Source', render: r => <Badge color="gray">{r.source?.replace(/_/g, ' ')}</Badge> },
+            { header: 'Status', render: r => <StatusBadge status={r.status} /> },
+          ]} ModalComp={CAPAModal} createLabel="New CAPA" icon={Icons.CAPA} />;
+          case 'meetings': return <ListPage title="Safety Meetings" subtitle="Committee meetings and safety talks" endpoint="/meetings" columns={[
+            { header: 'Title', render: r => <span className="font-semibold text-slate-800">{r.title}</span> },
+            { header: 'Type', render: r => <Badge color="blue">{r.type?.replace(/_/g, ' ')}</Badge> },
+            { header: 'Date', render: r => r.date ? new Date(r.date).toLocaleDateString() : '-' },
+            { header: 'Attendees', render: r => r.attendees?.length || 0 },
+            { header: 'Status', render: r => <StatusBadge status={r.status} /> },
+          ]} ModalComp={MeetingModal} createLabel="Schedule Meeting" icon={Icons.Meeting} />;
+          case 'osha': return <OSHAPage />;
+          case 'reports': return <ReportsPage />;
+          case 'users': return <UsersPage />;
+          case 'audit': return <AuditPage />;
+          case 'settings': return <SettingsPage />;
+          default: return <DashboardPage />;
+        }
+      };
+
+
+      if (loading) return <div className="min-h-screen flex items-center justify-center gradient-bg"><Spinner size="lg" className="!border-white/30 !border-t-white" /></div>;
+      
+      const path = window.location.pathname;
+      
+      // Super Admin Portal
+      if (path === '/superadmin' || path.startsWith('/superadmin')) {
+        if (!user) return <LoginPage onLogin={handleLogin} isSuperAdmin={true} />;
+        if (user.role === 'superadmin' || user.isSuperAdmin) {
+          return <SuperAdminPage onLogout={handleLogout} />;
+        }
+        return <div className="min-h-screen flex items-center justify-center bg-slate-100"><Card className="max-w-md"><h2 className="text-xl font-bold text-red-600 mb-2">Access Denied</h2><p className="text-slate-600 mb-4">You don't have permission to access the admin portal.</p><Button onClick={handleLogout}>Sign Out</Button></Card></div>;
+      }
+      
+      // Redirect unauthenticated users on root to landing page
+      if (!user && path === '/') {
+        window.location.href = '/';
+        return null;
+      }
+      
+      // Registration page
+      if (path === '/register') {
+        if (user) { window.location.href = '/app'; return null; }
+        return <RegisterPage onRegister={(u) => { handleLogin(u); window.location.href = '/app'; }} />;
+      }
+      
+      // Login page
+      if (path === '/login' || (!user && path !== '/register')) {
+        return <LoginPage onLogin={(u) => { handleLogin(u); window.location.href = '/app'; }} />;
+      }
+      
+      // Redirect to app if authenticated on root
+      if (user && path === '/') {
+        window.location.href = '/app';
+        return null;
+      }
+
+      return (
+        <AuthContext.Provider value={{ user, setUser }}>
+          <ToastContext.Provider value={{ addToast }}>
+            <div className="min-h-screen flex bg-slate-100">
+              <Sidebar page={page} setPage={setPage} user={user} onLogout={handleLogout} mobileOpen={mobileOpen} setMobileOpen={setMobileOpen} />
+              <div className="flex-1 flex flex-col min-w-0">
+                <Header user={user} setMobileOpen={setMobileOpen} />
+                <main className="flex-1 p-4 lg:p-6 overflow-auto">{renderPage()}</main>
+              </div>
+            </div>
+            <Toast toasts={toasts} removeToast={removeToast} />
+          </ToastContext.Provider>
+        </AuthContext.Provider>
+      );
+    };
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>
