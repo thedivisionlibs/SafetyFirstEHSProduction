@@ -218,7 +218,7 @@ const organizationSchema = new mongoose.Schema({
   email: String,
   website: String,
   subscription: {
-    tier: { type: String, enum: ['free', 'professional', 'enterprise'], default: 'free' },
+    tier: { type: String, enum: ['starter', 'professional', 'enterprise'], default: 'starter' },
     startDate: Date,
     endDate: Date,
     status: { type: String, enum: ['active', 'cancelled', 'expired', 'trial'], default: 'trial' }
@@ -262,8 +262,8 @@ const userSchema = new mongoose.Schema({
   lastName: { type: String, required: true },
   role: { 
     type: String, 
-    enum: ['superadmin', 'admin', 'manager', 'supervisor', 'user', 'readonly'],
-    default: 'user'
+    enum: ['superadmin', 'admin', 'manager', 'supervisor', 'safety_officer', 'employee', 'user', 'readonly'],
+    default: 'employee'
   },
   department: String,
   location: String,
