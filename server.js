@@ -22,6 +22,10 @@ const crypto = require('crypto');
 const path = require('path');
 const fs = require('fs');
 
+// Stripe for payment processing
+const Stripe = require('stripe');
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || 'sk_test_placeholder');
+
 const app = express();
 
 // =============================================================================
@@ -46,7 +50,21 @@ const CONFIG = {
     phoneNumber: process.env.TWILIO_PHONE_NUMBER
   },
   APP_URL: process.env.APP_URL || 'http://localhost:3000',
-  ENCRYPTION_KEY: process.env.ENCRYPTION_KEY || 'default-32-char-encryption-key!'
+  ENCRYPTION_KEY: process.env.ENCRYPTION_KEY || 'default-32-char-encryption-key!',
+  STRIPE: {
+    secretKey: process.env.STRIPE_SECRET_KEY,
+    publishableKey: process.env.STRIPE_PUBLISHABLE_KEY,
+    webhookSecret: process.env.STRIPE_WEBHOOK_SECRET,
+    // Price IDs - Create these in Stripe Dashboard
+    priceIds: {
+      starter_monthly: process.env.STRIPE_PRICE_STARTER_MONTHLY || 'price_starter_monthly',
+      starter_yearly: process.env.STRIPE_PRICE_STARTER_YEARLY || 'price_starter_yearly',
+      professional_monthly: process.env.STRIPE_PRICE_PROFESSIONAL_MONTHLY || 'price_professional_monthly',
+      professional_yearly: process.env.STRIPE_PRICE_PROFESSIONAL_YEARLY || 'price_professional_yearly',
+      enterprise_monthly: process.env.STRIPE_PRICE_ENTERPRISE_MONTHLY || 'price_enterprise_monthly',
+      enterprise_yearly: process.env.STRIPE_PRICE_ENTERPRISE_YEARLY || 'price_enterprise_yearly'
+    }
+  }
 };
 
 // Subscription Tier Limits
@@ -181,6 +199,76 @@ const SUBSCRIPTION_TIERS = {
 app.use(helmet({ contentSecurityPolicy: false }));
 app.use(compression());
 app.use(cors());
+
+// Stripe webhook needs raw body - must be before express.json()
+app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), async (req, res) => {
+  const sig = req.headers['stripe-signature'];
+  let event;
+
+  try {
+    // Verify webhook signature
+    if (CONFIG.STRIPE.webhookSecret) {
+      event = stripe.webhooks.constructEvent(req.body, sig, CONFIG.STRIPE.webhookSecret);
+    } else {
+      // For testing without webhook secret
+      event = JSON.parse(req.body.toString());
+    }
+  } catch (err) {
+    console.error('Webhook signature verification failed:', err.message);
+    return res.status(400).send(`Webhook Error: ${err.message}`);
+  }
+
+  // Handle the event
+  try {
+    switch (event.type) {
+      case 'checkout.session.completed': {
+        const session = event.data.object;
+        await handleCheckoutComplete(session);
+        break;
+      }
+      
+      case 'customer.subscription.created':
+      case 'customer.subscription.updated': {
+        const subscription = event.data.object;
+        await handleSubscriptionUpdate(subscription);
+        break;
+      }
+      
+      case 'customer.subscription.deleted': {
+        const subscription = event.data.object;
+        await handleSubscriptionCancelled(subscription);
+        break;
+      }
+      
+      case 'invoice.paid': {
+        const invoice = event.data.object;
+        await handleInvoicePaid(invoice);
+        break;
+      }
+      
+      case 'invoice.payment_failed': {
+        const invoice = event.data.object;
+        await handlePaymentFailed(invoice);
+        break;
+      }
+      
+      case 'customer.updated': {
+        const customer = event.data.object;
+        await handleCustomerUpdated(customer);
+        break;
+      }
+
+      default:
+        console.log(`Unhandled event type: ${event.type}`);
+    }
+
+    res.json({ received: true });
+  } catch (err) {
+    console.error('Error processing webhook:', err);
+    res.status(500).json({ error: 'Webhook processing failed' });
+  }
+});
+
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
@@ -223,12 +311,49 @@ const organizationSchema = new mongoose.Schema({
   phone: String,
   email: String,
   website: String,
+  // Stripe Integration
+  stripeCustomerId: String,
+  stripeSubscriptionId: String,
+  stripePriceId: String,
   subscription: {
     tier: { type: String, enum: ['starter', 'professional', 'enterprise'], default: 'starter' },
+    billingCycle: { type: String, enum: ['monthly', 'yearly'], default: 'monthly' },
     startDate: Date,
     endDate: Date,
-    status: { type: String, enum: ['active', 'cancelled', 'expired', 'trial'], default: 'trial' }
+    currentPeriodStart: Date,
+    currentPeriodEnd: Date,
+    cancelAtPeriodEnd: { type: Boolean, default: false },
+    status: { type: String, enum: ['active', 'cancelled', 'expired', 'trial', 'past_due', 'unpaid', 'incomplete'], default: 'trial' },
+    trialEndsAt: Date,
+    lastPaymentDate: Date,
+    lastPaymentAmount: Number,
+    nextPaymentDate: Date,
+    nextPaymentAmount: Number
   },
+  billing: {
+    name: String,
+    email: String,
+    address: {
+      line1: String,
+      line2: String,
+      city: String,
+      state: String,
+      postalCode: String,
+      country: String
+    },
+    taxId: String
+  },
+  paymentHistory: [{
+    stripePaymentIntentId: String,
+    stripeInvoiceId: String,
+    amount: Number,
+    currency: { type: String, default: 'usd' },
+    status: String,
+    description: String,
+    paidAt: Date,
+    invoiceUrl: String,
+    invoicePdf: String
+  }],
   settings: {
     timezone: { type: String, default: 'America/New_York' },
     dateFormat: { type: String, default: 'MM/DD/YYYY' },
@@ -2974,6 +3099,241 @@ const sendSMS = async (to, message) => {
 };
 
 // =============================================================================
+// STRIPE WEBHOOK HANDLERS
+// =============================================================================
+
+// Map Stripe price IDs to subscription tiers
+const getPlanFromPriceId = (priceId) => {
+  const priceMap = {
+    [CONFIG.STRIPE.priceIds.starter_monthly]: { tier: 'starter', cycle: 'monthly' },
+    [CONFIG.STRIPE.priceIds.starter_yearly]: { tier: 'starter', cycle: 'yearly' },
+    [CONFIG.STRIPE.priceIds.professional_monthly]: { tier: 'professional', cycle: 'monthly' },
+    [CONFIG.STRIPE.priceIds.professional_yearly]: { tier: 'professional', cycle: 'yearly' },
+    [CONFIG.STRIPE.priceIds.enterprise_monthly]: { tier: 'enterprise', cycle: 'monthly' },
+    [CONFIG.STRIPE.priceIds.enterprise_yearly]: { tier: 'enterprise', cycle: 'yearly' }
+  };
+  return priceMap[priceId] || { tier: 'starter', cycle: 'monthly' };
+};
+
+// Handle successful checkout
+const handleCheckoutComplete = async (session) => {
+  try {
+    const orgId = session.metadata?.organizationId;
+    if (!orgId) {
+      console.error('No organizationId in checkout session metadata');
+      return;
+    }
+
+    const org = await Organization.findById(orgId);
+    if (!org) {
+      console.error('Organization not found:', orgId);
+      return;
+    }
+
+    // Update Stripe customer ID if new
+    if (session.customer && !org.stripeCustomerId) {
+      org.stripeCustomerId = session.customer;
+    }
+
+    // Get subscription details
+    if (session.subscription) {
+      const subscription = await stripe.subscriptions.retrieve(session.subscription);
+      const priceId = subscription.items.data[0]?.price?.id;
+      const planInfo = getPlanFromPriceId(priceId);
+
+      org.stripeSubscriptionId = subscription.id;
+      org.stripePriceId = priceId;
+      org.subscription = {
+        tier: planInfo.tier,
+        billingCycle: planInfo.cycle,
+        status: 'active',
+        startDate: new Date(subscription.start_date * 1000),
+        currentPeriodStart: new Date(subscription.current_period_start * 1000),
+        currentPeriodEnd: new Date(subscription.current_period_end * 1000),
+        cancelAtPeriodEnd: subscription.cancel_at_period_end
+      };
+    }
+
+    // Update billing info from customer
+    if (session.customer_details) {
+      org.billing = {
+        email: session.customer_details.email,
+        name: session.customer_details.name,
+        address: session.customer_details.address ? {
+          line1: session.customer_details.address.line1,
+          line2: session.customer_details.address.line2,
+          city: session.customer_details.address.city,
+          state: session.customer_details.address.state,
+          postalCode: session.customer_details.address.postal_code,
+          country: session.customer_details.address.country
+        } : undefined
+      };
+    }
+
+    org.updatedAt = new Date();
+    await org.save();
+
+    console.log(`Checkout completed for org ${org.name}, tier: ${org.subscription.tier}`);
+  } catch (error) {
+    console.error('Error handling checkout complete:', error);
+  }
+};
+
+// Handle subscription updates
+const handleSubscriptionUpdate = async (subscription) => {
+  try {
+    const org = await Organization.findOne({ stripeSubscriptionId: subscription.id });
+    if (!org) {
+      // Try finding by customer ID
+      const orgByCustomer = await Organization.findOne({ stripeCustomerId: subscription.customer });
+      if (orgByCustomer) {
+        orgByCustomer.stripeSubscriptionId = subscription.id;
+        await orgByCustomer.save();
+        return handleSubscriptionUpdate(subscription);
+      }
+      console.log('No organization found for subscription:', subscription.id);
+      return;
+    }
+
+    const priceId = subscription.items.data[0]?.price?.id;
+    const planInfo = getPlanFromPriceId(priceId);
+
+    // Map Stripe status to our status
+    const statusMap = {
+      'active': 'active',
+      'trialing': 'trial',
+      'past_due': 'past_due',
+      'canceled': 'cancelled',
+      'unpaid': 'unpaid',
+      'incomplete': 'incomplete',
+      'incomplete_expired': 'expired'
+    };
+
+    org.stripePriceId = priceId;
+    org.subscription.tier = planInfo.tier;
+    org.subscription.billingCycle = planInfo.cycle;
+    org.subscription.status = statusMap[subscription.status] || 'active';
+    org.subscription.currentPeriodStart = new Date(subscription.current_period_start * 1000);
+    org.subscription.currentPeriodEnd = new Date(subscription.current_period_end * 1000);
+    org.subscription.cancelAtPeriodEnd = subscription.cancel_at_period_end;
+
+    if (subscription.trial_end) {
+      org.subscription.trialEndsAt = new Date(subscription.trial_end * 1000);
+    }
+
+    org.updatedAt = new Date();
+    await org.save();
+
+    console.log(`Subscription updated for org ${org.name}: ${subscription.status}, tier: ${planInfo.tier}`);
+  } catch (error) {
+    console.error('Error handling subscription update:', error);
+  }
+};
+
+// Handle subscription cancellation
+const handleSubscriptionCancelled = async (subscription) => {
+  try {
+    const org = await Organization.findOne({ stripeSubscriptionId: subscription.id });
+    if (!org) {
+      console.log('No organization found for cancelled subscription:', subscription.id);
+      return;
+    }
+
+    org.subscription.status = 'cancelled';
+    org.subscription.endDate = new Date();
+    org.updatedAt = new Date();
+    await org.save();
+
+    console.log(`Subscription cancelled for org ${org.name}`);
+  } catch (error) {
+    console.error('Error handling subscription cancelled:', error);
+  }
+};
+
+// Handle invoice paid
+const handleInvoicePaid = async (invoice) => {
+  try {
+    const org = await Organization.findOne({ stripeCustomerId: invoice.customer });
+    if (!org) {
+      console.log('No organization found for invoice customer:', invoice.customer);
+      return;
+    }
+
+    // Add to payment history
+    org.paymentHistory.push({
+      stripePaymentIntentId: invoice.payment_intent,
+      stripeInvoiceId: invoice.id,
+      amount: invoice.amount_paid / 100, // Convert from cents
+      currency: invoice.currency,
+      status: 'paid',
+      description: invoice.lines.data[0]?.description || 'Subscription payment',
+      paidAt: new Date(invoice.status_transitions?.paid_at * 1000 || Date.now()),
+      invoiceUrl: invoice.hosted_invoice_url,
+      invoicePdf: invoice.invoice_pdf
+    });
+
+    // Update last payment info
+    org.subscription.lastPaymentDate = new Date();
+    org.subscription.lastPaymentAmount = invoice.amount_paid / 100;
+
+    // Calculate next payment
+    if (invoice.next_payment_attempt) {
+      org.subscription.nextPaymentDate = new Date(invoice.next_payment_attempt * 1000);
+    }
+
+    org.updatedAt = new Date();
+    await org.save();
+
+    console.log(`Invoice paid for org ${org.name}: $${invoice.amount_paid / 100}`);
+  } catch (error) {
+    console.error('Error handling invoice paid:', error);
+  }
+};
+
+// Handle payment failed
+const handlePaymentFailed = async (invoice) => {
+  try {
+    const org = await Organization.findOne({ stripeCustomerId: invoice.customer });
+    if (!org) return;
+
+    org.subscription.status = 'past_due';
+    org.updatedAt = new Date();
+    await org.save();
+
+    // TODO: Send payment failed email notification
+    console.log(`Payment failed for org ${org.name}`);
+  } catch (error) {
+    console.error('Error handling payment failed:', error);
+  }
+};
+
+// Handle customer updated
+const handleCustomerUpdated = async (customer) => {
+  try {
+    const org = await Organization.findOne({ stripeCustomerId: customer.id });
+    if (!org) return;
+
+    if (customer.email) org.billing.email = customer.email;
+    if (customer.name) org.billing.name = customer.name;
+    if (customer.address) {
+      org.billing.address = {
+        line1: customer.address.line1,
+        line2: customer.address.line2,
+        city: customer.address.city,
+        state: customer.address.state,
+        postalCode: customer.address.postal_code,
+        country: customer.address.country
+      };
+    }
+
+    org.updatedAt = new Date();
+    await org.save();
+  } catch (error) {
+    console.error('Error handling customer updated:', error);
+  }
+};
+
+// =============================================================================
 // AUTHENTICATION MIDDLEWARE
 // =============================================================================
 
@@ -3119,8 +3479,128 @@ const checkLimit = (limitType) => {
 // Helper to check if in demo mode
 const isDemoMode = () => mongoose.connection.readyState !== 1;
 
-// Demo mode empty response helper
-const demoEmptyList = (key) => ({ [key]: [], pagination: { total: 0, page: 1, limit: 20, pages: 0 } });
+// Comprehensive Demo Data for Live Demo
+const DEMO_DATA = {
+  incidents: [
+    { _id: 'demo-inc-1', incidentNumber: 'INC-2024-001', title: 'Slip and Fall in Warehouse', description: 'Employee slipped on wet floor in warehouse section B. Minor bruising on left knee.', type: 'injury', severity: 'minor', status: 'investigating', dateOccurred: new Date(Date.now() - 2*24*60*60*1000), oshaRecordable: false, location: { site: 'Main Warehouse', department: 'Shipping', specificLocation: 'Section B - Loading Dock' }, reportedBy: { firstName: 'John', lastName: 'Smith' }, assignedTo: { firstName: 'Sarah', lastName: 'Johnson' } },
+    { _id: 'demo-inc-2', incidentNumber: 'INC-2024-002', title: 'Near Miss - Forklift', description: 'Forklift nearly struck pedestrian at intersection. No injuries reported.', type: 'near_miss', severity: 'moderate', status: 'open', dateOccurred: new Date(Date.now() - 5*24*60*60*1000), oshaRecordable: false, location: { site: 'Main Warehouse', department: 'Operations', specificLocation: 'Aisle 5' }, reportedBy: { firstName: 'Mike', lastName: 'Davis' }, assignedTo: { firstName: 'Sarah', lastName: 'Johnson' } },
+    { _id: 'demo-inc-3', incidentNumber: 'INC-2024-003', title: 'Chemical Spill - Lab Area', description: 'Minor chemical spill during transfer operations. Area contained and cleaned per SOP.', type: 'environmental', severity: 'minor', status: 'closed', dateOccurred: new Date(Date.now() - 10*24*60*60*1000), oshaRecordable: false, location: { site: 'R&D Facility', department: 'Laboratory', specificLocation: 'Lab 3' }, reportedBy: { firstName: 'Emily', lastName: 'Chen' }, assignedTo: { firstName: 'Tom', lastName: 'Wilson' } },
+    { _id: 'demo-inc-4', incidentNumber: 'INC-2024-004', title: 'Hand Laceration - Machine Shop', description: 'Employee sustained cut to right hand while operating lathe. Required first aid treatment.', type: 'injury', severity: 'minor', status: 'pending_review', dateOccurred: new Date(Date.now() - 7*24*60*60*1000), oshaRecordable: true, location: { site: 'Manufacturing Plant', department: 'Machine Shop', specificLocation: 'Lathe Station 2' }, reportedBy: { firstName: 'Robert', lastName: 'Martinez' }, assignedTo: { firstName: 'Sarah', lastName: 'Johnson' } },
+    { _id: 'demo-inc-5', incidentNumber: 'INC-2024-005', title: 'Property Damage - Delivery Truck', description: 'Delivery truck backed into loading dock door causing damage. No injuries.', type: 'property_damage', severity: 'minor', status: 'closed', dateOccurred: new Date(Date.now() - 14*24*60*60*1000), oshaRecordable: false, location: { site: 'Distribution Center', department: 'Logistics', specificLocation: 'Dock 4' }, reportedBy: { firstName: 'James', lastName: 'Brown' }, assignedTo: { firstName: 'Tom', lastName: 'Wilson' } },
+    { _id: 'demo-inc-6', incidentNumber: 'INC-2024-006', title: 'Ergonomic Complaint - Office', description: 'Employee reporting wrist pain from repetitive keyboard use.', type: 'illness', severity: 'minor', status: 'open', dateOccurred: new Date(Date.now() - 1*24*60*60*1000), oshaRecordable: false, location: { site: 'Corporate Office', department: 'Finance', specificLocation: 'Cubicle 23' }, reportedBy: { firstName: 'Lisa', lastName: 'Anderson' }, assignedTo: { firstName: 'Sarah', lastName: 'Johnson' } }
+  ],
+  actionItems: [
+    { _id: 'demo-act-1', actionNumber: 'ACT-2024-001', title: 'Install anti-slip mats in warehouse', description: 'Purchase and install anti-slip floor mats in high-traffic areas of warehouse section B.', priority: 'high', status: 'in_progress', dueDate: new Date(Date.now() + 3*24*60*60*1000), assignedTo: { firstName: 'Tom', lastName: 'Wilson' }, linkedIncident: 'INC-2024-001' },
+    { _id: 'demo-act-2', actionNumber: 'ACT-2024-002', title: 'Update forklift safety training', description: 'Revise forklift safety training to include pedestrian awareness at intersections.', priority: 'high', status: 'open', dueDate: new Date(Date.now() + 7*24*60*60*1000), assignedTo: { firstName: 'Sarah', lastName: 'Johnson' }, linkedIncident: 'INC-2024-002' },
+    { _id: 'demo-act-3', actionNumber: 'ACT-2024-003', title: 'Install convex mirrors at intersections', description: 'Install convex mirrors at all warehouse intersections to improve visibility.', priority: 'medium', status: 'open', dueDate: new Date(Date.now() + 14*24*60*60*1000), assignedTo: { firstName: 'Mike', lastName: 'Davis' }, linkedIncident: 'INC-2024-002' },
+    { _id: 'demo-act-4', actionNumber: 'ACT-2024-004', title: 'Machine guard inspection', description: 'Conduct comprehensive inspection of all machine guards in shop area.', priority: 'high', status: 'completed', dueDate: new Date(Date.now() - 2*24*60*60*1000), completedDate: new Date(Date.now() - 3*24*60*60*1000), assignedTo: { firstName: 'Robert', lastName: 'Martinez' }, linkedIncident: 'INC-2024-004' },
+    { _id: 'demo-act-5', actionNumber: 'ACT-2024-005', title: 'Ergonomic workstation assessment', description: 'Schedule ergonomic assessment for finance department workstations.', priority: 'medium', status: 'open', dueDate: new Date(Date.now() + 5*24*60*60*1000), assignedTo: { firstName: 'Lisa', lastName: 'Anderson' }, linkedIncident: 'INC-2024-006' },
+    { _id: 'demo-act-6', actionNumber: 'ACT-2024-006', title: 'Loading dock repair', description: 'Repair damaged loading dock door and install protective bollards.', priority: 'low', status: 'completed', dueDate: new Date(Date.now() - 7*24*60*60*1000), completedDate: new Date(Date.now() - 5*24*60*60*1000), assignedTo: { firstName: 'James', lastName: 'Brown' }, linkedIncident: 'INC-2024-005' },
+    { _id: 'demo-act-7', actionNumber: 'ACT-2024-007', title: 'Chemical handling refresher training', description: 'Schedule refresher training for lab personnel on chemical handling procedures.', priority: 'medium', status: 'in_progress', dueDate: new Date(Date.now() + 10*24*60*60*1000), assignedTo: { firstName: 'Emily', lastName: 'Chen' }, linkedIncident: 'INC-2024-003' },
+    { _id: 'demo-act-8', actionNumber: 'ACT-2024-008', title: 'PPE inventory check', description: 'Verify PPE inventory levels and reorder safety glasses and gloves as needed.', priority: 'low', status: 'overdue', dueDate: new Date(Date.now() - 1*24*60*60*1000), assignedTo: { firstName: 'Tom', lastName: 'Wilson' } }
+  ],
+  inspections: [
+    { _id: 'demo-insp-1', inspectionNumber: 'INS-2024-001', title: 'Monthly Fire Extinguisher Check', type: 'fire_safety', status: 'completed', scheduledDate: new Date(Date.now() - 5*24*60*60*1000), completedDate: new Date(Date.now() - 5*24*60*60*1000), score: 98, location: 'All Facilities', inspector: { firstName: 'Sarah', lastName: 'Johnson' } },
+    { _id: 'demo-insp-2', inspectionNumber: 'INS-2024-002', title: 'Warehouse Safety Walk', type: 'general_safety', status: 'completed', scheduledDate: new Date(Date.now() - 3*24*60*60*1000), completedDate: new Date(Date.now() - 3*24*60*60*1000), score: 85, location: 'Main Warehouse', inspector: { firstName: 'Tom', lastName: 'Wilson' } },
+    { _id: 'demo-insp-3', inspectionNumber: 'INS-2024-003', title: 'Machine Shop Safety Audit', type: 'equipment', status: 'scheduled', scheduledDate: new Date(Date.now() + 2*24*60*60*1000), location: 'Manufacturing Plant', inspector: { firstName: 'Robert', lastName: 'Martinez' } },
+    { _id: 'demo-insp-4', inspectionNumber: 'INS-2024-004', title: 'Laboratory Hazmat Inspection', type: 'hazmat', status: 'in_progress', scheduledDate: new Date(), location: 'R&D Facility', inspector: { firstName: 'Emily', lastName: 'Chen' } },
+    { _id: 'demo-insp-5', inspectionNumber: 'INS-2024-005', title: 'Office Ergonomics Review', type: 'ergonomic', status: 'scheduled', scheduledDate: new Date(Date.now() + 7*24*60*60*1000), location: 'Corporate Office', inspector: { firstName: 'Lisa', lastName: 'Anderson' } }
+  ],
+  training: [
+    { _id: 'demo-tr-1', title: 'Forklift Operator Certification', type: 'certification', duration: { hours: 8, minutes: 0 }, frequency: 'yearly', description: 'Comprehensive forklift operation and safety training', isActive: true },
+    { _id: 'demo-tr-2', title: 'Hazard Communication (HazCom)', type: 'compliance', duration: { hours: 2, minutes: 0 }, frequency: 'yearly', description: 'OSHA-required hazard communication training', isActive: true },
+    { _id: 'demo-tr-3', title: 'Fire Safety & Evacuation', type: 'safety', duration: { hours: 1, minutes: 30 }, frequency: 'yearly', description: 'Fire prevention and emergency evacuation procedures', isActive: true },
+    { _id: 'demo-tr-4', title: 'Lockout/Tagout (LOTO)', type: 'compliance', duration: { hours: 2, minutes: 0 }, frequency: 'yearly', description: 'Control of hazardous energy procedures', isActive: true },
+    { _id: 'demo-tr-5', title: 'First Aid & CPR', type: 'certification', duration: { hours: 4, minutes: 0 }, frequency: '2years', description: 'Basic first aid and CPR certification', isActive: true },
+    { _id: 'demo-tr-6', title: 'PPE Selection & Use', type: 'safety', duration: { hours: 1, minutes: 0 }, frequency: 'yearly', description: 'Proper selection and use of personal protective equipment', isActive: true }
+  ],
+  documents: [
+    { _id: 'demo-doc-1', title: 'Emergency Action Plan', category: 'policy', version: '3.2', status: 'active', updatedAt: new Date(Date.now() - 30*24*60*60*1000), owner: { firstName: 'Sarah', lastName: 'Johnson' } },
+    { _id: 'demo-doc-2', title: 'Lockout/Tagout Procedure', category: 'procedure', version: '2.1', status: 'active', updatedAt: new Date(Date.now() - 60*24*60*60*1000), owner: { firstName: 'Tom', lastName: 'Wilson' } },
+    { _id: 'demo-doc-3', title: 'Forklift Safety Guidelines', category: 'guideline', version: '1.5', status: 'active', updatedAt: new Date(Date.now() - 45*24*60*60*1000), owner: { firstName: 'Mike', lastName: 'Davis' } },
+    { _id: 'demo-doc-4', title: 'Hazard Communication Program', category: 'program', version: '4.0', status: 'active', updatedAt: new Date(Date.now() - 90*24*60*60*1000), owner: { firstName: 'Sarah', lastName: 'Johnson' } },
+    { _id: 'demo-doc-5', title: 'Acetone - Safety Data Sheet', category: 'sds', version: '1.0', status: 'active', updatedAt: new Date(Date.now() - 120*24*60*60*1000), owner: { firstName: 'Emily', lastName: 'Chen' } }
+  ],
+  observations: [
+    { _id: 'demo-obs-1', observationNumber: 'OBS-2024-001', description: 'Employee not wearing safety glasses in machine shop', type: 'unsafe_act', category: 'ppe', status: 'open', location: 'Machine Shop', reportedBy: { firstName: 'Tom', lastName: 'Wilson' }, createdAt: new Date(Date.now() - 1*24*60*60*1000) },
+    { _id: 'demo-obs-2', observationNumber: 'OBS-2024-002', description: 'Excellent housekeeping practices observed in warehouse', type: 'positive', category: 'housekeeping', status: 'closed', location: 'Main Warehouse', reportedBy: { firstName: 'Sarah', lastName: 'Johnson' }, createdAt: new Date(Date.now() - 3*24*60*60*1000) },
+    { _id: 'demo-obs-3', observationNumber: 'OBS-2024-003', description: 'Frayed electrical cord on portable grinder', type: 'unsafe_condition', category: 'electrical', status: 'in_progress', location: 'Maintenance Shop', reportedBy: { firstName: 'Mike', lastName: 'Davis' }, createdAt: new Date(Date.now() - 2*24*60*60*1000) },
+    { _id: 'demo-obs-4', observationNumber: 'OBS-2024-004', description: 'Team properly using lifting techniques during material handling', type: 'positive', category: 'ergonomics', status: 'closed', location: 'Shipping Dock', reportedBy: { firstName: 'James', lastName: 'Brown' }, createdAt: new Date(Date.now() - 5*24*60*60*1000) }
+  ],
+  riskAssessments: [
+    { _id: 'demo-ra-1', assessmentNumber: 'RA-2024-001', title: 'Chemical Storage Area Risk Assessment', type: 'chemical', status: 'active', riskLevel: 'medium', location: 'R&D Facility - Lab 3', assessor: { firstName: 'Emily', lastName: 'Chen' }, nextReviewDate: new Date(Date.now() + 90*24*60*60*1000), createdAt: new Date(Date.now() - 30*24*60*60*1000) },
+    { _id: 'demo-ra-2', assessmentNumber: 'RA-2024-002', title: 'Forklift Operations Risk Assessment', type: 'operational', status: 'active', riskLevel: 'high', location: 'Main Warehouse', assessor: { firstName: 'Tom', lastName: 'Wilson' }, nextReviewDate: new Date(Date.now() + 60*24*60*60*1000), createdAt: new Date(Date.now() - 45*24*60*60*1000) },
+    { _id: 'demo-ra-3', assessmentNumber: 'RA-2024-003', title: 'Machine Shop Hazard Assessment', type: 'equipment', status: 'active', riskLevel: 'high', location: 'Manufacturing Plant', assessor: { firstName: 'Robert', lastName: 'Martinez' }, nextReviewDate: new Date(Date.now() + 30*24*60*60*1000), createdAt: new Date(Date.now() - 60*24*60*60*1000) },
+    { _id: 'demo-ra-4', assessmentNumber: 'RA-2024-004', title: 'Office Ergonomic Assessment', type: 'ergonomic', status: 'draft', riskLevel: 'low', location: 'Corporate Office', assessor: { firstName: 'Lisa', lastName: 'Anderson' }, nextReviewDate: new Date(Date.now() + 180*24*60*60*1000), createdAt: new Date(Date.now() - 7*24*60*60*1000) }
+  ],
+  jsas: [
+    { _id: 'demo-jsa-1', jsaNumber: 'JSA-2024-001', title: 'Forklift Loading/Unloading Operations', status: 'approved', department: 'Warehouse', taskDescription: 'Loading and unloading materials using sit-down forklift', createdBy: { firstName: 'Tom', lastName: 'Wilson' }, approvedBy: { firstName: 'Sarah', lastName: 'Johnson' }, steps: 3, createdAt: new Date(Date.now() - 60*24*60*60*1000) },
+    { _id: 'demo-jsa-2', jsaNumber: 'JSA-2024-002', title: 'Lathe Machine Operation', status: 'approved', department: 'Machine Shop', taskDescription: 'Operating manual lathe for metal turning', createdBy: { firstName: 'Robert', lastName: 'Martinez' }, approvedBy: { firstName: 'Sarah', lastName: 'Johnson' }, steps: 5, createdAt: new Date(Date.now() - 45*24*60*60*1000) },
+    { _id: 'demo-jsa-3', jsaNumber: 'JSA-2024-003', title: 'Chemical Transfer Procedure', status: 'pending', department: 'Laboratory', taskDescription: 'Transferring chemicals between containers', createdBy: { firstName: 'Emily', lastName: 'Chen' }, steps: 4, createdAt: new Date(Date.now() - 10*24*60*60*1000) },
+    { _id: 'demo-jsa-4', jsaNumber: 'JSA-2024-004', title: 'Roof Access Maintenance', status: 'approved', department: 'Facilities', taskDescription: 'Accessing roof for HVAC maintenance', createdBy: { firstName: 'James', lastName: 'Brown' }, approvedBy: { firstName: 'Tom', lastName: 'Wilson' }, steps: 6, createdAt: new Date(Date.now() - 90*24*60*60*1000) }
+  ],
+  permits: [
+    { _id: 'demo-ptw-1', permitNumber: 'PTW-2024-001', title: 'Hot Work - Welding Repair', type: 'hot_work', status: 'active', location: 'Maintenance Shop', requestedBy: { firstName: 'James', lastName: 'Brown' }, approvedBy: { firstName: 'Tom', lastName: 'Wilson' }, startDate: new Date(), endDate: new Date(Date.now() + 8*60*60*1000), createdAt: new Date(Date.now() - 1*24*60*60*1000) },
+    { _id: 'demo-ptw-2', permitNumber: 'PTW-2024-002', title: 'Confined Space Entry - Tank Cleaning', type: 'confined_space', status: 'pending', location: 'Storage Tank A', requestedBy: { firstName: 'Mike', lastName: 'Davis' }, startDate: new Date(Date.now() + 2*24*60*60*1000), endDate: new Date(Date.now() + 2*24*60*60*1000 + 4*60*60*1000), createdAt: new Date() },
+    { _id: 'demo-ptw-3', permitNumber: 'PTW-2024-003', title: 'Electrical Work - Panel Upgrade', type: 'electrical', status: 'completed', location: 'Building B - Electrical Room', requestedBy: { firstName: 'Robert', lastName: 'Martinez' }, approvedBy: { firstName: 'Sarah', lastName: 'Johnson' }, startDate: new Date(Date.now() - 3*24*60*60*1000), endDate: new Date(Date.now() - 3*24*60*60*1000 + 6*60*60*1000), createdAt: new Date(Date.now() - 5*24*60*60*1000) },
+    { _id: 'demo-ptw-4', permitNumber: 'PTW-2024-004', title: 'LOTO - Conveyor Maintenance', type: 'lockout_tagout', status: 'active', location: 'Production Line 2', requestedBy: { firstName: 'Tom', lastName: 'Wilson' }, approvedBy: { firstName: 'Sarah', lastName: 'Johnson' }, startDate: new Date(), endDate: new Date(Date.now() + 4*60*60*1000), createdAt: new Date() }
+  ],
+  contractors: [
+    { _id: 'demo-cont-1', name: 'ABC Electrical Services', type: 'electrical', status: 'approved', contact: { name: 'John Electric', email: 'john@abcelectric.com', phone: '555-0101' }, insuranceExpiry: new Date(Date.now() + 180*24*60*60*1000), safetyRating: 95, lastAuditDate: new Date(Date.now() - 30*24*60*60*1000) },
+    { _id: 'demo-cont-2', name: 'SafeClean Janitorial', type: 'janitorial', status: 'approved', contact: { name: 'Maria Clean', email: 'maria@safeclean.com', phone: '555-0102' }, insuranceExpiry: new Date(Date.now() + 90*24*60*60*1000), safetyRating: 88, lastAuditDate: new Date(Date.now() - 60*24*60*60*1000) },
+    { _id: 'demo-cont-3', name: 'Industrial Welding Co', type: 'welding', status: 'pending', contact: { name: 'Bob Welder', email: 'bob@indweld.com', phone: '555-0103' }, insuranceExpiry: new Date(Date.now() + 30*24*60*60*1000), safetyRating: null, lastAuditDate: null },
+    { _id: 'demo-cont-4', name: 'HVAC Masters', type: 'hvac', status: 'approved', contact: { name: 'Steve Cool', email: 'steve@hvacmasters.com', phone: '555-0104' }, insuranceExpiry: new Date(Date.now() + 120*24*60*60*1000), safetyRating: 92, lastAuditDate: new Date(Date.now() - 45*24*60*60*1000) }
+  ],
+  chemicals: [
+    { _id: 'demo-chem-1', name: 'Acetone', casNumber: '67-64-1', location: 'Lab 3 - Flammable Cabinet', quantity: 10, unit: 'gallons', hazardClass: 'Flammable Liquid', ghs: ['flammable', 'irritant'], sdsDate: new Date(Date.now() - 365*24*60*60*1000), expiryDate: new Date(Date.now() + 365*24*60*60*1000) },
+    { _id: 'demo-chem-2', name: 'Sodium Hydroxide', casNumber: '1310-73-2', location: 'Lab 3 - Corrosive Cabinet', quantity: 5, unit: 'kg', hazardClass: 'Corrosive', ghs: ['corrosive', 'irritant'], sdsDate: new Date(Date.now() - 180*24*60*60*1000), expiryDate: new Date(Date.now() + 730*24*60*60*1000) },
+    { _id: 'demo-chem-3', name: 'Isopropyl Alcohol', casNumber: '67-63-0', location: 'Maintenance Shop', quantity: 20, unit: 'gallons', hazardClass: 'Flammable Liquid', ghs: ['flammable', 'irritant'], sdsDate: new Date(Date.now() - 90*24*60*60*1000), expiryDate: new Date(Date.now() + 540*24*60*60*1000) },
+    { _id: 'demo-chem-4', name: 'Hydrochloric Acid', casNumber: '7647-01-0', location: 'Lab 3 - Acid Cabinet', quantity: 2.5, unit: 'liters', hazardClass: 'Corrosive', ghs: ['corrosive', 'toxic'], sdsDate: new Date(Date.now() - 60*24*60*60*1000), expiryDate: new Date(Date.now() + 365*24*60*60*1000) }
+  ],
+  users: [
+    { _id: 'demo-user-1', email: 'demo@safetyfirst.com', firstName: 'Demo', lastName: 'User', role: 'admin', department: 'Safety', isActive: true, lastLogin: new Date() },
+    { _id: 'demo-user-2', email: 'sarah.johnson@demo.com', firstName: 'Sarah', lastName: 'Johnson', role: 'safety_officer', department: 'Safety', isActive: true, lastLogin: new Date(Date.now() - 1*24*60*60*1000) },
+    { _id: 'demo-user-3', email: 'tom.wilson@demo.com', firstName: 'Tom', lastName: 'Wilson', role: 'manager', department: 'Operations', isActive: true, lastLogin: new Date(Date.now() - 2*24*60*60*1000) },
+    { _id: 'demo-user-4', email: 'emily.chen@demo.com', firstName: 'Emily', lastName: 'Chen', role: 'supervisor', department: 'Laboratory', isActive: true, lastLogin: new Date(Date.now() - 1*24*60*60*1000) },
+    { _id: 'demo-user-5', email: 'mike.davis@demo.com', firstName: 'Mike', lastName: 'Davis', role: 'employee', department: 'Warehouse', isActive: true, lastLogin: new Date(Date.now() - 3*24*60*60*1000) },
+    { _id: 'demo-user-6', email: 'robert.martinez@demo.com', firstName: 'Robert', lastName: 'Martinez', role: 'employee', department: 'Machine Shop', isActive: true, lastLogin: new Date(Date.now() - 2*24*60*60*1000) }
+  ],
+  icareNotes: [
+    { _id: 'demo-icare-1', noteNumber: 'IC-2024-001', type: 'recognition', category: 'safe_behavior', description: 'Recognized John for always wearing proper PPE and encouraging others to do the same', employee: { firstName: 'John', lastName: 'Smith' }, submittedBy: { firstName: 'Sarah', lastName: 'Johnson' }, status: 'acknowledged', createdAt: new Date(Date.now() - 2*24*60*60*1000) },
+    { _id: 'demo-icare-2', noteNumber: 'IC-2024-002', type: 'coaching', category: 'procedure', description: 'Discussed proper ladder usage after observing incorrect three-point contact', employee: { firstName: 'Mike', lastName: 'Davis' }, submittedBy: { firstName: 'Tom', lastName: 'Wilson' }, status: 'open', createdAt: new Date(Date.now() - 1*24*60*60*1000) },
+    { _id: 'demo-icare-3', noteNumber: 'IC-2024-003', type: 'recognition', category: 'hazard_reporting', description: 'Thanked Emily for promptly reporting the chemical spill and following proper cleanup procedures', employee: { firstName: 'Emily', lastName: 'Chen' }, submittedBy: { firstName: 'Sarah', lastName: 'Johnson' }, status: 'acknowledged', createdAt: new Date(Date.now() - 5*24*60*60*1000) }
+  ],
+  meetings: [
+    { _id: 'demo-meet-1', title: 'Weekly Safety Toolbox Talk', type: 'toolbox_talk', status: 'completed', scheduledDate: new Date(Date.now() - 7*24*60*60*1000), location: 'Warehouse Break Room', facilitator: { firstName: 'Sarah', lastName: 'Johnson' }, attendeeCount: 15, topics: ['Forklift Safety', 'PPE Requirements'] },
+    { _id: 'demo-meet-2', title: 'Monthly Safety Committee', type: 'committee', status: 'scheduled', scheduledDate: new Date(Date.now() + 7*24*60*60*1000), location: 'Conference Room A', facilitator: { firstName: 'Tom', lastName: 'Wilson' }, attendeeCount: 8, topics: ['Incident Review', 'New Procedures'] },
+    { _id: 'demo-meet-3', title: 'Quarterly Management Review', type: 'management_review', status: 'scheduled', scheduledDate: new Date(Date.now() + 30*24*60*60*1000), location: 'Executive Conference Room', facilitator: { firstName: 'Sarah', lastName: 'Johnson' }, attendeeCount: 6, topics: ['KPI Review', 'Budget Planning'] }
+  ],
+  inbox: [
+    { _id: 'demo-inbox-1', type: 'action_item', title: 'Action Item Due: Install anti-slip mats', description: 'ACT-2024-001 is due in 3 days', priority: 'high', status: 'unread', dueDate: new Date(Date.now() + 3*24*60*60*1000), createdAt: new Date() },
+    { _id: 'demo-inbox-2', type: 'training', title: 'Training Assignment: HazCom Refresher', description: 'You have been assigned Hazard Communication training', priority: 'medium', status: 'unread', dueDate: new Date(Date.now() + 14*24*60*60*1000), createdAt: new Date(Date.now() - 1*24*60*60*1000) },
+    { _id: 'demo-inbox-3', type: 'incident', title: 'Incident Assigned: Slip and Fall', description: 'INC-2024-001 has been assigned to you for investigation', priority: 'high', status: 'read', createdAt: new Date(Date.now() - 2*24*60*60*1000) },
+    { _id: 'demo-inbox-4', type: 'inspection', title: 'Inspection Reminder: Machine Shop Audit', description: 'INS-2024-003 is scheduled for tomorrow', priority: 'medium', status: 'unread', dueDate: new Date(Date.now() + 2*24*60*60*1000), createdAt: new Date() }
+  ]
+};
+
+// Demo mode response helper with sample data
+const getDemoData = (type, options = {}) => {
+  const data = DEMO_DATA[type] || [];
+  const page = parseInt(options.page) || 1;
+  const limit = parseInt(options.limit) || 20;
+  const start = (page - 1) * limit;
+  const paginatedData = data.slice(start, start + limit);
+  
+  return {
+    [type]: paginatedData,
+    pagination: {
+      total: data.length,
+      page,
+      limit,
+      pages: Math.ceil(data.length / limit)
+    }
+  };
+};
 
 // Health check
 app.get('/api/health', (req, res) => {
@@ -4366,7 +4846,7 @@ app.get('/api/superadmin/export/organizations', authenticateSuperAdmin, async (r
 // Get all incidents
 app.get('/api/incidents', authenticate, async (req, res) => {
   try {
-    if (isDemoMode()) return res.json(demoEmptyList('incidents'));
+    if (isDemoMode()) return res.json(getDemoData('incidents', req.query));
     
     const { status, type, severity, startDate, endDate, search, page = 1, limit = 20 } = req.query;
     
@@ -4513,7 +4993,7 @@ app.delete('/api/incidents/:id', authenticate, authorize('admin', 'superadmin'),
 // Get all action items
 app.get('/api/action-items', authenticate, async (req, res) => {
   try {
-    if (isDemoMode()) return res.json(demoEmptyList('actionItems'));
+    if (isDemoMode()) return res.json(getDemoData('actionItems', req.query));
     
     const { status, priority, assignedTo, dueDate, overdue, page = 1, limit = 20 } = req.query;
     
@@ -4699,6 +5179,8 @@ app.delete('/api/action-items/:id', authenticate, authorize('admin', 'superadmin
 // Get all inspections
 app.get('/api/inspections', authenticate, requireFeature('auditModule'), async (req, res) => {
   try {
+    if (isDemoMode()) return res.json(getDemoData('inspections', req.query));
+    
     const { status, type, startDate, endDate, page = 1, limit = 20 } = req.query;
     
     const query = { organization: req.organization._id };
@@ -4891,6 +5373,11 @@ app.delete('/api/inspection-templates/:id', authenticate, authorize('admin', 'su
 // Get all training courses
 app.get('/api/training', authenticate, requireFeature('trainingModule'), async (req, res) => {
   try {
+    if (isDemoMode()) {
+      const data = getDemoData('training', req.query);
+      return res.json({ trainings: data.training, pagination: data.pagination });
+    }
+    
     const { type, category, page = 1, limit = 20 } = req.query;
     
     const query = { organization: req.organization._id, isActive: true };
@@ -5096,6 +5583,8 @@ app.post('/api/training-records/:id/complete', authenticate, requireFeature('tra
 
 app.get('/api/documents', authenticate, async (req, res) => {
   try {
+    if (isDemoMode()) return res.json(getDemoData('documents', req.query));
+    
     const { category, status, search, page = 1, limit = 20 } = req.query;
     
     const query = { organization: req.organization._id };
@@ -5501,6 +5990,8 @@ app.get('/api/osha-logs/:year/export/:form', authenticate, requireFeature('oshaL
 
 app.get('/api/users', authenticate, authorize('admin', 'superadmin', 'manager'), async (req, res) => {
   try {
+    if (isDemoMode()) return res.json(getDemoData('users', req.query));
+    
     const { role, department, isActive, page = 1, limit = 20 } = req.query;
     
     const query = { organization: req.organization._id };
@@ -5775,64 +6266,6 @@ app.post('/api/organization/departments', authenticate, authorize('admin', 'supe
 });
 
 // -----------------------------------------------------------------------------
-// NOTIFICATION ROUTES
-// -----------------------------------------------------------------------------
-
-app.get('/api/notifications', authenticate, async (req, res) => {
-  try {
-    const { unreadOnly, page = 1, limit = 20 } = req.query;
-    
-    const query = { user: req.user._id };
-    if (unreadOnly === 'true') query.read = false;
-
-    const total = await Notification.countDocuments(query);
-    const notifications = await Notification.find(query)
-      .sort({ createdAt: -1 })
-      .skip((page - 1) * limit)
-      .limit(parseInt(limit));
-
-    const unreadCount = await Notification.countDocuments({ user: req.user._id, read: false });
-
-    res.json({
-      notifications,
-      unreadCount,
-      pagination: {
-        total,
-        page: parseInt(page),
-        limit: parseInt(limit),
-        pages: Math.ceil(total / limit)
-      }
-    });
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to get notifications' });
-  }
-});
-
-app.put('/api/notifications/:id/read', authenticate, async (req, res) => {
-  try {
-    await Notification.findOneAndUpdate(
-      { _id: req.params.id, user: req.user._id },
-      { read: true, readAt: new Date() }
-    );
-    res.json({ success: true });
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to mark notification as read' });
-  }
-});
-
-app.put('/api/notifications/read-all', authenticate, async (req, res) => {
-  try {
-    await Notification.updateMany(
-      { user: req.user._id, read: false },
-      { read: true, readAt: new Date() }
-    );
-    res.json({ success: true });
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to mark notifications as read' });
-  }
-});
-
-// -----------------------------------------------------------------------------
 // AUDIT LOG ROUTES
 // -----------------------------------------------------------------------------
 
@@ -5931,22 +6364,39 @@ app.get('/api/audit-logs/export', authenticate, authorize('admin', 'superadmin')
 
 app.get('/api/dashboard', authenticate, async (req, res) => {
   try {
-    // Demo mode - return sample dashboard data
+    // Demo mode - return comprehensive sample dashboard data
     if (isDemoMode()) {
       return res.json({
         incidents: { total: 12, open: 3, ytd: 12, mtd: 2, recordable: 1 },
-        actionItems: { total: 25, open: 8, overdue: 2 },
+        actionItems: { total: 25, open: 5, overdue: 2, completionRate: 76 },
         inspections: { total: 15, completed: 12, scheduled: 3 },
-        training: { assigned: 5, overdue: 1, completed: 20 },
-        recentIncidents: [],
-        recentActionItems: [],
-        incidentsByMonth: [
-          { month: 'Jan', count: 2 }, { month: 'Feb', count: 1 }, { month: 'Mar', count: 3 },
-          { month: 'Apr', count: 1 }, { month: 'May', count: 2 }, { month: 'Jun', count: 1 }
-        ],
-        incidentsByType: [
-          { type: 'injury', count: 5 }, { type: 'near_miss', count: 4 }, { type: 'property_damage', count: 3 }
-        ],
+        training: { completionRate: 85, overdueTraining: 2 },
+        recentActivity: {
+          incidents: DEMO_DATA.incidents.slice(0, 5),
+          actionItems: DEMO_DATA.actionItems.slice(0, 5)
+        },
+        trends: {
+          incidents: [
+            { _id: { month: 1 }, count: 2, recordable: 0 },
+            { _id: { month: 2 }, count: 1, recordable: 0 },
+            { _id: { month: 3 }, count: 3, recordable: 1 },
+            { _id: { month: 4 }, count: 1, recordable: 0 },
+            { _id: { month: 5 }, count: 2, recordable: 0 },
+            { _id: { month: 6 }, count: 1, recordable: 0 },
+            { _id: { month: 7 }, count: 2, recordable: 1 },
+            { _id: { month: 8 }, count: 0, recordable: 0 },
+            { _id: { month: 9 }, count: 1, recordable: 0 },
+            { _id: { month: 10 }, count: 2, recordable: 0 },
+            { _id: { month: 11 }, count: 1, recordable: 0 },
+            { _id: { month: 12 }, count: 2, recordable: 0 }
+          ],
+          byType: [
+            { _id: 'injury', count: 5 },
+            { _id: 'near_miss', count: 4 },
+            { _id: 'property_damage', count: 2 },
+            { _id: 'environmental', count: 1 }
+          ]
+        },
         tier: 'enterprise'
       });
     }
@@ -6319,6 +6769,11 @@ app.post('/api/custom-forms/:id/submit', authenticate, requireFeature('customFor
 
 app.get('/api/risk-assessments', authenticate, requireFeature('riskAssessment'), async (req, res) => {
   try {
+    if (isDemoMode()) {
+      const data = getDemoData('riskAssessments', req.query);
+      return res.json({ assessments: data.riskAssessments, pagination: data.pagination });
+    }
+    
     const { status, type, page = 1, limit = 20 } = req.query;
     const query = { organization: req.organization._id };
     if (status) query.status = status;
@@ -6399,6 +6854,8 @@ app.delete('/api/risk-assessments/:id', authenticate, requireFeature('riskAssess
 
 app.get('/api/jsa', authenticate, requireFeature('jsaModule'), async (req, res) => {
   try {
+    if (isDemoMode()) return res.json(getDemoData('jsas', req.query));
+    
     const { status, department, page = 1, limit = 20 } = req.query;
     const query = { organization: req.organization._id };
     if (status) query.status = status;
@@ -6479,6 +6936,8 @@ app.delete('/api/jsa/:id', authenticate, requireFeature('jsaModule'), authorize(
 
 app.get('/api/permits', authenticate, requireFeature('permitToWork'), async (req, res) => {
   try {
+    if (isDemoMode()) return res.json(getDemoData('permits', req.query));
+    
     const { status, type, page = 1, limit = 20 } = req.query;
     const query = { organization: req.organization._id };
     if (status) query.status = status;
@@ -6601,6 +7060,8 @@ app.post('/api/permits/:id/close', authenticate, requireFeature('permitToWork'),
 
 app.get('/api/contractors', authenticate, requireFeature('contractorManagement'), async (req, res) => {
   try {
+    if (isDemoMode()) return res.json(getDemoData('contractors', req.query));
+    
     const { status, type, page = 1, limit = 20 } = req.query;
     const query = { organization: req.organization._id };
     if (status) query.status = status;
@@ -6689,6 +7150,8 @@ app.post('/api/contractors/:id/rate', authenticate, requireFeature('contractorMa
 
 app.get('/api/chemicals', authenticate, requireFeature('chemicalManagement'), async (req, res) => {
   try {
+    if (isDemoMode()) return res.json(getDemoData('chemicals', req.query));
+    
     const { status, location, search, page = 1, limit = 20 } = req.query;
     const query = { organization: req.organization._id };
     if (status) query.status = status;
@@ -7065,9 +7528,10 @@ app.delete('/api/action-item-templates/:id', authenticate, authorize('admin'), a
 });
 
 // -----------------------------------------------------------------------------
-// SUBSCRIPTION ROUTES
+// SUBSCRIPTION & BILLING ROUTES (STRIPE INTEGRATION)
 // -----------------------------------------------------------------------------
 
+// Get subscription details
 app.get('/api/subscription', authenticate, async (req, res) => {
   try {
     const tier = req.organization.subscription.tier;
@@ -7081,8 +7545,19 @@ app.get('/api/subscription', authenticate, async (req, res) => {
       Document.countDocuments({ organization: req.organization._id })
     ]);
 
+    // Get Stripe subscription details if available
+    let stripeSubscription = null;
+    if (req.organization.stripeSubscriptionId) {
+      try {
+        stripeSubscription = await stripe.subscriptions.retrieve(req.organization.stripeSubscriptionId);
+      } catch (e) {
+        console.log('Could not retrieve Stripe subscription:', e.message);
+      }
+    }
+
     res.json({
       subscription: req.organization.subscription,
+      billing: req.organization.billing,
       tier: tierConfig,
       usage: {
         users: { current: userCount, limit: tierConfig.maxUsers },
@@ -7091,13 +7566,325 @@ app.get('/api/subscription', authenticate, async (req, res) => {
         inspections: { current: inspectionCount, limit: tierConfig.maxInspections },
         documents: { current: documentCount, limit: tierConfig.maxDocuments }
       },
-      availableTiers: SUBSCRIPTION_TIERS
+      availableTiers: SUBSCRIPTION_TIERS,
+      stripePublishableKey: CONFIG.STRIPE.publishableKey,
+      hasPaymentMethod: !!req.organization.stripeCustomerId,
+      stripeSubscription: stripeSubscription ? {
+        status: stripeSubscription.status,
+        currentPeriodEnd: stripeSubscription.current_period_end,
+        cancelAtPeriodEnd: stripeSubscription.cancel_at_period_end
+      } : null
     });
   } catch (error) {
+    console.error('Error getting subscription:', error);
     res.status(500).json({ error: 'Failed to get subscription info' });
   }
 });
 
+// Get Stripe config for frontend
+app.get('/api/billing/config', authenticate, async (req, res) => {
+  res.json({
+    publishableKey: CONFIG.STRIPE.publishableKey,
+    prices: {
+      starter: {
+        monthly: { id: CONFIG.STRIPE.priceIds.starter_monthly, amount: 199 },
+        yearly: { id: CONFIG.STRIPE.priceIds.starter_yearly, amount: 1990 }
+      },
+      professional: {
+        monthly: { id: CONFIG.STRIPE.priceIds.professional_monthly, amount: 499 },
+        yearly: { id: CONFIG.STRIPE.priceIds.professional_yearly, amount: 4990 }
+      },
+      enterprise: {
+        monthly: { id: CONFIG.STRIPE.priceIds.enterprise_monthly, amount: 1299 },
+        yearly: { id: CONFIG.STRIPE.priceIds.enterprise_yearly, amount: 12990 }
+      }
+    }
+  });
+});
+
+// Create checkout session for new subscription
+app.post('/api/billing/create-checkout-session', authenticate, authorize('admin', 'superadmin'), async (req, res) => {
+  try {
+    const { tier, billingCycle = 'monthly' } = req.body;
+
+    if (!SUBSCRIPTION_TIERS[tier]) {
+      return res.status(400).json({ error: 'Invalid subscription tier' });
+    }
+
+    const priceKey = `${tier}_${billingCycle}`;
+    const priceId = CONFIG.STRIPE.priceIds[priceKey];
+
+    if (!priceId || priceId.startsWith('price_')) {
+      return res.status(400).json({ 
+        error: 'Stripe not configured', 
+        message: 'Please configure Stripe price IDs in environment variables' 
+      });
+    }
+
+    // Create or get Stripe customer
+    let customerId = req.organization.stripeCustomerId;
+    if (!customerId) {
+      const customer = await stripe.customers.create({
+        email: req.user.email,
+        name: req.organization.name,
+        metadata: {
+          organizationId: req.organization._id.toString(),
+          organizationName: req.organization.name
+        }
+      });
+      customerId = customer.id;
+      req.organization.stripeCustomerId = customerId;
+      await req.organization.save();
+    }
+
+    // Create checkout session
+    const session = await stripe.checkout.sessions.create({
+      customer: customerId,
+      payment_method_types: ['card'],
+      line_items: [{
+        price: priceId,
+        quantity: 1
+      }],
+      mode: 'subscription',
+      success_url: `${CONFIG.APP_URL}/app?checkout=success&session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${CONFIG.APP_URL}/app?checkout=cancelled`,
+      metadata: {
+        organizationId: req.organization._id.toString(),
+        tier: tier,
+        billingCycle: billingCycle
+      },
+      subscription_data: {
+        metadata: {
+          organizationId: req.organization._id.toString(),
+          tier: tier
+        },
+        trial_period_days: req.organization.subscription.status === 'trial' ? 14 : undefined
+      },
+      allow_promotion_codes: true,
+      billing_address_collection: 'required',
+      customer_update: {
+        address: 'auto',
+        name: 'auto'
+      }
+    });
+
+    await createAuditLog(req, 'create', 'billing', 'Checkout', session.id, `${tier} ${billingCycle}`, 'Created checkout session');
+
+    res.json({ 
+      sessionId: session.id, 
+      url: session.url 
+    });
+  } catch (error) {
+    console.error('Error creating checkout session:', error);
+    res.status(500).json({ error: 'Failed to create checkout session', message: error.message });
+  }
+});
+
+// Create customer portal session for managing subscription
+app.post('/api/billing/create-portal-session', authenticate, authorize('admin', 'superadmin'), async (req, res) => {
+  try {
+    if (!req.organization.stripeCustomerId) {
+      return res.status(400).json({ error: 'No billing account found. Please subscribe first.' });
+    }
+
+    const session = await stripe.billingPortal.sessions.create({
+      customer: req.organization.stripeCustomerId,
+      return_url: `${CONFIG.APP_URL}/app?tab=settings&section=subscription`
+    });
+
+    res.json({ url: session.url });
+  } catch (error) {
+    console.error('Error creating portal session:', error);
+    res.status(500).json({ error: 'Failed to create billing portal session' });
+  }
+});
+
+// Update subscription (upgrade/downgrade)
+app.post('/api/billing/update-subscription', authenticate, authorize('admin', 'superadmin'), async (req, res) => {
+  try {
+    const { tier, billingCycle = 'monthly' } = req.body;
+
+    if (!SUBSCRIPTION_TIERS[tier]) {
+      return res.status(400).json({ error: 'Invalid subscription tier' });
+    }
+
+    if (!req.organization.stripeSubscriptionId) {
+      return res.status(400).json({ error: 'No active subscription. Please subscribe first.' });
+    }
+
+    const priceKey = `${tier}_${billingCycle}`;
+    const priceId = CONFIG.STRIPE.priceIds[priceKey];
+
+    // Get current subscription
+    const subscription = await stripe.subscriptions.retrieve(req.organization.stripeSubscriptionId);
+
+    // Update subscription with new price
+    const updatedSubscription = await stripe.subscriptions.update(
+      req.organization.stripeSubscriptionId,
+      {
+        items: [{
+          id: subscription.items.data[0].id,
+          price: priceId
+        }],
+        proration_behavior: 'always_invoice',
+        metadata: {
+          organizationId: req.organization._id.toString(),
+          tier: tier
+        }
+      }
+    );
+
+    // Update local record
+    req.organization.stripePriceId = priceId;
+    req.organization.subscription.tier = tier;
+    req.organization.subscription.billingCycle = billingCycle;
+    await req.organization.save();
+
+    await createAuditLog(req, 'update', 'billing', 'Subscription', req.organization.stripeSubscriptionId, tier, `Updated subscription to ${tier} ${billingCycle}`);
+
+    res.json({ 
+      success: true, 
+      subscription: req.organization.subscription,
+      tier: SUBSCRIPTION_TIERS[tier]
+    });
+  } catch (error) {
+    console.error('Error updating subscription:', error);
+    res.status(500).json({ error: 'Failed to update subscription', message: error.message });
+  }
+});
+
+// Cancel subscription
+app.post('/api/billing/cancel-subscription', authenticate, authorize('admin', 'superadmin'), async (req, res) => {
+  try {
+    const { cancelImmediately = false } = req.body;
+
+    if (!req.organization.stripeSubscriptionId) {
+      return res.status(400).json({ error: 'No active subscription' });
+    }
+
+    if (cancelImmediately) {
+      // Cancel immediately
+      await stripe.subscriptions.cancel(req.organization.stripeSubscriptionId);
+      req.organization.subscription.status = 'cancelled';
+      req.organization.subscription.endDate = new Date();
+    } else {
+      // Cancel at period end
+      await stripe.subscriptions.update(req.organization.stripeSubscriptionId, {
+        cancel_at_period_end: true
+      });
+      req.organization.subscription.cancelAtPeriodEnd = true;
+    }
+
+    await req.organization.save();
+    await createAuditLog(req, 'update', 'billing', 'Subscription', req.organization.stripeSubscriptionId, 'cancelled', cancelImmediately ? 'Cancelled immediately' : 'Cancelled at period end');
+
+    res.json({ 
+      success: true, 
+      message: cancelImmediately ? 'Subscription cancelled' : 'Subscription will cancel at end of billing period' 
+    });
+  } catch (error) {
+    console.error('Error cancelling subscription:', error);
+    res.status(500).json({ error: 'Failed to cancel subscription' });
+  }
+});
+
+// Resume cancelled subscription
+app.post('/api/billing/resume-subscription', authenticate, authorize('admin', 'superadmin'), async (req, res) => {
+  try {
+    if (!req.organization.stripeSubscriptionId) {
+      return res.status(400).json({ error: 'No subscription to resume' });
+    }
+
+    await stripe.subscriptions.update(req.organization.stripeSubscriptionId, {
+      cancel_at_period_end: false
+    });
+
+    req.organization.subscription.cancelAtPeriodEnd = false;
+    await req.organization.save();
+
+    await createAuditLog(req, 'update', 'billing', 'Subscription', req.organization.stripeSubscriptionId, 'resumed', 'Resumed subscription');
+
+    res.json({ success: true, message: 'Subscription resumed' });
+  } catch (error) {
+    console.error('Error resuming subscription:', error);
+    res.status(500).json({ error: 'Failed to resume subscription' });
+  }
+});
+
+// Get payment history
+app.get('/api/billing/payment-history', authenticate, authorize('admin', 'superadmin'), async (req, res) => {
+  try {
+    // Return stored payment history
+    const paymentHistory = req.organization.paymentHistory || [];
+
+    // If we have a Stripe customer, also fetch from Stripe
+    let stripeInvoices = [];
+    if (req.organization.stripeCustomerId) {
+      try {
+        const invoices = await stripe.invoices.list({
+          customer: req.organization.stripeCustomerId,
+          limit: 24
+        });
+        stripeInvoices = invoices.data.map(inv => ({
+          id: inv.id,
+          amount: inv.amount_paid / 100,
+          currency: inv.currency,
+          status: inv.status,
+          description: inv.lines.data[0]?.description || 'Subscription',
+          paidAt: inv.status_transitions?.paid_at ? new Date(inv.status_transitions.paid_at * 1000) : null,
+          invoiceUrl: inv.hosted_invoice_url,
+          invoicePdf: inv.invoice_pdf,
+          periodStart: new Date(inv.period_start * 1000),
+          periodEnd: new Date(inv.period_end * 1000)
+        }));
+      } catch (e) {
+        console.log('Could not fetch Stripe invoices:', e.message);
+      }
+    }
+
+    res.json({ 
+      paymentHistory,
+      invoices: stripeInvoices
+    });
+  } catch (error) {
+    console.error('Error getting payment history:', error);
+    res.status(500).json({ error: 'Failed to get payment history' });
+  }
+});
+
+// Get upcoming invoice preview
+app.get('/api/billing/upcoming-invoice', authenticate, authorize('admin', 'superadmin'), async (req, res) => {
+  try {
+    if (!req.organization.stripeCustomerId) {
+      return res.json({ invoice: null });
+    }
+
+    const invoice = await stripe.invoices.retrieveUpcoming({
+      customer: req.organization.stripeCustomerId
+    });
+
+    res.json({
+      invoice: {
+        amount: invoice.amount_due / 100,
+        currency: invoice.currency,
+        dueDate: invoice.next_payment_attempt ? new Date(invoice.next_payment_attempt * 1000) : null,
+        lines: invoice.lines.data.map(line => ({
+          description: line.description,
+          amount: line.amount / 100
+        }))
+      }
+    });
+  } catch (error) {
+    // No upcoming invoice is not an error
+    if (error.code === 'invoice_upcoming_none') {
+      return res.json({ invoice: null });
+    }
+    console.error('Error getting upcoming invoice:', error);
+    res.status(500).json({ error: 'Failed to get upcoming invoice' });
+  }
+});
+
+// Legacy upgrade endpoint (redirects to Stripe)
 app.post('/api/subscription/upgrade', authenticate, authorize('admin', 'superadmin'), async (req, res) => {
   try {
     const { tier } = req.body;
@@ -7106,6 +7893,15 @@ app.post('/api/subscription/upgrade', authenticate, authorize('admin', 'superadm
       return res.status(400).json({ error: 'Invalid subscription tier' });
     }
 
+    // If org has Stripe subscription, update via Stripe
+    if (req.organization.stripeSubscriptionId) {
+      return res.json({ 
+        redirectToStripe: true, 
+        message: 'Please use the billing portal to change your plan' 
+      });
+    }
+
+    // For non-Stripe orgs (trial, demo), update directly
     req.organization.subscription.tier = tier;
     req.organization.subscription.status = 'active';
     req.organization.subscription.startDate = new Date();
@@ -7625,6 +8421,8 @@ app.post('/api/users/:id/reset-password', authenticate, authorize('admin', 'supe
 
 app.get('/api/observations', authenticate, async (req, res) => {
   try {
+    if (isDemoMode()) return res.json(getDemoData('observations', req.query));
+    
     const { page = 1, limit = 15, search } = req.query;
     const query = { organization: req.organization._id };
     if (search) query.$or = [
@@ -8016,6 +8814,8 @@ app.delete('/api/capa/:id', authenticate, requireFeature('capa'), async (req, re
 
 app.get('/api/meetings', authenticate, async (req, res) => {
   try {
+    if (isDemoMode()) return res.json(getDemoData('meetings', req.query));
+    
     const { page = 1, limit = 15, search } = req.query;
     const query = { organization: req.organization._id };
     if (search) query.title = { $regex: search, $options: 'i' };
@@ -8939,6 +9739,13 @@ app.delete('/api/notifications/:id', authenticate, async (req, res) => {
 
 app.get('/api/inbox', authenticate, async (req, res) => {
   try {
+    if (isDemoMode()) {
+      return res.json({
+        tasks: DEMO_DATA.inbox,
+        summary: { total: 4, overdue: 1, dueToday: 1, dueThisWeek: 2, unread: 3 }
+      });
+    }
+    
     const { view = 'all', status, priority, dueFilter } = req.query;
     const userId = req.user._id;
     const orgId = req.organization._id;
@@ -9336,6 +10143,11 @@ app.get('/api/hierarchy/assignable-users', authenticate, async (req, res) => {
 
 app.get('/api/icare', authenticate, async (req, res) => {
   try {
+    if (isDemoMode()) {
+      const data = getDemoData('icareNotes', req.query);
+      return res.json({ notes: data.icareNotes, pagination: data.pagination });
+    }
+    
     const { page = 1, limit = 15, type, status, observer, search } = req.query;
     const query = { organization: req.organization._id };
     
