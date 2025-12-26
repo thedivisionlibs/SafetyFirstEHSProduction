@@ -4,7 +4,6 @@
  * Similar to Intelex/Vector EHS
  */
 
-
 require('dotenv').config();
 const express = require('express');
 const mongoose = require('mongoose');
@@ -55,20 +54,21 @@ const SUBSCRIPTION_TIERS = {
   starter: {
     name: 'Starter',
     price: 199,
-    maxUsers: 10,
-    maxIncidents: 100,
-    maxActionItems: 250,
-    maxInspections: 50,
-    maxDocuments: 100,
-    maxRiskAssessments: 25,
-    maxJSAs: 25,
-    maxPermits: 50,
-    maxContractors: 10,
-    features: ['incidents', 'actions', 'dashboard', 'basic_inspections', 'basic_training', 'documents'],
+    maxUsers: 25,
+    maxIncidents: -1,
+    maxActionItems: -1,
+    maxInspections: -1,
+    maxDocuments: -1,
+    maxRiskAssessments: -1,
+    maxJSAs: -1,
+    maxPermits: -1,
+    maxContractors: -1,
+    features: ['incidents', 'actions', 'dashboard', 'inspections', 'training', 'documents', 'reporting', 'icare', 'notifications', 'inbox'],
     oshaLogs: true,
     customForms: false,
     apiAccess: false,
-    advancedReporting: false,
+    advancedReporting: true,
+    customReportBuilder: true,
     trainingModule: true,
     auditModule: true,
     riskAssessment: false,
@@ -79,7 +79,8 @@ const SUBSCRIPTION_TIERS = {
     occupationalHealth: false,
     emergencyResponse: false,
     ergonomics: false,
-    scheduledReports: false,
+    scheduledReports: true,
+    dashboardBuilder: false,
     ssoIntegration: false,
     webhooks: false,
     moc: false,
@@ -92,20 +93,21 @@ const SUBSCRIPTION_TIERS = {
   professional: {
     name: 'Professional',
     price: 499,
-    maxUsers: 50,
-    maxIncidents: 1000,
-    maxActionItems: 2500,
-    maxInspections: 250,
-    maxDocuments: 1000,
-    maxRiskAssessments: 100,
-    maxJSAs: 100,
-    maxPermits: 200,
-    maxContractors: 50,
-    features: ['all_starter', 'osha_logs', 'risk_assessment', 'jsa', 'permit_to_work', 'contractor_mgmt', 'advanced_reporting', 'scheduled_reports'],
+    maxUsers: 100,
+    maxIncidents: -1,
+    maxActionItems: -1,
+    maxInspections: -1,
+    maxDocuments: -1,
+    maxRiskAssessments: -1,
+    maxJSAs: -1,
+    maxPermits: -1,
+    maxContractors: -1,
+    features: ['all_starter', 'osha_logs', 'risk_assessment', 'jsa', 'permit_to_work', 'contractor_mgmt', 'advanced_reporting', 'scheduled_reports', 'dashboard_builder'],
     oshaLogs: true,
     customForms: true,
     apiAccess: true,
     advancedReporting: true,
+    customReportBuilder: true,
     trainingModule: true,
     auditModule: true,
     riskAssessment: true,
@@ -117,6 +119,7 @@ const SUBSCRIPTION_TIERS = {
     emergencyResponse: true,
     ergonomics: false,
     scheduledReports: true,
+    dashboardBuilder: true,
     ssoIntegration: false,
     webhooks: true,
     moc: true,
@@ -143,6 +146,7 @@ const SUBSCRIPTION_TIERS = {
     customForms: true,
     apiAccess: true,
     advancedReporting: true,
+    customReportBuilder: true,
     trainingModule: true,
     auditModule: true,
     riskAssessment: true,
@@ -154,6 +158,7 @@ const SUBSCRIPTION_TIERS = {
     emergencyResponse: true,
     ergonomics: true,
     scheduledReports: true,
+    dashboardBuilder: true,
     ssoIntegration: true,
     webhooks: true,
     customBranding: true,
@@ -8049,66 +8054,8 @@ app.use((err, req, res, next) => {
 let DEMO_MODE = false;
 
 // =============================================================================
-// ENHANCED FEATURES - NOTIFICATIONS, INBOX, HIERARCHY, CUSTOM REPORTS
+// ENHANCED FEATURES - HIERARCHY, ICARE, AUDITS, DASHBOARDS, REPORTS
 // =============================================================================
-
-// Notification Schema - Real-time user notifications
-const notificationSchema = new mongoose.Schema({
-  organization: { type: mongoose.Schema.Types.ObjectId, ref: 'Organization', required: true },
-  recipient: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
-  sender: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
-  
-  type: {
-    type: String,
-    enum: [
-      'action_assigned', 'action_due_soon', 'action_overdue', 'action_completed', 'action_rejected',
-      'incident_assigned', 'incident_status_change', 'incident_comment', 'incident_needs_review',
-      'audit_assigned', 'audit_due_soon', 'audit_overdue', 'audit_completed',
-      'training_assigned', 'training_due_soon', 'training_overdue', 'training_completed',
-      'inspection_assigned', 'inspection_due_soon', 'inspection_completed',
-      'approval_needed', 'approval_granted', 'approval_rejected',
-      'mention', 'comment', 'document_shared', 'system_alert', 'reminder',
-      'icare_received', 'icare_followup_due',
-      'report_ready', 'export_ready'
-    ],
-    required: true
-  },
-  
-  priority: { type: String, enum: ['low', 'normal', 'high', 'urgent'], default: 'normal' },
-  
-  title: { type: String, required: true },
-  message: String,
-  
-  // Related entity
-  entityType: { type: String, enum: ['incident', 'action', 'inspection', 'training', 'audit', 'document', 'icare', 'report', 'user'] },
-  entityId: { type: mongoose.Schema.Types.ObjectId },
-  entityNumber: String,
-  
-  // Links
-  actionUrl: String,
-  actionLabel: String,
-  
-  // Status
-  isRead: { type: Boolean, default: false },
-  readAt: Date,
-  isDismissed: { type: Boolean, default: false },
-  dismissedAt: Date,
-  
-  // Email/Push notification status
-  emailSent: { type: Boolean, default: false },
-  emailSentAt: Date,
-  pushSent: { type: Boolean, default: false },
-  pushSentAt: Date,
-  
-  // Expiry
-  expiresAt: Date,
-  
-  createdAt: { type: Date, default: Date.now }
-});
-
-notificationSchema.index({ recipient: 1, isRead: 1, createdAt: -1 });
-notificationSchema.index({ organization: 1, createdAt: -1 });
-const Notification = mongoose.model('Notification', notificationSchema);
 
 // User Hierarchy Schema - Reporting structure
 const userHierarchySchema = new mongoose.Schema({
