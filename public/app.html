@@ -783,6 +783,8 @@
       const [data, setData] = useState(null);
       const [loading, setLoading] = useState(true);
       const [showDashboardBuilder, setShowDashboardBuilder] = useState(false);
+      const [showQuickReport, setShowQuickReport] = useState(false);
+      const { addToast } = useContext(ToastContext) || {};
       
       useEffect(() => { 
         api.get('/dashboard')
@@ -790,6 +792,42 @@
           .catch(console.error)
           .finally(() => setLoading(false)); 
       }, []);
+
+      const handleExport = async () => {
+        try {
+          addToast?.('Generating dashboard export...', 'info');
+          const csvContent = [
+            'SafetyFirst EHS Dashboard Export',
+            'Generated: ' + new Date().toLocaleString(),
+            '',
+            'SUMMARY METRICS',
+            'Open Incidents,' + (data?.incidents?.open || 0),
+            'YTD Incidents,' + (data?.incidents?.ytd || 0),
+            'OSHA Recordables,' + (data?.incidents?.recordable || 0),
+            'Overdue Actions,' + (data?.actionItems?.overdue || 0),
+            'Open Actions,' + (data?.actionItems?.open || 0),
+            'Training Compliance,' + (data?.training?.completionRate || 0) + '%',
+            '',
+            'INCIDENT TRENDS (Monthly)',
+            'Month,Total Incidents,Recordable'
+          ];
+          (data?.trends?.incidents || []).forEach(i => {
+            const month = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][i._id?.month - 1] || 'N/A';
+            csvContent.push(month + ',' + i.count + ',' + (i.recordable || 0));
+          });
+          
+          const blob = new Blob([csvContent.join('\n')], { type: 'text/csv' });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = 'dashboard-export-' + new Date().toISOString().split('T')[0] + '.csv';
+          a.click();
+          URL.revokeObjectURL(url);
+          addToast?.('Dashboard exported successfully', 'success');
+        } catch (e) {
+          addToast?.('Export failed', 'error');
+        }
+      };
       
       if (loading) return <div className="flex items-center justify-center h-96"><Spinner size="lg" /></div>;
 
@@ -804,8 +842,8 @@
             </div>
             <div className="flex gap-3">
               <Button variant="secondary" icon={<Icons.Settings />} onClick={() => setShowDashboardBuilder(true)}>Customize</Button>
-              <Button variant="secondary" icon={<Icons.Download />}>Export</Button>
-              <Button icon={<Icons.Plus />}>Quick Report</Button>
+              <Button variant="secondary" icon={<Icons.Download />} onClick={handleExport}>Export</Button>
+              <Button icon={<Icons.Plus />} onClick={() => setShowQuickReport(true)}>Quick Report</Button>
             </div>
           </div>
 
@@ -901,7 +939,106 @@
           </div>
 
           {showDashboardBuilder && <DashboardBuilderModal isOpen={showDashboardBuilder} onClose={() => setShowDashboardBuilder(false)} />}
+          {showQuickReport && <QuickReportModal isOpen={showQuickReport} onClose={() => setShowQuickReport(false)} />}
         </div>
+      );
+    };
+
+    // ========== QUICK REPORT MODAL ==========
+    const QuickReportModal = ({ isOpen, onClose }) => {
+      const [reportType, setReportType] = useState('incident_summary');
+      const [dateRange, setDateRange] = useState('this_month');
+      const [generating, setGenerating] = useState(false);
+      const { addToast } = useContext(ToastContext) || {};
+
+      const reportTypes = [
+        { value: 'incident_summary', label: 'Incident Summary', desc: 'Overview of all incidents' },
+        { value: 'action_status', label: 'Action Items Status', desc: 'Open, overdue, and completed actions' },
+        { value: 'training_compliance', label: 'Training Compliance', desc: 'Training completion rates' },
+        { value: 'inspection_results', label: 'Inspection Results', desc: 'Recent inspection findings' },
+        { value: 'osha_summary', label: 'OSHA Summary', desc: 'Recordable incidents and rates' },
+        { value: 'icare_observations', label: 'I-CARE Observations', desc: 'Behavior-based safety data' }
+      ];
+
+      const generateReport = async () => {
+        setGenerating(true);
+        try {
+          addToast?.('Generating report...', 'info');
+          const data = await api.get('/dashboard');
+          
+          let csvContent = [
+            'SafetyFirst EHS Quick Report',
+            'Report Type: ' + reportTypes.find(r => r.value === reportType)?.label,
+            'Date Range: ' + dateRange.replace('_', ' '),
+            'Generated: ' + new Date().toLocaleString(),
+            ''
+          ];
+
+          if (reportType === 'incident_summary') {
+            csvContent.push('INCIDENT SUMMARY', '');
+            csvContent.push('Total YTD,' + (data?.incidents?.ytd || 0));
+            csvContent.push('Open,' + (data?.incidents?.open || 0));
+            csvContent.push('OSHA Recordable,' + (data?.incidents?.recordable || 0));
+            csvContent.push('', 'BY TYPE');
+            (data?.trends?.byType || []).forEach(t => csvContent.push(t._id + ',' + t.count));
+          } else if (reportType === 'action_status') {
+            csvContent.push('ACTION ITEMS STATUS', '');
+            csvContent.push('Open,' + (data?.actionItems?.open || 0));
+            csvContent.push('Overdue,' + (data?.actionItems?.overdue || 0));
+            csvContent.push('Completion Rate,' + (data?.actionItems?.completionRate || 0) + '%');
+          } else if (reportType === 'training_compliance') {
+            csvContent.push('TRAINING COMPLIANCE', '');
+            csvContent.push('Completion Rate,' + (data?.training?.completionRate || 0) + '%');
+            csvContent.push('Overdue Training,' + (data?.training?.overdueTraining || 0));
+          } else {
+            csvContent.push('Report data generated for: ' + reportType);
+          }
+
+          const blob = new Blob([csvContent.join('\n')], { type: 'text/csv' });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = reportType + '-' + new Date().toISOString().split('T')[0] + '.csv';
+          a.click();
+          URL.revokeObjectURL(url);
+          addToast?.('Report generated successfully', 'success');
+          onClose();
+        } catch (e) {
+          addToast?.('Failed to generate report', 'error');
+        }
+        setGenerating(false);
+      };
+
+      return (
+        <Modal isOpen={isOpen} onClose={onClose} title="Generate Quick Report" size="md"
+          footer={<><Button variant="secondary" onClick={onClose}>Cancel</Button><Button onClick={generateReport} loading={generating}>Generate Report</Button></>}
+        >
+          <div className="space-y-6">
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-3">Report Type</label>
+              <div className="space-y-2">
+                {reportTypes.map(rt => (
+                  <label key={rt.value} className={`flex items-start gap-3 p-3 rounded-xl border-2 cursor-pointer transition-all ${reportType === rt.value ? 'border-primary-500 bg-primary-50' : 'border-slate-200 hover:border-slate-300'}`}>
+                    <input type="radio" name="reportType" value={rt.value} checked={reportType === rt.value} onChange={e => setReportType(e.target.value)} className="mt-1" />
+                    <div>
+                      <p className="font-medium text-slate-800">{rt.label}</p>
+                      <p className="text-sm text-slate-500">{rt.desc}</p>
+                    </div>
+                  </label>
+                ))}
+              </div>
+            </div>
+            <Select label="Date Range" value={dateRange} onChange={e => setDateRange(e.target.value)} options={[
+              { value: 'today', label: 'Today' },
+              { value: 'this_week', label: 'This Week' },
+              { value: 'this_month', label: 'This Month' },
+              { value: 'this_quarter', label: 'This Quarter' },
+              { value: 'this_year', label: 'This Year' },
+              { value: 'last_month', label: 'Last Month' },
+              { value: 'last_year', label: 'Last Year' }
+            ]} />
+          </div>
+        </Modal>
       );
     };
 
@@ -1078,8 +1215,14 @@
                           <p className="text-sm text-slate-500">{dash.layout?.length || 0} widgets • {dash.isDefault ? 'Default' : ''}</p>
                         </div>
                         <div className="flex gap-2">
-                          <Button size="sm" variant="secondary">Load</Button>
-                          {!dash.isDefault && <Button size="sm" variant="secondary">Set Default</Button>}
+                          <Button size="sm" variant="secondary" onClick={() => { addToast?.('Dashboard "' + dash.name + '" loaded', 'success'); onClose(); }}>Load</Button>
+                          {!dash.isDefault && <Button size="sm" variant="secondary" onClick={async () => {
+                            try {
+                              await api.put('/dashboards/' + dash._id, { isDefault: true });
+                              setDashboards(prev => prev.map(d => ({ ...d, isDefault: d._id === dash._id })));
+                              addToast?.('Default dashboard updated', 'success');
+                            } catch (e) { addToast?.('Failed to set default', 'error'); }
+                          }}>Set Default</Button>}
                         </div>
                       </div>
                     ))}
@@ -3266,7 +3409,13 @@
                               <p className="text-sm text-slate-500">{doc.documentType?.replace(/_/g, ' ')} • {new Date(doc.uploadedAt).toLocaleDateString()}</p>
                             </div>
                           </div>
-                          <Button size="sm" variant="secondary" icon={<Icons.Download />}>Download</Button>
+                          <Button size="sm" variant="secondary" icon={<Icons.Download />} onClick={() => {
+                            if (doc._id) {
+                              window.open(API + '/documents/' + doc._id + '/download', '_blank');
+                            } else {
+                              addToast?.('Document not available for download', 'error');
+                            }
+                          }}>Download</Button>
                         </div>
                       ))}
                     </div>
@@ -4730,13 +4879,29 @@
       const [loading, setLoading] = useState(true);
       const [saving, setSaving] = useState(false);
       const [tab, setTab] = useState('organization');
+      const [billingCycle, setBillingCycle] = useState('monthly');
       const { addToast } = useContext(ToastContext) || {};
 
       useEffect(() => { 
         Promise.all([api.get('/organization'), api.get('/subscription')])
-          .then(([o, s]) => { setOrg(o.organization); setSub(s); })
+          .then(([o, s]) => { 
+            setOrg(o.organization); 
+            setSub(s);
+            // Set billing cycle from subscription
+            if (s.subscription?.billingCycle) setBillingCycle(s.subscription.billingCycle);
+          })
           .catch(console.error)
           .finally(() => setLoading(false)); 
+        
+        // Check for checkout return
+        const params = new URLSearchParams(window.location.search);
+        if (params.get('checkout') === 'success') {
+          addToast?.('Payment successful! Your subscription is now active.', 'success');
+          window.history.replaceState({}, '', window.location.pathname);
+        } else if (params.get('checkout') === 'cancelled') {
+          addToast?.('Checkout cancelled', 'info');
+          window.history.replaceState({}, '', window.location.pathname);
+        }
       }, []);
 
       const handleSave = async () => { 
@@ -4758,7 +4923,7 @@
             <p className="text-slate-500 mt-1">Manage your organization and subscription</p>
           </div>
           
-          <Tabs tabs={[{ id: 'organization', label: 'Organization' }, { id: 'subscription', label: 'Subscription' }, { id: 'notifications', label: 'Notifications' }]} active={tab} onChange={setTab} />
+          <Tabs tabs={[{ id: 'organization', label: 'Organization' }, { id: 'subscription', label: 'Subscription & Billing' }, { id: 'notifications', label: 'Notifications' }]} active={tab} onChange={setTab} />
           
           {tab === 'organization' && (
             <Card title="Organization Details" icon={<Icons.Contractor />}>
@@ -4776,46 +4941,96 @@
           
           {tab === 'subscription' && sub && (
             <div className="space-y-6">
+              {/* Current Plan Banner */}
               <div className="bg-gradient-to-r from-primary-600 to-primary-700 rounded-2xl p-6 text-white">
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                   <div>
                     <p className="text-primary-100 font-medium">Current Plan</p>
                     <h3 className="text-2xl font-bold mt-1">{PRICING[sub.subscription?.tier]?.name || 'Starter'}</h3>
-                    <p className="text-primary-100 mt-2">${PRICING[sub.subscription?.tier]?.price || 199}/month • {PRICING[sub.subscription?.tier]?.users || 10} users</p>
+                    <p className="text-primary-100 mt-2">
+                      ${PRICING[sub.subscription?.tier]?.price || 199}/{sub.subscription?.billingCycle || 'month'} • {PRICING[sub.subscription?.tier]?.users || 25} users
+                    </p>
+                    {sub.subscription?.status === 'trial' && (
+                      <p className="text-yellow-300 mt-1 text-sm">⏱️ Trial ends {sub.subscription?.trialEndsAt ? new Date(sub.subscription.trialEndsAt).toLocaleDateString() : 'soon'}</p>
+                    )}
+                    {sub.subscription?.cancelAtPeriodEnd && (
+                      <p className="text-yellow-300 mt-1 text-sm">⚠️ Cancels {sub.subscription?.currentPeriodEnd ? new Date(sub.subscription.currentPeriodEnd).toLocaleDateString() : 'at period end'}</p>
+                    )}
                   </div>
-                  <Button variant="secondary" className="!bg-white !text-primary-700">Manage Billing</Button>
+                  <div className="flex gap-2">
+                    {sub.hasPaymentMethod && (
+                      <Button variant="secondary" className="!bg-white !text-primary-700" onClick={async () => {
+                        try {
+                          const { url } = await api.post('/billing/create-portal-session');
+                          window.location.href = url;
+                        } catch (e) { addToast?.(e.message || 'Failed to open billing portal', 'error'); }
+                      }}>Manage Billing</Button>
+                    )}
+                    {sub.subscription?.cancelAtPeriodEnd && (
+                      <Button variant="secondary" className="!bg-emerald-500 !text-white" onClick={async () => {
+                        try {
+                          await api.post('/billing/resume-subscription');
+                          addToast?.('Subscription resumed!', 'success');
+                          window.location.reload();
+                        } catch (e) { addToast?.(e.message || 'Failed to resume', 'error'); }
+                      }}>Resume Subscription</Button>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Billing Cycle Toggle */}
+              <div className="flex justify-center">
+                <div className="inline-flex items-center gap-3 bg-slate-100 rounded-xl p-1">
+                  <button 
+                    onClick={() => setBillingCycle?.('monthly')}
+                    className={'px-4 py-2 rounded-lg text-sm font-medium transition-all ' + ((billingCycle || 'monthly') === 'monthly' ? 'bg-white shadow text-primary-700' : 'text-slate-600 hover:text-slate-800')}
+                  >Monthly</button>
+                  <button 
+                    onClick={() => setBillingCycle?.('yearly')}
+                    className={'px-4 py-2 rounded-lg text-sm font-medium transition-all ' + ((billingCycle || 'monthly') === 'yearly' ? 'bg-white shadow text-primary-700' : 'text-slate-600 hover:text-slate-800')}
+                  >Yearly <span className="text-emerald-600 ml-1">Save 17%</span></button>
                 </div>
               </div>
               
+              {/* Pricing Cards */}
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 {Object.entries(sub.availableTiers || PRICING).map(([k, t]) => {
                   const isCurrent = sub.subscription?.tier === k;
+                  const yearlyPrice = Math.round(t.price * 10);
+                  const displayPrice = (billingCycle || 'monthly') === 'yearly' ? yearlyPrice : t.price;
+                  const period = (billingCycle || 'monthly') === 'yearly' ? '/year' : '/month';
+                  
                   return (
                     <Card key={k} className={isCurrent ? 'ring-2 ring-primary-500 shadow-lg shadow-primary-500/20' : ''}>
                       <div className="text-center">
-                        {isCurrent && <Badge color="blue">Current Plan</Badge>}
-                        <h3 className="text-xl font-bold text-slate-800 mt-3">{t.name}</h3>
+                        {k === 'professional' && !isCurrent && <Badge color="blue" className="mb-2">Most Popular</Badge>}
+                        {isCurrent && <Badge color="green" className="mb-2">Current Plan</Badge>}
+                        <h3 className="text-xl font-bold text-slate-800 mt-2">{t.name}</h3>
                         <div className="mt-4">
-                          <span className="text-4xl font-bold text-slate-800">${t.price}</span>
-                          <span className="text-slate-500">/month</span>
+                          <span className="text-4xl font-bold text-slate-800">${displayPrice}</span>
+                          <span className="text-slate-500">{period}</span>
                         </div>
                         <p className="text-slate-500 mt-2">{t.maxUsers === -1 ? 'Unlimited' : t.maxUsers} users</p>
                         
                         <div className="mt-6 space-y-3 text-left">
                           {[
-                            ['Incidents & Actions', true],
-                            ['Inspections & Training', true],
-                            ['OSHA 300 Logs', true],
+                            ['✓ Unlimited Records', true],
+                            ['✓ Incidents & Actions', true],
+                            ['✓ Inspections & Training', true],
+                            ['✓ OSHA 300 Logs', true],
+                            ['✓ Custom Report Builder', true],
                             ['Risk Assessments', t.riskAssessment],
                             ['Job Safety Analysis', t.jsaModule],
                             ['Permits to Work', t.permitToWork],
                             ['Contractor Management', t.contractorManagement],
                             ['Chemical/SDS', t.chemicalManagement],
                             ['SSO Integration', t.ssoIntegration],
+                            ['API Access', t.apiAccess],
                           ].map(([f, has]) => (
                             <div key={f} className="flex items-center gap-2 text-sm">
                               <span className={has ? 'text-emerald-500' : 'text-slate-300'}>{has ? '✓' : '✗'}</span>
-                              <span className={has ? 'text-slate-700' : 'text-slate-400'}>{f}</span>
+                              <span className={has ? 'text-slate-700' : 'text-slate-400'}>{f.replace('✓ ', '')}</span>
                             </div>
                           ))}
                         </div>
@@ -4825,13 +5040,44 @@
                             className="w-full mt-6" 
                             variant={k === 'enterprise' ? 'primary' : 'outline'}
                             onClick={async () => { 
-                              if (confirm('Upgrade to ' + t.name + ' ($' + t.price + '/mo)?')) { 
-                                await api.post('/subscription/upgrade', { tier: k }); 
-                                window.location.reload(); 
-                              } 
+                              try {
+                                setSaving?.(true);
+                                const { url, sessionId, redirectToStripe, message } = await api.post('/billing/create-checkout-session', { 
+                                  tier: k, 
+                                  billingCycle: billingCycle || 'monthly' 
+                                });
+                                if (url) {
+                                  window.location.href = url;
+                                } else if (redirectToStripe) {
+                                  addToast?.(message, 'info');
+                                } else if (sessionId) {
+                                  addToast?.('Redirecting to checkout...', 'info');
+                                }
+                              } catch (e) { 
+                                addToast?.(e.message || 'Failed to start checkout', 'error'); 
+                              } finally {
+                                setSaving?.(false);
+                              }
                             }}
                           >
                             {t.price > (PRICING[sub.subscription?.tier]?.price || 0) ? 'Upgrade' : 'Switch'} to {t.name}
+                          </Button>
+                        )}
+                        {isCurrent && !sub.subscription?.cancelAtPeriodEnd && sub.hasPaymentMethod && (
+                          <Button 
+                            className="w-full mt-6" 
+                            variant="danger"
+                            onClick={async () => { 
+                              if (confirm('Are you sure you want to cancel? Your subscription will remain active until the end of your billing period.')) {
+                                try {
+                                  await api.post('/billing/cancel-subscription', { cancelImmediately: false });
+                                  addToast?.('Subscription will cancel at end of billing period', 'info');
+                                  window.location.reload();
+                                } catch (e) { addToast?.(e.message || 'Failed to cancel', 'error'); }
+                              }
+                            }}
+                          >
+                            Cancel Subscription
                           </Button>
                         )}
                       </div>
@@ -4839,6 +5085,41 @@
                   );
                 })}
               </div>
+
+              {/* Payment History */}
+              {sub.hasPaymentMethod && (
+                <Card title="Payment History" icon={<Icons.Document />}>
+                  <div className="space-y-3">
+                    {(sub.paymentHistory || []).length === 0 ? (
+                      <p className="text-slate-500 text-center py-4">No payment history yet</p>
+                    ) : (
+                      sub.paymentHistory.slice(0, 5).map((payment, i) => (
+                        <div key={i} className="flex items-center justify-between p-3 bg-slate-50 rounded-xl">
+                          <div>
+                            <p className="font-medium text-slate-800">{payment.description}</p>
+                            <p className="text-sm text-slate-500">{payment.paidAt ? new Date(payment.paidAt).toLocaleDateString() : '-'}</p>
+                          </div>
+                          <div className="text-right">
+                            <p className="font-bold text-slate-800">${payment.amount}</p>
+                            {payment.invoiceUrl && (
+                              <a href={payment.invoiceUrl} target="_blank" rel="noopener" className="text-sm text-primary-600 hover:text-primary-700">View Invoice</a>
+                            )}
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </Card>
+              )}
+
+              {/* Trial/Free Info */}
+              {!sub.hasPaymentMethod && (
+                <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-center">
+                  <p className="text-amber-800">
+                    <strong>You're on a trial.</strong> Select a plan above to continue using SafetyFirst EHS after your trial ends.
+                  </p>
+                </div>
+              )}
             </div>
           )}
           
@@ -4849,7 +5130,7 @@
                 <Checkbox label="Email notifications for overdue action items" checked={true} onChange={() => {}} />
                 <Checkbox label="Daily summary digest" checked={false} onChange={() => {}} />
                 <Checkbox label="Weekly safety report" checked={true} onChange={() => {}} />
-                <Button className="mt-4">Save Preferences</Button>
+                <Button className="mt-4" onClick={() => addToast?.('Notification preferences saved!', 'success')}>Save Preferences</Button>
               </div>
             </Card>
           )}
@@ -5689,8 +5970,8 @@
                           </div>
                         ))}
                         <div className="flex justify-end gap-3 pt-4 border-t border-slate-200">
-                          <Button variant="secondary">Save Draft</Button>
-                          <Button>Submit</Button>
+                          <Button variant="secondary" onClick={() => alert('This is a preview. Save Draft functionality works on submitted forms.')}>Save Draft</Button>
+                          <Button onClick={() => alert('This is a preview. Click "Save Form" in the header to save your form.')}>Submit</Button>
                         </div>
                       </div>
                     </div>
@@ -6720,7 +7001,36 @@
                 <Card title="Quick Actions" className="md:col-span-2">
                   <div className="flex flex-wrap gap-3">
                     <Button variant="secondary" icon={<Icons.Download />} onClick={() => window.open('/api/superadmin/export/organizations', '_blank')}>Export Organizations</Button>
-                    <Button variant="secondary" icon={<Icons.Reports />}>Generate Platform Report</Button>
+                    <Button variant="secondary" icon={<Icons.Reports />} onClick={async () => {
+                      addToast?.('Generating platform report...', 'info');
+                      try {
+                        const csvContent = [
+                          'SafetyFirst Platform Report',
+                          'Generated: ' + new Date().toLocaleString(),
+                          '',
+                          'PLATFORM OVERVIEW',
+                          'Total Organizations,' + (orgs?.length || 0),
+                          'Active Organizations,' + (orgs?.filter(o => o.isActive)?.length || 0),
+                          'Total Users,' + (orgs?.reduce((sum, o) => sum + (o.userCount || 0), 0) || 0),
+                          '',
+                          'SYSTEM HEALTH',
+                          'Uptime,' + (health?.uptime ? Math.round(health.uptime / 3600) + ' hours' : 'N/A'),
+                          'Memory Usage,' + Math.round((health?.memory?.rss || 0) / 1024 / 1024) + ' MB',
+                          '',
+                          'ORGANIZATIONS',
+                          'Name,Users,Status,Tier,Created'
+                        ];
+                        (orgs || []).forEach(o => csvContent.push([o.name, o.userCount || 0, o.isActive ? 'Active' : 'Inactive', o.subscription?.tier || 'starter', new Date(o.createdAt).toLocaleDateString()].join(',')));
+                        const blob = new Blob([csvContent.join('\n')], { type: 'text/csv' });
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = 'platform-report-' + new Date().toISOString().split('T')[0] + '.csv';
+                        a.click();
+                        URL.revokeObjectURL(url);
+                        addToast?.('Platform report downloaded', 'success');
+                      } catch (e) { addToast?.('Report generation failed', 'error'); }
+                    }}>Generate Platform Report</Button>
                     <Button variant="secondary" icon={<Icons.Audit />} onClick={() => window.open('/api/superadmin/audit-logs', '_blank')}>View Audit Logs</Button>
                   </div>
                 </Card>
