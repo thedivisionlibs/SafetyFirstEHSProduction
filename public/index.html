@@ -3,16 +3,19 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>SafetyFirst EHS - Enterprise Safety Management Platform</title>
-  <meta name="description" content="Enterprise-grade EHS software. Track incidents, manage compliance, OSHA logs, and build a culture of safety.">
+  <title>SafetyFirst EHS - Enterprise Environmental Health & Safety Management Platform</title>
+  <meta name="description" content="Complete EHS management software. Incident tracking, OSHA compliance, safety inspections, training management, risk assessments, and more. Start your free trial today.">
+  <meta name="keywords" content="EHS software, safety management, incident tracking, OSHA compliance, workplace safety, environmental health, safety inspections">
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🛡️</text></svg>">
   <script src="https://cdn.tailwindcss.com"></script>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
   <script>
     tailwind.config = {
       theme: {
         extend: {
           colors: {
-            primary: { 50: '#eff6ff', 100: '#dbeafe', 200: '#bfdbfe', 300: '#93c5fd', 400: '#60a5fa', 500: '#3b82f6', 600: '#2563eb', 700: '#1d4ed8', 800: '#1e40af', 900: '#1e3a8a' }
+            primary: { 50: '#eff6ff', 100: '#dbeafe', 200: '#bfdbfe', 300: '#93c5fd', 400: '#60a5fa', 500: '#3b82f6', 600: '#2563eb', 700: '#1d4ed8', 800: '#1e40af', 900: '#1e3a8a' },
+            accent: { 50: '#ecfeff', 100: '#cffafe', 200: '#a5f3fc', 300: '#67e8f9', 400: '#22d3ee', 500: '#06b6d4', 600: '#0891b2', 700: '#0e7490' }
           }
         }
       }
@@ -20,393 +23,519 @@
   </script>
   <style>
     * { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; }
-    .gradient-bg { background: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 50%, #06b6d4 100%); }
+    .gradient-bg { background: linear-gradient(135deg, #1e3a8a 0%, #2563eb 50%, #0891b2 100%); }
+    .gradient-text { background: linear-gradient(135deg, #3b82f6 0%, #06b6d4 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
     .card-shadow { box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1), 0 2px 4px -1px rgba(0,0,0,0.06); }
-    .card-hover { transition: all 0.3s ease; }
-    .card-hover:hover { transform: translateY(-4px); box-shadow: 0 20px 40px -15px rgba(0,0,0,0.2); }
+    .card-hover { transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
+    .card-hover:hover { transform: translateY(-8px); box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25); }
     .btn-hover { transition: all 0.2s ease; }
-    .btn-hover:hover { transform: translateY(-1px); }
+    .btn-hover:hover { transform: translateY(-2px); box-shadow: 0 10px 40px -10px rgba(59,130,246,0.5); }
     .btn-hover:active { transform: scale(0.98); }
     html { scroll-behavior: smooth; }
+    .feature-icon { transition: all 0.3s ease; }
+    .feature-card:hover .feature-icon { transform: scale(1.1) rotate(-5deg); }
+    .floating { animation: floating 3s ease-in-out infinite; }
+    @keyframes floating { 0%, 100% { transform: translateY(0px); } 50% { transform: translateY(-10px); } }
+    .pulse-glow { animation: pulse-glow 2s ease-in-out infinite; }
+    @keyframes pulse-glow { 0%, 100% { box-shadow: 0 0 20px rgba(59,130,246,0.3); } 50% { box-shadow: 0 0 40px rgba(59,130,246,0.6); } }
   </style>
 </head>
 <body class="bg-white antialiased">
   <!-- Navigation -->
-  <nav class="fixed top-0 left-0 right-0 z-50 bg-white/95 backdrop-blur-lg border-b border-slate-100">
+  <nav class="fixed top-0 left-0 right-0 z-50 bg-white/95 backdrop-blur-lg border-b border-slate-100 shadow-sm">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-      <div class="flex justify-between items-center h-16">
+      <div class="flex justify-between items-center h-16 lg:h-20">
         <div class="flex items-center gap-3">
-          <div class="w-10 h-10 bg-gradient-to-br from-blue-500 to-blue-700 rounded-xl flex items-center justify-center shadow-lg shadow-blue-500/30">
-            <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <div class="w-10 h-10 lg:w-12 lg:h-12 bg-gradient-to-br from-blue-500 to-cyan-500 rounded-xl flex items-center justify-center shadow-lg shadow-blue-500/30 pulse-glow">
+            <svg class="w-6 h-6 lg:w-7 lg:h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
             </svg>
           </div>
-          <span class="font-bold text-xl text-slate-800">SafetyFirst</span>
+          <div>
+            <span class="font-bold text-xl lg:text-2xl text-slate-800">SafetyFirst</span>
+            <span class="hidden sm:inline text-xs text-slate-400 ml-2 bg-slate-100 px-2 py-0.5 rounded-full">EHS Platform</span>
+          </div>
         </div>
-        <div class="hidden md:flex items-center gap-8">
+        <div class="hidden lg:flex items-center gap-8">
           <a href="#features" class="text-slate-600 hover:text-blue-600 font-medium transition-colors">Features</a>
+          <a href="#modules" class="text-slate-600 hover:text-blue-600 font-medium transition-colors">Modules</a>
           <a href="#pricing" class="text-slate-600 hover:text-blue-600 font-medium transition-colors">Pricing</a>
+          <a href="#testimonials" class="text-slate-600 hover:text-blue-600 font-medium transition-colors">Testimonials</a>
           <a href="#contact" class="text-slate-600 hover:text-blue-600 font-medium transition-colors">Contact</a>
         </div>
         <div class="flex items-center gap-3">
-          <a href="/login" class="px-4 py-2 text-slate-600 hover:text-slate-900 font-medium transition-colors">Sign In</a>
-          <a href="/register" class="px-5 py-2.5 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-semibold rounded-xl shadow-lg shadow-blue-500/25 btn-hover">Start Free Trial</a>
+          <a href="/app.html" class="px-4 py-2 text-slate-600 hover:text-slate-900 font-medium transition-colors hidden sm:block">Sign In</a>
+          <a href="/app.html" class="px-5 py-2.5 lg:px-6 lg:py-3 bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700 text-white font-semibold rounded-xl shadow-lg shadow-blue-500/25 btn-hover text-sm lg:text-base">Start Free Trial</a>
         </div>
       </div>
     </div>
   </nav>
 
   <!-- Hero Section -->
-  <section class="pt-32 pb-24 px-4 gradient-bg relative overflow-hidden">
+  <section class="pt-28 lg:pt-40 pb-20 lg:pb-32 px-4 gradient-bg relative overflow-hidden">
     <div class="absolute inset-0 overflow-hidden pointer-events-none">
       <div class="absolute -top-40 -right-40 w-96 h-96 bg-white/10 rounded-full blur-3xl"></div>
       <div class="absolute -bottom-40 -left-40 w-96 h-96 bg-white/10 rounded-full blur-3xl"></div>
-      <div class="absolute top-1/2 left-1/4 w-64 h-64 bg-cyan-400/20 rounded-full blur-3xl"></div>
+      <div class="absolute top-1/2 left-1/4 w-64 h-64 bg-cyan-400/20 rounded-full blur-3xl floating"></div>
+      <div class="absolute top-1/4 right-1/4 w-48 h-48 bg-blue-400/20 rounded-full blur-3xl floating" style="animation-delay: 1s;"></div>
     </div>
-    <div class="max-w-7xl mx-auto text-center relative">
-      <div class="inline-flex items-center gap-2 px-4 py-2 bg-white/10 rounded-full text-white/90 text-sm font-medium mb-8 backdrop-blur-sm border border-white/20">
-        <span class="w-2 h-2 bg-emerald-400 rounded-full animate-pulse"></span>
-        Trusted by 500+ companies worldwide
+    <div class="max-w-7xl mx-auto relative">
+      <div class="grid lg:grid-cols-2 gap-12 items-center">
+        <div class="text-center lg:text-left">
+          <div class="inline-flex items-center gap-2 px-4 py-2 bg-white/10 rounded-full text-white/90 text-sm font-medium mb-6 backdrop-blur-sm border border-white/20">
+            <span class="w-2 h-2 bg-emerald-400 rounded-full animate-pulse"></span>
+            Trusted by 500+ safety-focused companies
+          </div>
+          <h1 class="text-4xl sm:text-5xl lg:text-6xl font-extrabold text-white mb-6 leading-tight">
+            Complete EHS Management
+            <span class="block text-cyan-300">For Modern Workplaces</span>
+          </h1>
+          <p class="text-lg lg:text-xl text-white/80 max-w-xl mx-auto lg:mx-0 mb-8 leading-relaxed">
+            The all-in-one platform for incident tracking, OSHA compliance, safety inspections, training management, and building a culture of workplace safety.
+          </p>
+          <div class="flex flex-col sm:flex-row gap-4 justify-center lg:justify-start">
+            <a href="/app.html" class="px-8 py-4 bg-white text-blue-700 font-bold rounded-xl shadow-xl hover:bg-slate-50 btn-hover text-lg inline-flex items-center justify-center gap-2">
+              <span>Start 14-Day Free Trial</span>
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6"/></svg>
+            </a>
+            <a href="#demo" class="px-8 py-4 border-2 border-white/30 text-white font-semibold rounded-xl hover:bg-white/10 btn-hover text-lg inline-flex items-center justify-center gap-2">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+              <span>Watch Demo</span>
+            </a>
+          </div>
+          <div class="mt-8 flex flex-wrap justify-center lg:justify-start gap-6 text-white/60 text-sm">
+            <span class="flex items-center gap-2"><svg class="w-5 h-5 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg> No credit card required</span>
+            <span class="flex items-center gap-2"><svg class="w-5 h-5 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg> Setup in 5 minutes</span>
+            <span class="flex items-center gap-2"><svg class="w-5 h-5 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg> Cancel anytime</span>
+          </div>
+        </div>
+        <div class="hidden lg:block relative">
+          <div class="bg-white/10 backdrop-blur-lg rounded-2xl p-6 border border-white/20 shadow-2xl">
+            <div class="bg-slate-900 rounded-xl p-4 shadow-inner">
+              <div class="flex items-center gap-2 mb-4">
+                <div class="w-3 h-3 rounded-full bg-red-500"></div>
+                <div class="w-3 h-3 rounded-full bg-yellow-500"></div>
+                <div class="w-3 h-3 rounded-full bg-green-500"></div>
+                <span class="text-white/50 text-xs ml-2">SafetyFirst Dashboard</span>
+              </div>
+              <div class="space-y-3">
+                <div class="grid grid-cols-4 gap-2">
+                  <div class="bg-gradient-to-br from-blue-500/20 to-blue-600/20 rounded-lg p-3 border border-blue-500/30">
+                    <p class="text-2xl font-bold text-white">12</p>
+                    <p class="text-xs text-blue-300">Open Incidents</p>
+                  </div>
+                  <div class="bg-gradient-to-br from-yellow-500/20 to-yellow-600/20 rounded-lg p-3 border border-yellow-500/30">
+                    <p class="text-2xl font-bold text-white">5</p>
+                    <p class="text-xs text-yellow-300">Overdue Actions</p>
+                  </div>
+                  <div class="bg-gradient-to-br from-green-500/20 to-green-600/20 rounded-lg p-3 border border-green-500/30">
+                    <p class="text-2xl font-bold text-white">94%</p>
+                    <p class="text-xs text-green-300">Training Rate</p>
+                  </div>
+                  <div class="bg-gradient-to-br from-cyan-500/20 to-cyan-600/20 rounded-lg p-3 border border-cyan-500/30">
+                    <p class="text-2xl font-bold text-white">847</p>
+                    <p class="text-xs text-cyan-300">Days Since LTI</p>
+                  </div>
+                </div>
+                <div class="bg-white/5 rounded-lg p-3 border border-white/10">
+                  <div class="flex items-center justify-between mb-2">
+                    <span class="text-white/70 text-sm">Incident Trend</span>
+                    <span class="text-emerald-400 text-xs font-medium">↓ 23% vs last month</span>
+                  </div>
+                  <div class="flex items-end gap-1 h-16">
+                    <div class="flex-1 bg-blue-500/50 rounded-t" style="height: 60%"></div>
+                    <div class="flex-1 bg-blue-500/50 rounded-t" style="height: 80%"></div>
+                    <div class="flex-1 bg-blue-500/50 rounded-t" style="height: 45%"></div>
+                    <div class="flex-1 bg-blue-500/50 rounded-t" style="height: 70%"></div>
+                    <div class="flex-1 bg-blue-500/50 rounded-t" style="height: 55%"></div>
+                    <div class="flex-1 bg-blue-500/50 rounded-t" style="height: 35%"></div>
+                    <div class="flex-1 bg-emerald-500/70 rounded-t" style="height: 25%"></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
-      <h1 class="text-4xl sm:text-5xl lg:text-6xl font-extrabold text-white mb-6 leading-tight">
-        Enterprise Safety Management<br>
-        <span class="text-cyan-300">Made Simple</span>
-      </h1>
-      <p class="text-xl text-white/80 max-w-2xl mx-auto mb-10 leading-relaxed">
-        Protect your workforce with powerful EHS software. Track incidents, manage compliance, and build a culture of safety—all in one platform.
-      </p>
-      <div class="flex flex-col sm:flex-row gap-4 justify-center">
-        <a href="/register" class="px-8 py-4 bg-white text-blue-700 font-bold rounded-xl shadow-xl hover:bg-slate-50 btn-hover text-lg">
-          Start 14-Day Free Trial
-        </a>
-        <a href="#features" class="px-8 py-4 border-2 border-white/30 text-white font-semibold rounded-xl hover:bg-white/10 btn-hover text-lg">
-          Learn More
-        </a>
+    </div>
+  </section>
+
+  <!-- Trusted By -->
+  <section class="py-12 bg-slate-50 border-b border-slate-100">
+    <div class="max-w-7xl mx-auto px-4">
+      <p class="text-center text-slate-400 text-sm font-medium mb-8">TRUSTED BY SAFETY LEADERS ACROSS INDUSTRIES</p>
+      <div class="flex flex-wrap justify-center items-center gap-8 lg:gap-16 opacity-60 grayscale">
+        <div class="text-2xl font-bold text-slate-400">🏭 Manufacturing Co</div>
+        <div class="text-2xl font-bold text-slate-400">🏗️ BuildSafe Inc</div>
+        <div class="text-2xl font-bold text-slate-400">⚡ PowerGrid Corp</div>
+        <div class="text-2xl font-bold text-slate-400">🚚 LogiSafe</div>
+        <div class="text-2xl font-bold text-slate-400">🏥 HealthFirst</div>
       </div>
-      <p class="mt-8 text-white/60 text-sm">No credit card required • Setup in 5 minutes • Cancel anytime</p>
     </div>
   </section>
 
   <!-- Stats Section -->
-  <section class="py-12 bg-white border-b border-slate-100">
+  <section class="py-16 lg:py-20 bg-white">
     <div class="max-w-7xl mx-auto px-4">
-      <div class="grid grid-cols-2 md:grid-cols-4 gap-8 text-center">
-        <div>
-          <p class="text-4xl font-bold text-slate-800">500+</p>
-          <p class="text-slate-500 mt-1">Companies</p>
+      <div class="grid grid-cols-2 lg:grid-cols-4 gap-8 lg:gap-12">
+        <div class="text-center">
+          <p class="text-4xl lg:text-5xl font-extrabold gradient-text">500+</p>
+          <p class="text-slate-600 mt-2 font-medium">Companies Protected</p>
         </div>
-        <div>
-          <p class="text-4xl font-bold text-slate-800">50K+</p>
-          <p class="text-slate-500 mt-1">Users</p>
+        <div class="text-center">
+          <p class="text-4xl lg:text-5xl font-extrabold gradient-text">50K+</p>
+          <p class="text-slate-600 mt-2 font-medium">Active Users</p>
         </div>
-        <div>
-          <p class="text-4xl font-bold text-slate-800">99.9%</p>
-          <p class="text-slate-500 mt-1">Uptime</p>
+        <div class="text-center">
+          <p class="text-4xl lg:text-5xl font-extrabold gradient-text">99.9%</p>
+          <p class="text-slate-600 mt-2 font-medium">Uptime SLA</p>
         </div>
-        <div>
-          <p class="text-4xl font-bold text-slate-800">60%</p>
-          <p class="text-slate-500 mt-1">Cost Savings</p>
+        <div class="text-center">
+          <p class="text-4xl lg:text-5xl font-extrabold gradient-text">60%</p>
+          <p class="text-slate-600 mt-2 font-medium">Incident Reduction</p>
         </div>
       </div>
     </div>
   </section>
 
-  <!-- Features Section -->
-  <section id="features" class="py-24 px-4 bg-slate-50">
+  <!-- Core Features Section -->
+  <section id="features" class="py-20 lg:py-28 px-4 bg-slate-50">
     <div class="max-w-7xl mx-auto">
       <div class="text-center mb-16">
-        <h2 class="text-3xl sm:text-4xl font-bold text-slate-800 mb-4">Everything You Need for Workplace Safety</h2>
-        <p class="text-lg text-slate-600 max-w-2xl mx-auto">Comprehensive tools to manage incidents, ensure compliance, and protect your team.</p>
+        <span class="inline-block px-4 py-1 bg-blue-100 text-blue-700 text-sm font-semibold rounded-full mb-4">POWERFUL FEATURES</span>
+        <h2 class="text-3xl sm:text-4xl lg:text-5xl font-bold text-slate-800 mb-4">Everything You Need for<br><span class="gradient-text">Workplace Safety Excellence</span></h2>
+        <p class="text-lg lg:text-xl text-slate-600 max-w-3xl mx-auto">Comprehensive tools to track incidents, ensure compliance, and build a proactive safety culture across your entire organization.</p>
       </div>
-      <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
+      
+      <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-6 lg:gap-8">
         <!-- Feature 1 -->
-        <div class="bg-white p-8 rounded-2xl card-shadow card-hover">
-          <div class="w-14 h-14 bg-gradient-to-br from-red-500 to-red-600 rounded-xl flex items-center justify-center text-white mb-5 shadow-lg shadow-red-500/20">
-            <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
-            </svg>
+        <div class="feature-card bg-white p-8 rounded-2xl card-shadow card-hover border border-slate-100">
+          <div class="feature-icon w-14 h-14 bg-gradient-to-br from-red-500 to-red-600 rounded-xl flex items-center justify-center text-white mb-6 shadow-lg shadow-red-500/25">
+            <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
           </div>
           <h3 class="text-xl font-bold text-slate-800 mb-3">Incident Management</h3>
-          <p class="text-slate-600">Track, investigate, and prevent workplace incidents with comprehensive reporting and root cause analysis tools.</p>
+          <p class="text-slate-600 mb-4">Complete incident lifecycle from report to resolution with customizable workflows, root cause analysis, and document management.</p>
+          <ul class="space-y-2 text-sm text-slate-500">
+            <li class="flex items-center gap-2"><span class="text-emerald-500">✓</span> Full lifecycle tracking</li>
+            <li class="flex items-center gap-2"><span class="text-emerald-500">✓</span> Root cause analysis (5 Whys, Fishbone)</li>
+            <li class="flex items-center gap-2"><span class="text-emerald-500">✓</span> LTI/RI document uploads</li>
+          </ul>
         </div>
+
         <!-- Feature 2 -->
-        <div class="bg-white p-8 rounded-2xl card-shadow card-hover">
-          <div class="w-14 h-14 bg-gradient-to-br from-amber-500 to-amber-600 rounded-xl flex items-center justify-center text-white mb-5 shadow-lg shadow-amber-500/20">
-            <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
-            </svg>
-          </div>
-          <h3 class="text-xl font-bold text-slate-800 mb-3">Risk Assessments</h3>
-          <p class="text-slate-600">Identify hazards, assess risks, and implement controls with customizable risk matrices and action tracking.</p>
-        </div>
-        <!-- Feature 3 -->
-        <div class="bg-white p-8 rounded-2xl card-shadow card-hover">
-          <div class="w-14 h-14 bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl flex items-center justify-center text-white mb-5 shadow-lg shadow-blue-500/20">
-            <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
-            </svg>
+        <div class="feature-card bg-white p-8 rounded-2xl card-shadow card-hover border border-slate-100">
+          <div class="feature-icon w-14 h-14 bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl flex items-center justify-center text-white mb-6 shadow-lg shadow-blue-500/25">
+            <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
           </div>
           <h3 class="text-xl font-bold text-slate-800 mb-3">OSHA Compliance</h3>
-          <p class="text-slate-600">Automated OSHA 300, 300A, and 301 logs with electronic submission. Stay audit-ready at all times.</p>
+          <p class="text-slate-600 mb-4">Automated OSHA 300, 300A, and 301 log generation. Stay audit-ready with complete recordkeeping.</p>
+          <ul class="space-y-2 text-sm text-slate-500">
+            <li class="flex items-center gap-2"><span class="text-emerald-500">✓</span> Auto-generated OSHA forms</li>
+            <li class="flex items-center gap-2"><span class="text-emerald-500">✓</span> Recordability determination</li>
+            <li class="flex items-center gap-2"><span class="text-emerald-500">✓</span> Annual certification</li>
+          </ul>
         </div>
+
+        <!-- Feature 3 -->
+        <div class="feature-card bg-white p-8 rounded-2xl card-shadow card-hover border border-slate-100">
+          <div class="feature-icon w-14 h-14 bg-gradient-to-br from-amber-500 to-amber-600 rounded-xl flex items-center justify-center text-white mb-6 shadow-lg shadow-amber-500/25">
+            <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/></svg>
+          </div>
+          <h3 class="text-xl font-bold text-slate-800 mb-3">Action Item Tracking</h3>
+          <p class="text-slate-600 mb-4">Never let a corrective action slip. Assign, track, and verify with automated notifications.</p>
+          <ul class="space-y-2 text-sm text-slate-500">
+            <li class="flex items-center gap-2"><span class="text-emerald-500">✓</span> Automatic notifications</li>
+            <li class="flex items-center gap-2"><span class="text-emerald-500">✓</span> Due date reminders</li>
+            <li class="flex items-center gap-2"><span class="text-emerald-500">✓</span> Verification workflow</li>
+          </ul>
+        </div>
+
         <!-- Feature 4 -->
-        <div class="bg-white p-8 rounded-2xl card-shadow card-hover">
-          <div class="w-14 h-14 bg-gradient-to-br from-emerald-500 to-emerald-600 rounded-xl flex items-center justify-center text-white mb-5 shadow-lg shadow-emerald-500/20">
-            <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"/>
-            </svg>
+        <div class="feature-card bg-white p-8 rounded-2xl card-shadow card-hover border border-slate-100">
+          <div class="feature-icon w-14 h-14 bg-gradient-to-br from-emerald-500 to-emerald-600 rounded-xl flex items-center justify-center text-white mb-6 shadow-lg shadow-emerald-500/25">
+            <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"/></svg>
+          </div>
+          <h3 class="text-xl font-bold text-slate-800 mb-3">I-CARE Observations</h3>
+          <p class="text-slate-600 mb-4">Behavior-based safety to recognize safe behaviors and coach at-risk actions.</p>
+          <ul class="space-y-2 text-sm text-slate-500">
+            <li class="flex items-center gap-2"><span class="text-emerald-500">✓</span> Safe/at-risk tracking</li>
+            <li class="flex items-center gap-2"><span class="text-emerald-500">✓</span> Recognition system</li>
+            <li class="flex items-center gap-2"><span class="text-emerald-500">✓</span> Follow-up assignments</li>
+          </ul>
+        </div>
+
+        <!-- Feature 5 -->
+        <div class="feature-card bg-white p-8 rounded-2xl card-shadow card-hover border border-slate-100">
+          <div class="feature-icon w-14 h-14 bg-gradient-to-br from-purple-500 to-purple-600 rounded-xl flex items-center justify-center text-white mb-6 shadow-lg shadow-purple-500/25">
+            <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
+          </div>
+          <h3 class="text-xl font-bold text-slate-800 mb-3">Safety Inspections</h3>
+          <p class="text-slate-600 mb-4">Schedule and conduct inspections with customizable checklists and photo documentation.</p>
+          <ul class="space-y-2 text-sm text-slate-500">
+            <li class="flex items-center gap-2"><span class="text-emerald-500">✓</span> Custom templates</li>
+            <li class="flex items-center gap-2"><span class="text-emerald-500">✓</span> Photo documentation</li>
+            <li class="flex items-center gap-2"><span class="text-emerald-500">✓</span> Auto action generation</li>
+          </ul>
+        </div>
+
+        <!-- Feature 6 -->
+        <div class="feature-card bg-white p-8 rounded-2xl card-shadow card-hover border border-slate-100">
+          <div class="feature-icon w-14 h-14 bg-gradient-to-br from-cyan-500 to-cyan-600 rounded-xl flex items-center justify-center text-white mb-6 shadow-lg shadow-cyan-500/25">
+            <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"/></svg>
           </div>
           <h3 class="text-xl font-bold text-slate-800 mb-3">Training Management</h3>
-          <p class="text-slate-600">Track certifications, schedule training, send reminders, and ensure your team stays compliant.</p>
+          <p class="text-slate-600 mb-4">Track certifications, assign courses, and maintain training compliance.</p>
+          <ul class="space-y-2 text-sm text-slate-500">
+            <li class="flex items-center gap-2"><span class="text-emerald-500">✓</span> Certification tracking</li>
+            <li class="flex items-center gap-2"><span class="text-emerald-500">✓</span> Expiration alerts</li>
+            <li class="flex items-center gap-2"><span class="text-emerald-500">✓</span> Training matrix</li>
+          </ul>
         </div>
-        <!-- Feature 5 -->
-        <div class="bg-white p-8 rounded-2xl card-shadow card-hover">
-          <div class="w-14 h-14 bg-gradient-to-br from-purple-500 to-purple-600 rounded-xl flex items-center justify-center text-white mb-5 shadow-lg shadow-purple-500/20">
-            <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"/>
-            </svg>
+
+        <!-- Feature 7 -->
+        <div class="feature-card bg-white p-8 rounded-2xl card-shadow card-hover border border-slate-100">
+          <div class="feature-icon w-14 h-14 bg-gradient-to-br from-pink-500 to-pink-600 rounded-xl flex items-center justify-center text-white mb-6 shadow-lg shadow-pink-500/25">
+            <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg>
           </div>
-          <h3 class="text-xl font-bold text-slate-800 mb-3">Inspections & Audits</h3>
-          <p class="text-slate-600">Schedule inspections, use custom checklists, track findings, and manage corrective actions efficiently.</p>
+          <h3 class="text-xl font-bold text-slate-800 mb-3">Real-time Notifications</h3>
+          <p class="text-slate-600 mb-4">Stay informed with instant alerts for assignments, due dates, and approvals.</p>
+          <ul class="space-y-2 text-sm text-slate-500">
+            <li class="flex items-center gap-2"><span class="text-emerald-500">✓</span> In-app & email alerts</li>
+            <li class="flex items-center gap-2"><span class="text-emerald-500">✓</span> Custom preferences</li>
+            <li class="flex items-center gap-2"><span class="text-emerald-500">✓</span> Escalation rules</li>
+          </ul>
         </div>
-        <!-- Feature 6 -->
-        <div class="bg-white p-8 rounded-2xl card-shadow card-hover">
-          <div class="w-14 h-14 bg-gradient-to-br from-cyan-500 to-cyan-600 rounded-xl flex items-center justify-center text-white mb-5 shadow-lg shadow-cyan-500/20">
-            <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
-            </svg>
+
+        <!-- Feature 8 -->
+        <div class="feature-card bg-white p-8 rounded-2xl card-shadow card-hover border border-slate-100">
+          <div class="feature-icon w-14 h-14 bg-gradient-to-br from-indigo-500 to-indigo-600 rounded-xl flex items-center justify-center text-white mb-6 shadow-lg shadow-indigo-500/25">
+            <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
           </div>
-          <h3 class="text-xl font-bold text-slate-800 mb-3">Analytics & Reports</h3>
-          <p class="text-slate-600">Real-time dashboards, trend analysis, KPI tracking, and exportable reports for data-driven decisions.</p>
+          <h3 class="text-xl font-bold text-slate-800 mb-3">Advanced Reporting</h3>
+          <p class="text-slate-600 mb-4">Build custom reports from any data. Schedule delivery in Excel, PDF, or CSV.</p>
+          <ul class="space-y-2 text-sm text-slate-500">
+            <li class="flex items-center gap-2"><span class="text-emerald-500">✓</span> Drag-and-drop builder</li>
+            <li class="flex items-center gap-2"><span class="text-emerald-500">✓</span> Scheduled reports</li>
+            <li class="flex items-center gap-2"><span class="text-emerald-500">✓</span> Custom dashboards</li>
+          </ul>
+        </div>
+
+        <!-- Feature 9 -->
+        <div class="feature-card bg-white p-8 rounded-2xl card-shadow card-hover border border-slate-100">
+          <div class="feature-icon w-14 h-14 bg-gradient-to-br from-orange-500 to-orange-600 rounded-xl flex items-center justify-center text-white mb-6 shadow-lg shadow-orange-500/25">
+            <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4"/></svg>
+          </div>
+          <h3 class="text-xl font-bold text-slate-800 mb-3">Unified Inbox</h3>
+          <p class="text-slate-600 mb-4">All your tasks, assignments, and items requiring attention in one place.</p>
+          <ul class="space-y-2 text-sm text-slate-500">
+            <li class="flex items-center gap-2"><span class="text-emerald-500">✓</span> All tasks in one view</li>
+            <li class="flex items-center gap-2"><span class="text-emerald-500">✓</span> Overdue highlighting</li>
+            <li class="flex items-center gap-2"><span class="text-emerald-500">✓</span> Quick actions</li>
+          </ul>
         </div>
       </div>
     </div>
   </section>
 
-  <!-- More Features -->
-  <section class="py-24 px-4 bg-white">
+  <!-- Modules Section -->
+  <section id="modules" class="py-20 lg:py-28 px-4 bg-white">
     <div class="max-w-7xl mx-auto">
-      <div class="grid lg:grid-cols-2 gap-16 items-center">
-        <div>
-          <h2 class="text-3xl sm:text-4xl font-bold text-slate-800 mb-6">Complete EHS Solution</h2>
-          <p class="text-lg text-slate-600 mb-8">Everything you need to manage workplace safety, all in one integrated platform.</p>
-          <div class="space-y-4">
-            <div class="flex items-start gap-4">
-              <div class="w-6 h-6 bg-emerald-100 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
-                <svg class="w-4 h-4 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
-                </svg>
-              </div>
-              <div>
-                <h4 class="font-semibold text-slate-800">Job Safety Analysis (JSA)</h4>
-                <p class="text-slate-600">Break down tasks, identify hazards, and implement controls step-by-step.</p>
-              </div>
-            </div>
-            <div class="flex items-start gap-4">
-              <div class="w-6 h-6 bg-emerald-100 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
-                <svg class="w-4 h-4 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
-                </svg>
-              </div>
-              <div>
-                <h4 class="font-semibold text-slate-800">Permits to Work</h4>
-                <p class="text-slate-600">Manage hot work, confined space, LOTO, and other high-risk permits.</p>
-              </div>
-            </div>
-            <div class="flex items-start gap-4">
-              <div class="w-6 h-6 bg-emerald-100 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
-                <svg class="w-4 h-4 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
-                </svg>
-              </div>
-              <div>
-                <h4 class="font-semibold text-slate-800">Contractor Management</h4>
-                <p class="text-slate-600">Track contractor compliance, certifications, and safety performance.</p>
-              </div>
-            </div>
-            <div class="flex items-start gap-4">
-              <div class="w-6 h-6 bg-emerald-100 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
-                <svg class="w-4 h-4 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
-                </svg>
-              </div>
-              <div>
-                <h4 class="font-semibold text-slate-800">Chemical/SDS Management</h4>
-                <p class="text-slate-600">Maintain SDS inventory, track chemicals, and ensure GHS compliance.</p>
-              </div>
-            </div>
-            <div class="flex items-start gap-4">
-              <div class="w-6 h-6 bg-emerald-100 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
-                <svg class="w-4 h-4 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
-                </svg>
-              </div>
-              <div>
-                <h4 class="font-semibold text-slate-800">Emergency Response Plans</h4>
-                <p class="text-slate-600">Document emergency procedures and track drill records.</p>
-              </div>
-            </div>
-          </div>
-        </div>
-        <div class="bg-gradient-to-br from-slate-100 to-slate-200 rounded-3xl p-8 lg:p-12">
-          <div class="bg-white rounded-2xl shadow-xl p-6">
-            <div class="flex items-center gap-3 mb-6">
-              <div class="w-3 h-3 bg-red-400 rounded-full"></div>
-              <div class="w-3 h-3 bg-yellow-400 rounded-full"></div>
-              <div class="w-3 h-3 bg-green-400 rounded-full"></div>
-            </div>
-            <div class="space-y-4">
-              <div class="h-8 bg-gradient-to-r from-blue-500 to-blue-600 rounded-lg w-3/4"></div>
-              <div class="grid grid-cols-4 gap-3">
-                <div class="h-20 bg-blue-100 rounded-lg"></div>
-                <div class="h-20 bg-emerald-100 rounded-lg"></div>
-                <div class="h-20 bg-amber-100 rounded-lg"></div>
-                <div class="h-20 bg-purple-100 rounded-lg"></div>
-              </div>
-              <div class="h-32 bg-slate-100 rounded-lg"></div>
-              <div class="grid grid-cols-2 gap-3">
-                <div class="h-24 bg-slate-100 rounded-lg"></div>
-                <div class="h-24 bg-slate-100 rounded-lg"></div>
-              </div>
-            </div>
-          </div>
-        </div>
+      <div class="text-center mb-16">
+        <span class="inline-block px-4 py-1 bg-cyan-100 text-cyan-700 text-sm font-semibold rounded-full mb-4">COMPLETE EHS SUITE</span>
+        <h2 class="text-3xl sm:text-4xl lg:text-5xl font-bold text-slate-800 mb-4">All the Modules You Need</h2>
+        <p class="text-lg text-slate-600 max-w-2xl mx-auto">From risk assessments to environmental compliance, we've got you covered.</p>
+      </div>
+      
+      <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 lg:gap-6">
+        <div class="p-6 bg-slate-50 rounded-xl border border-slate-100 hover:border-blue-200 hover:bg-blue-50/50 transition-all text-center"><span class="text-3xl mb-3 block">📊</span><h4 class="font-semibold text-slate-800">Risk Assessments</h4></div>
+        <div class="p-6 bg-slate-50 rounded-xl border border-slate-100 hover:border-blue-200 hover:bg-blue-50/50 transition-all text-center"><span class="text-3xl mb-3 block">📋</span><h4 class="font-semibold text-slate-800">Job Safety Analysis</h4></div>
+        <div class="p-6 bg-slate-50 rounded-xl border border-slate-100 hover:border-blue-200 hover:bg-blue-50/50 transition-all text-center"><span class="text-3xl mb-3 block">🎫</span><h4 class="font-semibold text-slate-800">Permits to Work</h4></div>
+        <div class="p-6 bg-slate-50 rounded-xl border border-slate-100 hover:border-blue-200 hover:bg-blue-50/50 transition-all text-center"><span class="text-3xl mb-3 block">🔄</span><h4 class="font-semibold text-slate-800">Management of Change</h4></div>
+        <div class="p-6 bg-slate-50 rounded-xl border border-slate-100 hover:border-blue-200 hover:bg-blue-50/50 transition-all text-center"><span class="text-3xl mb-3 block">👷</span><h4 class="font-semibold text-slate-800">Contractor Management</h4></div>
+        <div class="p-6 bg-slate-50 rounded-xl border border-slate-100 hover:border-blue-200 hover:bg-blue-50/50 transition-all text-center"><span class="text-3xl mb-3 block">🧪</span><h4 class="font-semibold text-slate-800">Chemical/SDS</h4></div>
+        <div class="p-6 bg-slate-50 rounded-xl border border-slate-100 hover:border-blue-200 hover:bg-blue-50/50 transition-all text-center"><span class="text-3xl mb-3 block">🏥</span><h4 class="font-semibold text-slate-800">Occupational Health</h4></div>
+        <div class="p-6 bg-slate-50 rounded-xl border border-slate-100 hover:border-blue-200 hover:bg-blue-50/50 transition-all text-center"><span class="text-3xl mb-3 block">🚨</span><h4 class="font-semibold text-slate-800">Emergency Response</h4></div>
+        <div class="p-6 bg-slate-50 rounded-xl border border-slate-100 hover:border-blue-200 hover:bg-blue-50/50 transition-all text-center"><span class="text-3xl mb-3 block">🏋️</span><h4 class="font-semibold text-slate-800">Ergonomics</h4></div>
+        <div class="p-6 bg-slate-50 rounded-xl border border-slate-100 hover:border-blue-200 hover:bg-blue-50/50 transition-all text-center"><span class="text-3xl mb-3 block">🌿</span><h4 class="font-semibold text-slate-800">Environmental</h4></div>
+        <div class="p-6 bg-slate-50 rounded-xl border border-slate-100 hover:border-blue-200 hover:bg-blue-50/50 transition-all text-center"><span class="text-3xl mb-3 block">✅</span><h4 class="font-semibold text-slate-800">Quality/NCR</h4></div>
+        <div class="p-6 bg-slate-50 rounded-xl border border-slate-100 hover:border-blue-200 hover:bg-blue-50/50 transition-all text-center"><span class="text-3xl mb-3 block">🔧</span><h4 class="font-semibold text-slate-800">CAPA</h4></div>
       </div>
     </div>
   </section>
 
   <!-- Pricing Section -->
-  <section id="pricing" class="py-24 px-4 bg-slate-50">
+  <section id="pricing" class="py-20 lg:py-28 px-4 bg-slate-50">
     <div class="max-w-7xl mx-auto">
       <div class="text-center mb-16">
-        <h2 class="text-3xl sm:text-4xl font-bold text-slate-800 mb-4">Simple, Transparent Pricing</h2>
-        <p class="text-lg text-slate-600">No hidden fees. Cancel anytime. Save 60-80% vs competitors like Intelex.</p>
+        <span class="inline-block px-4 py-1 bg-emerald-100 text-emerald-700 text-sm font-semibold rounded-full mb-4">SIMPLE PRICING</span>
+        <h2 class="text-3xl sm:text-4xl lg:text-5xl font-bold text-slate-800 mb-4">Plans That Scale With You</h2>
+        <p class="text-lg text-slate-600 max-w-2xl mx-auto"><strong>Unlimited records on every plan.</strong> No limits on incidents, actions, inspections, or documents.</p>
       </div>
+      
       <div class="grid md:grid-cols-3 gap-8 max-w-5xl mx-auto">
         <!-- Starter -->
-        <div class="bg-white p-8 rounded-2xl card-shadow">
-          <h3 class="text-xl font-bold text-slate-800">Starter</h3>
-          <p class="text-slate-500 mt-1">Up to 10 users</p>
+        <div class="bg-white p-8 rounded-2xl card-shadow card-hover border border-slate-200">
+          <h3 class="text-2xl font-bold text-slate-800">Starter</h3>
+          <p class="text-slate-500 mt-1">Up to 25 users</p>
           <div class="mt-6 mb-8">
-            <span class="text-5xl font-bold text-slate-800">$199</span>
+            <span class="text-5xl font-extrabold text-slate-800">$199</span>
             <span class="text-slate-500">/month</span>
           </div>
-          <ul class="space-y-3 mb-8">
-            <li class="flex items-center gap-2 text-slate-600"><span class="text-emerald-500">✓</span> Incident Management</li>
-            <li class="flex items-center gap-2 text-slate-600"><span class="text-emerald-500">✓</span> Action Item Tracking</li>
-            <li class="flex items-center gap-2 text-slate-600"><span class="text-emerald-500">✓</span> Inspections & Audits</li>
-            <li class="flex items-center gap-2 text-slate-600"><span class="text-emerald-500">✓</span> Training Records</li>
-            <li class="flex items-center gap-2 text-slate-600"><span class="text-emerald-500">✓</span> OSHA 300 Logs</li>
-            <li class="flex items-center gap-2 text-slate-600"><span class="text-emerald-500">✓</span> Basic Reports</li>
+          <ul class="space-y-3 mb-8 text-slate-600">
+            <li class="flex items-center gap-2"><span class="text-emerald-500">✓</span> <strong>Unlimited</strong> records</li>
+            <li class="flex items-center gap-2"><span class="text-emerald-500">✓</span> Incident management</li>
+            <li class="flex items-center gap-2"><span class="text-emerald-500">✓</span> Action tracking</li>
+            <li class="flex items-center gap-2"><span class="text-emerald-500">✓</span> Inspections & training</li>
+            <li class="flex items-center gap-2"><span class="text-emerald-500">✓</span> OSHA 300 logs</li>
+            <li class="flex items-center gap-2"><span class="text-emerald-500">✓</span> I-CARE observations</li>
+            <li class="flex items-center gap-2"><span class="text-emerald-500">✓</span> Custom report builder</li>
+            <li class="flex items-center gap-2"><span class="text-emerald-500">✓</span> Notifications & inbox</li>
           </ul>
-          <a href="/register" class="block w-full py-3 text-center border-2 border-blue-500 text-blue-600 font-semibold rounded-xl hover:bg-blue-50 btn-hover">Get Started</a>
+          <a href="/app.html" class="block w-full py-4 text-center border-2 border-blue-500 text-blue-600 font-bold rounded-xl hover:bg-blue-50 btn-hover text-lg">Start Free Trial</a>
         </div>
+        
         <!-- Professional -->
-        <div class="bg-white p-8 rounded-2xl card-shadow ring-2 ring-blue-500 scale-105 relative">
-          <div class="absolute -top-4 left-1/2 -translate-x-1/2 px-4 py-1 bg-gradient-to-r from-blue-500 to-blue-600 text-white text-sm font-bold rounded-full shadow-lg">Most Popular</div>
-          <h3 class="text-xl font-bold text-slate-800">Professional</h3>
-          <p class="text-slate-500 mt-1">Up to 50 users</p>
+        <div class="bg-white p-8 rounded-2xl card-shadow ring-2 ring-blue-500 relative transform lg:scale-105">
+          <div class="absolute -top-4 left-1/2 -translate-x-1/2 px-6 py-1.5 bg-gradient-to-r from-blue-500 to-cyan-500 text-white text-sm font-bold rounded-full shadow-lg">Most Popular</div>
+          <h3 class="text-2xl font-bold text-slate-800">Professional</h3>
+          <p class="text-slate-500 mt-1">Up to 100 users</p>
           <div class="mt-6 mb-8">
-            <span class="text-5xl font-bold text-slate-800">$499</span>
+            <span class="text-5xl font-extrabold text-slate-800">$499</span>
             <span class="text-slate-500">/month</span>
           </div>
-          <ul class="space-y-3 mb-8">
-            <li class="flex items-center gap-2 text-slate-600"><span class="text-emerald-500">✓</span> Everything in Starter</li>
-            <li class="flex items-center gap-2 text-slate-600"><span class="text-emerald-500">✓</span> Risk Assessments</li>
-            <li class="flex items-center gap-2 text-slate-600"><span class="text-emerald-500">✓</span> Job Safety Analysis</li>
-            <li class="flex items-center gap-2 text-slate-600"><span class="text-emerald-500">✓</span> Permits to Work</li>
-            <li class="flex items-center gap-2 text-slate-600"><span class="text-emerald-500">✓</span> Contractor Management</li>
-            <li class="flex items-center gap-2 text-slate-600"><span class="text-emerald-500">✓</span> API Access</li>
+          <ul class="space-y-3 mb-8 text-slate-600">
+            <li class="flex items-center gap-2"><span class="text-emerald-500">✓</span> <strong>Everything in Starter</strong></li>
+            <li class="flex items-center gap-2"><span class="text-emerald-500">✓</span> Risk assessments & JSA</li>
+            <li class="flex items-center gap-2"><span class="text-emerald-500">✓</span> Permits to work</li>
+            <li class="flex items-center gap-2"><span class="text-emerald-500">✓</span> Scheduled audits</li>
+            <li class="flex items-center gap-2"><span class="text-emerald-500">✓</span> Contractor management</li>
+            <li class="flex items-center gap-2"><span class="text-emerald-500">✓</span> Custom form builder</li>
+            <li class="flex items-center gap-2"><span class="text-emerald-500">✓</span> Dashboard builder</li>
+            <li class="flex items-center gap-2"><span class="text-emerald-500">✓</span> API access</li>
           </ul>
-          <a href="/register" class="block w-full py-3 text-center bg-gradient-to-r from-blue-600 to-blue-700 text-white font-semibold rounded-xl shadow-lg shadow-blue-500/25 hover:from-blue-700 hover:to-blue-800 btn-hover">Get Started</a>
+          <a href="/app.html" class="block w-full py-4 text-center bg-gradient-to-r from-blue-600 to-cyan-600 text-white font-bold rounded-xl shadow-lg shadow-blue-500/25 hover:from-blue-700 hover:to-cyan-700 btn-hover text-lg">Start Free Trial</a>
         </div>
+        
         <!-- Enterprise -->
-        <div class="bg-white p-8 rounded-2xl card-shadow">
-          <h3 class="text-xl font-bold text-slate-800">Enterprise</h3>
+        <div class="bg-white p-8 rounded-2xl card-shadow card-hover border border-slate-200">
+          <h3 class="text-2xl font-bold text-slate-800">Enterprise</h3>
           <p class="text-slate-500 mt-1">Unlimited users</p>
           <div class="mt-6 mb-8">
-            <span class="text-5xl font-bold text-slate-800">$1,299</span>
+            <span class="text-5xl font-extrabold text-slate-800">$1,299</span>
             <span class="text-slate-500">/month</span>
           </div>
-          <ul class="space-y-3 mb-8">
-            <li class="flex items-center gap-2 text-slate-600"><span class="text-emerald-500">✓</span> Everything in Professional</li>
-            <li class="flex items-center gap-2 text-slate-600"><span class="text-emerald-500">✓</span> Chemical/SDS Management</li>
-            <li class="flex items-center gap-2 text-slate-600"><span class="text-emerald-500">✓</span> Occupational Health</li>
-            <li class="flex items-center gap-2 text-slate-600"><span class="text-emerald-500">✓</span> Ergonomic Assessments</li>
-            <li class="flex items-center gap-2 text-slate-600"><span class="text-emerald-500">✓</span> SSO/SAML Integration</li>
-            <li class="flex items-center gap-2 text-slate-600"><span class="text-emerald-500">✓</span> Dedicated Support</li>
+          <ul class="space-y-3 mb-8 text-slate-600">
+            <li class="flex items-center gap-2"><span class="text-emerald-500">✓</span> <strong>Everything in Professional</strong></li>
+            <li class="flex items-center gap-2"><span class="text-emerald-500">✓</span> Unlimited users</li>
+            <li class="flex items-center gap-2"><span class="text-emerald-500">✓</span> Chemical/SDS management</li>
+            <li class="flex items-center gap-2"><span class="text-emerald-500">✓</span> Occupational health</li>
+            <li class="flex items-center gap-2"><span class="text-emerald-500">✓</span> Environmental module</li>
+            <li class="flex items-center gap-2"><span class="text-emerald-500">✓</span> SSO/SAML integration</li>
+            <li class="flex items-center gap-2"><span class="text-emerald-500">✓</span> Custom branding</li>
+            <li class="flex items-center gap-2"><span class="text-emerald-500">✓</span> Dedicated support</li>
           </ul>
-          <a href="/register" class="block w-full py-3 text-center border-2 border-blue-500 text-blue-600 font-semibold rounded-xl hover:bg-blue-50 btn-hover">Get Started</a>
+          <a href="/app.html" class="block w-full py-4 text-center border-2 border-blue-500 text-blue-600 font-bold rounded-xl hover:bg-blue-50 btn-hover text-lg">Contact Sales</a>
+        </div>
+      </div>
+      
+      <p class="text-center text-slate-500 mt-12">All plans: <strong>14-day free trial</strong> • No credit card • <strong>Unlimited records</strong> • Email support</p>
+    </div>
+  </section>
+
+  <!-- Testimonials -->
+  <section id="testimonials" class="py-20 lg:py-28 px-4 bg-white">
+    <div class="max-w-7xl mx-auto">
+      <div class="text-center mb-16">
+        <span class="inline-block px-4 py-1 bg-purple-100 text-purple-700 text-sm font-semibold rounded-full mb-4">TESTIMONIALS</span>
+        <h2 class="text-3xl sm:text-4xl lg:text-5xl font-bold text-slate-800 mb-4">Trusted by Safety Professionals</h2>
+      </div>
+      
+      <div class="grid md:grid-cols-3 gap-8">
+        <div class="bg-slate-50 p-8 rounded-2xl border border-slate-100">
+          <div class="flex gap-1 text-yellow-400 mb-4">★★★★★</div>
+          <p class="text-slate-600 mb-6 italic">"SafetyFirst transformed our safety program. We reduced incidents by 45% in the first year."</p>
+          <div class="flex items-center gap-4">
+            <div class="w-12 h-12 bg-gradient-to-br from-blue-500 to-cyan-500 rounded-full flex items-center justify-center text-white font-bold">JM</div>
+            <div><p class="font-semibold text-slate-800">Jennifer Martinez</p><p class="text-sm text-slate-500">EHS Director</p></div>
+          </div>
+        </div>
+        <div class="bg-slate-50 p-8 rounded-2xl border border-slate-100">
+          <div class="flex gap-1 text-yellow-400 mb-4">★★★★★</div>
+          <p class="text-slate-600 mb-6 italic">"The I-CARE module completely changed our safety culture. Employees actively report observations."</p>
+          <div class="flex items-center gap-4">
+            <div class="w-12 h-12 bg-gradient-to-br from-emerald-500 to-teal-500 rounded-full flex items-center justify-center text-white font-bold">RK</div>
+            <div><p class="font-semibold text-slate-800">Robert Kim</p><p class="text-sm text-slate-500">Safety Manager</p></div>
+          </div>
+        </div>
+        <div class="bg-slate-50 p-8 rounded-2xl border border-slate-100">
+          <div class="flex gap-1 text-yellow-400 mb-4">★★★★★</div>
+          <p class="text-slate-600 mb-6 italic">"Finally, one system for everything. The custom report builder alone is worth the investment."</p>
+          <div class="flex items-center gap-4">
+            <div class="w-12 h-12 bg-gradient-to-br from-purple-500 to-pink-500 rounded-full flex items-center justify-center text-white font-bold">SL</div>
+            <div><p class="font-semibold text-slate-800">Sarah Lee</p><p class="text-sm text-slate-500">VP Operations</p></div>
+          </div>
         </div>
       </div>
     </div>
   </section>
 
   <!-- CTA Section -->
-  <section class="py-24 px-4 gradient-bg">
-    <div class="max-w-4xl mx-auto text-center">
-      <h2 class="text-3xl sm:text-4xl font-bold text-white mb-6">Ready to Transform Your Safety Program?</h2>
+  <section id="demo" class="py-20 lg:py-28 px-4 gradient-bg relative overflow-hidden">
+    <div class="absolute inset-0 overflow-hidden pointer-events-none">
+      <div class="absolute -top-40 -right-40 w-96 h-96 bg-white/10 rounded-full blur-3xl"></div>
+      <div class="absolute -bottom-40 -left-40 w-96 h-96 bg-white/10 rounded-full blur-3xl"></div>
+    </div>
+    <div class="max-w-4xl mx-auto text-center relative">
+      <h2 class="text-3xl sm:text-4xl lg:text-5xl font-bold text-white mb-6">Ready to Transform Your Safety Program?</h2>
       <p class="text-xl text-white/80 mb-10">Join hundreds of companies using SafetyFirst to protect their workforce.</p>
-      <a href="/register" class="inline-block px-8 py-4 bg-white text-blue-700 font-bold rounded-xl shadow-xl hover:bg-slate-50 btn-hover text-lg">
-        Start Your Free Trial Today
-      </a>
-      <p class="mt-6 text-white/60 text-sm">No credit card required • 14-day free trial</p>
+      <div class="flex flex-col sm:flex-row gap-4 justify-center">
+        <a href="/app.html" class="px-8 py-4 bg-white text-blue-700 font-bold rounded-xl shadow-xl hover:bg-slate-50 btn-hover text-lg">Start Your Free Trial</a>
+        <a href="#contact" class="px-8 py-4 border-2 border-white/30 text-white font-semibold rounded-xl hover:bg-white/10 btn-hover text-lg">Schedule a Demo</a>
+      </div>
+      <p class="mt-8 text-white/60 text-sm">14-day free trial • No credit card required • Full feature access</p>
     </div>
   </section>
 
   <!-- Footer -->
   <footer id="contact" class="py-16 px-4 bg-slate-900 text-white">
     <div class="max-w-7xl mx-auto">
-      <div class="grid md:grid-cols-4 gap-12 mb-12">
+      <div class="grid md:grid-cols-2 lg:grid-cols-4 gap-12 mb-12">
         <div>
           <div class="flex items-center gap-3 mb-4">
-            <div class="w-10 h-10 bg-gradient-to-br from-blue-400 to-blue-600 rounded-xl flex items-center justify-center">
-              <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
-              </svg>
+            <div class="w-10 h-10 bg-gradient-to-br from-blue-400 to-cyan-400 rounded-xl flex items-center justify-center">
+              <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
             </div>
             <span class="font-bold text-xl">SafetyFirst</span>
           </div>
-          <p class="text-slate-400 leading-relaxed">Enterprise-grade EHS software for modern workplaces. Protect your workforce with powerful safety management tools.</p>
+          <p class="text-slate-400">Enterprise EHS software for modern workplaces.</p>
         </div>
         <div>
-          <h4 class="font-bold mb-4 text-lg">Product</h4>
-          <ul class="space-y-3 text-slate-400">
-            <li><a href="#features" class="hover:text-white transition-colors">Features</a></li>
-            <li><a href="#pricing" class="hover:text-white transition-colors">Pricing</a></li>
-            <li><a href="#" class="hover:text-white transition-colors">Integrations</a></li>
-            <li><a href="#" class="hover:text-white transition-colors">API Documentation</a></li>
+          <h4 class="font-bold mb-4">Product</h4>
+          <ul class="space-y-2 text-slate-400">
+            <li><a href="#features" class="hover:text-white">Features</a></li>
+            <li><a href="#pricing" class="hover:text-white">Pricing</a></li>
+            <li><a href="#" class="hover:text-white">API Docs</a></li>
           </ul>
         </div>
         <div>
-          <h4 class="font-bold mb-4 text-lg">Company</h4>
-          <ul class="space-y-3 text-slate-400">
-            <li><a href="#" class="hover:text-white transition-colors">About Us</a></li>
-            <li><a href="#" class="hover:text-white transition-colors">Careers</a></li>
-            <li><a href="#" class="hover:text-white transition-colors">Blog</a></li>
-            <li><a href="#" class="hover:text-white transition-colors">Contact</a></li>
+          <h4 class="font-bold mb-4">Company</h4>
+          <ul class="space-y-2 text-slate-400">
+            <li><a href="#" class="hover:text-white">About</a></li>
+            <li><a href="#" class="hover:text-white">Blog</a></li>
+            <li><a href="#" class="hover:text-white">Contact</a></li>
           </ul>
         </div>
         <div>
-          <h4 class="font-bold mb-4 text-lg">Legal</h4>
-          <ul class="space-y-3 text-slate-400">
-            <li><a href="#" class="hover:text-white transition-colors">Privacy Policy</a></li>
-            <li><a href="#" class="hover:text-white transition-colors">Terms of Service</a></li>
-            <li><a href="#" class="hover:text-white transition-colors">Security</a></li>
-            <li><a href="#" class="hover:text-white transition-colors">GDPR</a></li>
+          <h4 class="font-bold mb-4">Legal</h4>
+          <ul class="space-y-2 text-slate-400">
+            <li><a href="#" class="hover:text-white">Privacy</a></li>
+            <li><a href="#" class="hover:text-white">Terms</a></li>
+            <li><a href="#" class="hover:text-white">Security</a></li>
           </ul>
         </div>
       </div>
-      <div class="border-t border-slate-800 pt-8 flex flex-col md:flex-row justify-between items-center gap-4">
-        <p class="text-slate-400">© 2024 SafetyFirst EHS by Umbra Global LLC. All rights reserved.</p>
-        <div class="flex gap-6">
-          <a href="#" class="text-slate-400 hover:text-white transition-colors">
-            <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24"><path d="M24 4.557c-.883.392-1.832.656-2.828.775 1.017-.609 1.798-1.574 2.165-2.724-.951.564-2.005.974-3.127 1.195-.897-.957-2.178-1.555-3.594-1.555-3.179 0-5.515 2.966-4.797 6.045-4.091-.205-7.719-2.165-10.148-5.144-1.29 2.213-.669 5.108 1.523 6.574-.806-.026-1.566-.247-2.229-.616-.054 2.281 1.581 4.415 3.949 4.89-.693.188-1.452.232-2.224.084.626 1.956 2.444 3.379 4.6 3.419-2.07 1.623-4.678 2.348-7.29 2.04 2.179 1.397 4.768 2.212 7.548 2.212 9.142 0 14.307-7.721 13.995-14.646.962-.695 1.797-1.562 2.457-2.549z"/></svg>
-          </a>
-          <a href="#" class="text-slate-400 hover:text-white transition-colors">
-            <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24"><path d="M19 0h-14c-2.761 0-5 2.239-5 5v14c0 2.761 2.239 5 5 5h14c2.762 0 5-2.239 5-5v-14c0-2.761-2.238-5-5-5zm-11 19h-3v-11h3v11zm-1.5-12.268c-.966 0-1.75-.79-1.75-1.764s.784-1.764 1.75-1.764 1.75.79 1.75 1.764-.783 1.764-1.75 1.764zm13.5 12.268h-3v-5.604c0-3.368-4-3.113-4 0v5.604h-3v-11h3v1.765c1.396-2.586 7-2.777 7 2.476v6.759z"/></svg>
-          </a>
-        </div>
+      <div class="border-t border-slate-800 pt-8 text-center text-slate-400">
+        <p>© 2024 SafetyFirst EHS by Umbra Global LLC. All rights reserved.</p>
       </div>
     </div>
   </footer>
