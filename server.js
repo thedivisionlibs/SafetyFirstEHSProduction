@@ -262,7 +262,7 @@ const userSchema = new mongoose.Schema({
   lastName: { type: String, required: true },
   role: { 
     type: String, 
-    enum: ['superadmin', 'admin', 'manager', 'supervisor', 'safety_officer', 'employee', 'user', 'readonly'],
+    enum: ['superadmin', 'admin', 'manager', 'supervisor', 'safety_officer', 'moderator', 'employee', 'user', 'readonly'],
     default: 'employee'
   },
   department: String,
@@ -297,114 +297,696 @@ const userSchema = new mongoose.Schema({
 
 userSchema.index({ organization: 1, email: 1 }, { unique: true });
 
-// Incident Schema
+// Incident Schema - Comprehensive
 const incidentSchema = new mongoose.Schema({
   organization: { type: mongoose.Schema.Types.ObjectId, ref: 'Organization', required: true },
   incidentNumber: { type: String, unique: true },
   title: { type: String, required: true },
   description: String,
+  
+  // Classification
   type: {
     type: String,
-    enum: ['injury', 'illness', 'near_miss', 'property_damage', 'environmental', 'security', 'vehicle', 'other'],
+    enum: ['injury', 'illness', 'near_miss', 'first_aid', 'property_damage', 'environmental', 'security', 'vehicle', 'fire', 'chemical_exposure', 'ergonomic', 'slip_trip_fall', 'struck_by', 'caught_in', 'electrical', 'other'],
     required: true
   },
+  subType: String, // Specific sub-category
   severity: {
     type: String,
-    enum: ['minor', 'moderate', 'serious', 'severe', 'catastrophic'],
+    enum: ['insignificant', 'minor', 'moderate', 'major', 'severe', 'catastrophic'],
     default: 'minor'
   },
+  potentialSeverity: { // What could have happened
+    type: String,
+    enum: ['insignificant', 'minor', 'moderate', 'major', 'severe', 'catastrophic']
+  },
+  probability: {
+    type: String,
+    enum: ['rare', 'unlikely', 'possible', 'likely', 'almost_certain']
+  },
+  riskScore: Number, // Calculated from severity x probability
   status: {
     type: String,
-    enum: ['draft', 'open', 'investigating', 'pending_review', 'closed', 'reopened'],
+    enum: ['draft', 'submitted', 'acknowledged', 'investigating', 'pending_review', 'pending_approval', 'approved', 'closed', 'reopened'],
     default: 'draft'
   },
+
+  // Date/Time Information
   dateOccurred: { type: Date, required: true },
   timeOccurred: String,
+  shift: { type: String, enum: ['day', 'evening', 'night', 'rotating', 'other'] },
+  hoursIntoShift: Number,
   dateReported: { type: Date, default: Date.now },
+  dateEmployerNotified: Date,
+  dateInvestigationStarted: Date,
+  dateInvestigationCompleted: Date,
+
+  // Location Details
   location: {
     site: String,
+    building: String,
+    floor: String,
     department: String,
+    area: String,
     specificLocation: String,
-    coordinates: { lat: Number, lng: Number }
+    coordinates: { lat: Number, lng: Number },
+    indoorOutdoor: { type: String, enum: ['indoor', 'outdoor', 'both'] }
   },
+
+  // Environmental Conditions
+  environmentalConditions: {
+    weather: { type: String, enum: ['clear', 'rain', 'snow', 'ice', 'fog', 'wind', 'extreme_heat', 'extreme_cold', 'na'] },
+    lighting: { type: String, enum: ['adequate', 'poor', 'dark', 'glare', 'na'] },
+    noise: { type: String, enum: ['normal', 'loud', 'very_loud', 'na'] },
+    temperature: String,
+    humidity: String,
+    ventilation: { type: String, enum: ['adequate', 'poor', 'none', 'na'] },
+    floorCondition: { type: String, enum: ['dry', 'wet', 'oily', 'dusty', 'uneven', 'cluttered', 'na'] },
+    housekeeping: { type: String, enum: ['good', 'fair', 'poor'] },
+    notes: String
+  },
+
+  // Involved Persons (Comprehensive)
   involvedPersons: [{
-    type: { type: String, enum: ['employee', 'contractor', 'visitor', 'other'] },
-    name: String,
+    personType: { type: String, enum: ['employee', 'contractor', 'visitor', 'vendor', 'customer', 'public', 'other'] },
+    // Basic Info
+    firstName: String,
+    lastName: String,
+    employeeId: String,
+    dateOfBirth: Date,
+    gender: { type: String, enum: ['male', 'female', 'other', 'prefer_not_to_say'] },
+    // Employment Info
+    department: String,
+    jobTitle: String,
+    supervisor: String,
+    hireDate: Date,
+    yearsExperience: Number,
+    employmentStatus: { type: String, enum: ['full_time', 'part_time', 'temporary', 'contractor'] },
+    regularJobDuties: String,
+    // Contact Info
+    phone: String,
+    email: String,
+    address: String,
+    emergencyContact: { name: String, phone: String, relationship: String },
+    
+    // Injury/Illness Details
+    wasInjured: { type: Boolean, default: false },
+    injuryDescription: String,
+    natureOfInjury: { 
+      type: String, 
+      enum: ['amputation', 'bruise', 'burn_chemical', 'burn_heat', 'burn_electrical', 'concussion', 'crushing', 'cut_laceration', 'dislocation', 'fracture', 'hearing_loss', 'hernia', 'internal_injury', 'poisoning', 'puncture', 'respiratory', 'skin_disorder', 'sprain_strain', 'vision_loss', 'other']
+    },
+    bodyPartsAffected: [{
+      bodyPart: { type: String, enum: ['head', 'face', 'eye_left', 'eye_right', 'ear_left', 'ear_right', 'neck', 'shoulder_left', 'shoulder_right', 'arm_upper_left', 'arm_upper_right', 'elbow_left', 'elbow_right', 'arm_lower_left', 'arm_lower_right', 'wrist_left', 'wrist_right', 'hand_left', 'hand_right', 'finger_left', 'finger_right', 'chest', 'abdomen', 'back_upper', 'back_lower', 'hip_left', 'hip_right', 'groin', 'leg_upper_left', 'leg_upper_right', 'knee_left', 'knee_right', 'leg_lower_left', 'leg_lower_right', 'ankle_left', 'ankle_right', 'foot_left', 'foot_right', 'toe_left', 'toe_right', 'multiple', 'internal', 'other'] },
+      side: { type: String, enum: ['left', 'right', 'both', 'na'] },
+      severity: { type: String, enum: ['minor', 'moderate', 'severe'] }
+    }],
+    objectSubstanceCausedHarm: String,
+    activityWhenInjured: String,
+    
+    // Medical Treatment
+    treatmentType: { 
+      type: String, 
+      enum: ['none', 'first_aid_onsite', 'first_aid_offsite', 'medical_treatment', 'emergency_room', 'hospitalized', 'surgery', 'fatality'] 
+    },
+    firstAidProvided: String,
+    medicalProvider: {
+      name: String,
+      address: String,
+      phone: String,
+      treatingPhysician: String
+    },
+    hospitalName: String,
+    hospitalAdmitDate: Date,
+    hospitalDischargeDate: Date,
+    diagnosisCodes: [String], // ICD-10 codes
+    treatmentNotes: String,
+    
+    // Work Status
+    returnToWork: {
+      status: { type: String, enum: ['working', 'off_work', 'restricted_duty', 'light_duty', 'terminated', 'retired', 'deceased'] },
+      restrictedDutyStart: Date,
+      restrictedDutyEnd: Date,
+      restrictions: [String],
+      offWorkStart: Date,
+      offWorkEnd: Date,
+      expectedReturnDate: Date,
+      actualReturnDate: Date,
+      fitnessForDutyDate: Date,
+      fitnessForDutyClearance: String,
+      permanentRestrictions: Boolean,
+      permanentRestrictionsDetails: String
+    },
+    daysAwayFromWork: Number,
+    daysRestrictedDuty: Number,
+    daysJobTransfer: Number,
+
+    // Training/PPE at time of incident
+    trainingCurrent: Boolean,
+    relevantTraining: [{ course: String, completedDate: Date }],
+    ppeRequired: [String],
+    ppeWorn: [String],
+    ppeCondition: String,
+    ppeFailure: Boolean,
+    ppeFailureDetails: String,
+
+    // Workers Comp
+    workersCompClaim: {
+      filed: Boolean,
+      claimNumber: String,
+      dateOfClaim: Date,
+      status: { type: String, enum: ['open', 'accepted', 'denied', 'closed', 'appealed'] },
+      insuranceCarrier: String,
+      adjusterName: String,
+      adjusterPhone: String,
+      adjusterEmail: String,
+      totalPaid: Number,
+      notes: String
+    }
+  }],
+
+  // Witnesses (Comprehensive)
+  witnesses: [{
+    firstName: String,
+    lastName: String,
+    personType: { type: String, enum: ['employee', 'contractor', 'visitor', 'vendor', 'public', 'other'] },
     employeeId: String,
     department: String,
     jobTitle: String,
-    injuryType: String,
-    bodyPartAffected: String,
-    treatmentProvided: String,
-    daysAwayFromWork: Number,
-    daysRestrictedDuty: Number,
-    returnToWorkDate: Date
-  }],
-  witnesses: [{
-    name: String,
-    contact: String,
+    phone: String,
+    email: String,
+    locationDuringIncident: String,
+    distanceFromIncident: String,
+    statementTaken: Boolean,
+    statementDate: Date,
+    statementTakenBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
     statement: String,
-    statementDate: Date
+    signedStatement: Boolean,
+    statementDocument: String, // filename
+    willingToTestify: Boolean,
+    notes: String
   }],
-  rootCause: {
-    immediate: [String],
-    underlying: [String],
-    rootCauses: [String],
-    contributingFactors: [String]
+
+  // Equipment/Machinery Involved
+  equipmentInvolved: [{
+    equipmentType: { type: String, enum: ['machine', 'vehicle', 'tool_power', 'tool_hand', 'ladder', 'scaffold', 'forklift', 'crane', 'conveyor', 'press', 'chemical', 'electrical', 'other'] },
+    name: String,
+    assetId: String,
+    manufacturer: String,
+    model: String,
+    serialNumber: String,
+    yearManufactured: Number,
+    lastInspectionDate: Date,
+    lastMaintenanceDate: Date,
+    operatingCondition: { type: String, enum: ['normal', 'malfunction', 'improper_use', 'modified', 'damaged', 'unknown'] },
+    safetyDevicesPresent: Boolean,
+    safetyDevicesWorking: Boolean,
+    safetyDevicesBypassed: Boolean,
+    lockoutTagoutRequired: Boolean,
+    lockoutTagoutFollowed: Boolean,
+    equipmentSecured: Boolean,
+    equipmentQuarantined: Boolean,
+    notes: String
+  }],
+
+  // Substances/Materials Involved
+  substancesInvolved: [{
+    substanceType: { type: String, enum: ['chemical', 'biological', 'radioactive', 'dust', 'fumes', 'gas', 'liquid', 'solid', 'other'] },
+    name: String,
+    casNumber: String,
+    sdsAvailable: Boolean,
+    quantity: String,
+    unit: String,
+    exposureRoute: { type: String, enum: ['inhalation', 'skin_contact', 'eye_contact', 'ingestion', 'injection', 'multiple'] },
+    exposureDuration: String,
+    protectiveMeasuresUsed: [String],
+    spillContained: Boolean,
+    notes: String
+  }],
+
+  // Drug/Alcohol Testing
+  drugAlcoholTesting: {
+    testingRequired: Boolean,
+    testingConducted: Boolean,
+    reasonNotTested: String,
+    testDate: Date,
+    testTime: String,
+    testType: { type: String, enum: ['drug', 'alcohol', 'both'] },
+    testMethod: { type: String, enum: ['urine', 'blood', 'breath', 'hair', 'oral_fluid'] },
+    testingFacility: String,
+    collectorName: String,
+    chainOfCustody: Boolean,
+    results: { type: String, enum: ['negative', 'positive', 'pending', 'inconclusive', 'refused'] },
+    substancesDetected: [String],
+    mroName: String, // Medical Review Officer
+    mroReviewDate: Date,
+    documentFilename: String
   },
+
+  // Root Cause Analysis (Comprehensive)
+  rootCauseAnalysis: {
+    method: { type: String, enum: ['5_whys', 'fishbone', 'fault_tree', 'taproot', 'apollo', 'other'] },
+    performedBy: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
+    performedDate: Date,
+    
+    // Immediate Causes
+    immediateCauses: [{
+      category: { type: String, enum: ['substandard_act', 'substandard_condition'] },
+      description: String,
+      details: String
+    }],
+    
+    // Basic/Underlying Causes
+    basicCauses: [{
+      category: { type: String, enum: ['personal_factors', 'job_factors'] },
+      subCategory: String,
+      description: String
+    }],
+    
+    // Root Causes
+    rootCauses: [{
+      category: { type: String, enum: ['management_system', 'training', 'procedures', 'equipment', 'communication', 'supervision', 'culture', 'resources', 'other'] },
+      description: String,
+      evidence: String
+    }],
+    
+    // Contributing Factors
+    contributingFactors: [{
+      factor: String,
+      category: { type: String, enum: ['human', 'equipment', 'environment', 'process', 'organizational'] },
+      significance: { type: String, enum: ['primary', 'secondary', 'minor'] }
+    }],
+    
+    // 5 Whys (if used)
+    fiveWhys: {
+      why1: { question: String, answer: String },
+      why2: { question: String, answer: String },
+      why3: { question: String, answer: String },
+      why4: { question: String, answer: String },
+      why5: { question: String, answer: String },
+      rootCauseIdentified: String
+    },
+    
+    summary: String,
+    preventionStrategy: String
+  },
+
+  // Investigation
   investigation: {
-    investigator: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    required: { type: Boolean, default: true },
+    leadInvestigator: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    team: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
     startDate: Date,
-    completedDate: Date,
+    targetCompletionDate: Date,
+    actualCompletionDate: Date,
+    status: { type: String, enum: ['not_started', 'in_progress', 'pending_review', 'completed'] },
+    methodology: String,
     findings: String,
-    recommendations: String
+    conclusions: String,
+    recommendations: String,
+    lessonsLearned: String,
+    communicationPlan: String,
+    timeline: [{
+      date: Date,
+      activity: String,
+      performedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+      notes: String
+    }]
   },
+
+  // Corrective Actions
   correctiveActions: [{ type: mongoose.Schema.Types.ObjectId, ref: 'ActionItem' }],
-  oshaRecordable: { type: Boolean, default: false },
-  oshaClassification: {
-    type: String,
-    enum: ['death', 'days_away', 'restricted_transfer', 'other_recordable', 'not_recordable']
+
+  // OSHA Recordability (Comprehensive)
+  oshaRecordability: {
+    isRecordable: { type: Boolean, default: false },
+    determinedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    determinedDate: Date,
+    classification: {
+      type: String,
+      enum: ['fatality', 'days_away_from_work', 'job_transfer_restriction', 'other_recordable', 'first_aid_only', 'not_recordable']
+    },
+    caseNumber: String, // OSHA 300 log case number
+    privacyCase: { type: Boolean, default: false }, // Privacy concern case
+    hearingLossSTS: Boolean, // Standard Threshold Shift
+    
+    // Key Dates for OSHA
+    dateOfInjury: Date,
+    dateEmployerNotified: Date,
+    dateBeganWork: Date,
+    dateOfDeath: Date,
+    
+    // Days Tracking
+    daysAwayFromWork: { count: Number, ongoing: Boolean },
+    daysJobTransferRestriction: { count: Number, ongoing: Boolean },
+    
+    // Classification Details
+    injuryType: { type: String, enum: ['injury', 'skin_disorder', 'respiratory_condition', 'poisoning', 'hearing_loss', 'other_illness'] },
+    
+    // OSHA 301 Information
+    form301: {
+      completed: Boolean,
+      completedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+      completedDate: Date,
+      whatWasEmployeeDoing: String,
+      howDidIncidentOccur: String,
+      whatObjectOrSubstance: String,
+      treatmentFacility: String,
+      wasEmployeeHospitalized: Boolean,
+      dateReturnedToWork: Date
+    },
+    
+    documents: [{
+      type: { type: String, enum: ['osha_300', 'osha_300a', 'osha_301', 'medical_record', 'witness_statement', 'investigation_report', 'photo', 'other'] },
+      filename: String,
+      originalName: String,
+      uploadedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+      uploadedAt: Date,
+      notes: String
+    }],
+    
+    annualLogYear: Number,
+    linkedTo300Log: { type: mongoose.Schema.Types.ObjectId, ref: 'OSHA300Log' }
   },
+
+  // Regulatory Reporting
   regulatoryReporting: {
+    oshaReportable: Boolean,
     oshaReported: Boolean,
+    oshaReportType: { type: String, enum: ['fatality', 'hospitalization', 'amputation', 'eye_loss', 'none'] },
+    oshaReportedWithin: String, // 8 hours for fatality, 24 hours for hospitalization/amputation/eye loss
+    oshaReportMethod: { type: String, enum: ['phone', 'online', 'in_person'] },
     oshaReportDate: Date,
+    oshaReportTime: String,
     oshaReportNumber: String,
+    oshaAreaOffice: String,
+    oshaContactPerson: String,
+    
+    epaReportable: Boolean,
     epaReported: Boolean,
     epaReportDate: Date,
-    otherAgencies: [{ agency: String, reportDate: Date, referenceNumber: String }]
+    epaReportNumber: String,
+    epaReportDetails: String,
+    
+    dotReportable: Boolean,
+    dotReported: Boolean,
+    dotReportDate: Date,
+    dotReportNumber: String,
+    
+    stateAgencyReportable: Boolean,
+    stateAgencyReported: Boolean,
+    stateAgency: String,
+    stateReportDate: Date,
+    stateReportNumber: String,
+    
+    otherAgencies: [{
+      agencyName: String,
+      reportRequired: Boolean,
+      reported: Boolean,
+      reportDate: Date,
+      reportMethod: String,
+      referenceNumber: String,
+      contactPerson: String,
+      notes: String
+    }],
+    
+    regulatoryDocuments: [{
+      documentType: String,
+      filename: String,
+      uploadedAt: Date
+    }]
   },
+
+  // Notifications & Communications
+  notifications: {
+    supervisorNotified: Boolean,
+    supervisorNotifiedTime: Date,
+    supervisorName: String,
+    managementNotified: Boolean,
+    managementNotifiedTime: Date,
+    safetyNotified: Boolean,
+    safetyNotifiedTime: Date,
+    hrNotified: Boolean,
+    hrNotifiedTime: Date,
+    executiveNotified: Boolean,
+    executiveNotifiedTime: Date,
+    legalNotified: Boolean,
+    legalNotifiedTime: Date,
+    insuranceNotified: Boolean,
+    insuranceNotifiedTime: Date,
+    unionNotified: Boolean,
+    unionNotifiedTime: Date,
+    communicationLog: [{
+      date: Date,
+      type: { type: String, enum: ['email', 'phone', 'meeting', 'memo', 'other'] },
+      recipient: String,
+      subject: String,
+      summary: String,
+      sentBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }
+    }]
+  },
+
+  // Attachments & Documentation
   attachments: [{
+    category: { type: String, enum: ['photo', 'video', 'document', 'medical_record', 'witness_statement', 'investigation_report', 'training_record', 'procedure', 'sds', 'diagram', 'other'] },
     filename: String,
     originalName: String,
     mimeType: String,
     size: Number,
+    description: String,
     uploadedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
-    uploadedAt: { type: Date, default: Date.now }
+    uploadedAt: { type: Date, default: Date.now },
+    isConfidential: Boolean
   }],
+
+  // Photos with annotations
   photos: [{
     filename: String,
     caption: String,
+    location: String,
+    takenBy: String,
+    takenAt: Date,
+    annotations: String,
     uploadedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
     uploadedAt: { type: Date, default: Date.now }
   }],
+
+  // Cost Tracking (Comprehensive)
   costs: {
-    medical: Number,
-    property: Number,
-    legal: Number,
-    productivity: Number,
-    other: Number,
-    total: Number
+    // Direct Costs
+    direct: {
+      medical: { amount: Number, notes: String },
+      medicalOngoing: { amount: Number, notes: String },
+      workersComp: { amount: Number, notes: String },
+      wageReplacement: { amount: Number, notes: String },
+      propertyDamage: { amount: Number, notes: String },
+      equipmentDamage: { amount: Number, notes: String },
+      equipmentReplacement: { amount: Number, notes: String },
+      cleanup: { amount: Number, notes: String },
+      fines: { amount: Number, notes: String },
+      legal: { amount: Number, notes: String }
+    },
+    // Indirect Costs
+    indirect: {
+      lostProductivity: { amount: Number, hours: Number, notes: String },
+      overtime: { amount: Number, hours: Number, notes: String },
+      temporaryWorkers: { amount: Number, notes: String },
+      trainingReplacement: { amount: Number, notes: String },
+      investigationTime: { amount: Number, hours: Number, notes: String },
+      administrativeTime: { amount: Number, hours: Number, notes: String },
+      supervisorTime: { amount: Number, hours: Number, notes: String },
+      reputationalDamage: { amount: Number, notes: String },
+      customerImpact: { amount: Number, notes: String },
+      other: { amount: Number, description: String, notes: String }
+    },
+    totalDirect: Number,
+    totalIndirect: Number,
+    grandTotal: Number,
+    estimatedVsActual: { type: String, enum: ['estimated', 'actual', 'partial'] },
+    lastUpdated: Date,
+    updatedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }
   },
+
+  // Workflow & Approvals
+  workflow: {
+    currentStep: String,
+    history: [{
+      step: String,
+      action: String,
+      performedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+      performedAt: Date,
+      comments: String
+    }],
+    approvals: [{
+      level: String,
+      approver: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+      status: { type: String, enum: ['pending', 'approved', 'rejected', 'returned'] },
+      date: Date,
+      comments: String
+    }]
+  },
+
+  // Linked Records
+  linkedRecords: {
+    previousIncidents: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Incident' }],
+    relatedIncidents: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Incident' }],
+    inspections: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Inspection' }],
+    riskAssessments: [{ type: mongoose.Schema.Types.ObjectId, ref: 'RiskAssessment' }],
+    jsas: [{ type: mongoose.Schema.Types.ObjectId, ref: 'JSA' }],
+    permits: [{ type: mongoose.Schema.Types.ObjectId, ref: 'PermitToWork' }],
+    trainingRecords: [{ type: mongoose.Schema.Types.ObjectId, ref: 'TrainingRecord' }]
+  },
+
+  // Custom Form Data
+  customFormId: { type: mongoose.Schema.Types.ObjectId, ref: 'IncidentForm' },
+  customFormData: mongoose.Schema.Types.Mixed,
+
+  // Metadata
   reportedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   assignedTo: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   reviewedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   reviewedAt: Date,
+  approvedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  approvedAt: Date,
   closedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   closedAt: Date,
-  customFields: mongoose.Schema.Types.Mixed,
+  closureNotes: String,
+  
+  tags: [String],
+  internalNotes: String,
+  
   createdAt: { type: Date, default: Date.now },
   updatedAt: { type: Date, default: Date.now }
 });
+
+// Custom Incident Form Schema - For organizations to create their own forms
+const incidentFormSchema = new mongoose.Schema({
+  organization: { type: mongoose.Schema.Types.ObjectId, ref: 'Organization', required: true },
+  name: { type: String, required: true },
+  description: String,
+  incidentTypes: [{ type: String }], // Which incident types this form applies to
+  version: { type: Number, default: 1 },
+  status: { type: String, enum: ['draft', 'active', 'inactive', 'archived'], default: 'draft' },
+  isDefault: { type: Boolean, default: false },
+  
+  // Form Sections
+  sections: [{
+    name: String,
+    description: String,
+    order: Number,
+    collapsible: Boolean,
+    defaultCollapsed: Boolean,
+    conditionalDisplay: {
+      enabled: Boolean,
+      field: String,
+      operator: { type: String, enum: ['equals', 'not_equals', 'contains', 'not_contains', 'greater_than', 'less_than', 'is_empty', 'is_not_empty'] },
+      value: mongoose.Schema.Types.Mixed
+    },
+    
+    fields: [{
+      fieldId: String, // Unique identifier
+      label: { type: String, required: true },
+      type: { 
+        type: String, 
+        enum: ['text', 'textarea', 'number', 'decimal', 'email', 'phone', 'date', 'time', 'datetime', 'select', 'multiselect', 'radio', 'checkbox', 'checkboxgroup', 'file', 'image', 'signature', 'location', 'user_lookup', 'employee_lookup', 'equipment_lookup', 'rating', 'scale', 'rich_text', 'header', 'divider', 'instructions'],
+        required: true
+      },
+      placeholder: String,
+      helpText: String,
+      defaultValue: mongoose.Schema.Types.Mixed,
+      required: Boolean,
+      readOnly: Boolean,
+      hidden: Boolean,
+      order: Number,
+      width: { type: String, enum: ['full', 'half', 'third', 'quarter'], default: 'full' },
+      
+      // Validation
+      validation: {
+        minLength: Number,
+        maxLength: Number,
+        min: Number,
+        max: Number,
+        pattern: String,
+        patternMessage: String,
+        customValidation: String // JavaScript expression
+      },
+      
+      // Options for select/radio/checkbox fields
+      options: [{
+        value: String,
+        label: String,
+        order: Number,
+        isDefault: Boolean
+      }],
+      allowOther: Boolean, // Allow "Other" option with text input
+      
+      // Conditional Display
+      conditionalDisplay: {
+        enabled: Boolean,
+        rules: [{
+          field: String,
+          operator: { type: String, enum: ['equals', 'not_equals', 'contains', 'not_contains', 'greater_than', 'less_than', 'is_empty', 'is_not_empty', 'in', 'not_in'] },
+          value: mongoose.Schema.Types.Mixed,
+          logic: { type: String, enum: ['and', 'or'], default: 'and' }
+        }]
+      },
+      
+      // File upload settings
+      fileSettings: {
+        allowedTypes: [String],
+        maxSize: Number, // in bytes
+        maxFiles: Number,
+        requireCaption: Boolean
+      },
+      
+      // Rating/Scale settings
+      scaleSettings: {
+        min: Number,
+        max: Number,
+        step: Number,
+        minLabel: String,
+        maxLabel: String,
+        showLabels: Boolean
+      },
+      
+      // Lookup settings
+      lookupSettings: {
+        entityType: String,
+        displayField: String,
+        filterBy: mongoose.Schema.Types.Mixed
+      },
+      
+      // Data mapping to core incident fields
+      mapsToField: String // Maps to a core incident schema field
+    }]
+  }],
+  
+  // Form Settings
+  settings: {
+    requireApproval: Boolean,
+    approvers: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
+    notifyOnSubmission: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
+    allowDraft: { type: Boolean, default: true },
+    allowEdit: { type: Boolean, default: true },
+    editTimeLimit: Number, // hours after submission
+    requireSignature: Boolean,
+    requireWitness: Boolean,
+    autoAssign: {
+      enabled: Boolean,
+      assignTo: { type: String, enum: ['supervisor', 'safety_manager', 'specific_user', 'round_robin'] },
+      userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }
+    }
+  },
+  
+  createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  createdAt: { type: Date, default: Date.now },
+  updatedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  updatedAt: { type: Date, default: Date.now },
+  publishedAt: Date,
+  publishedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }
+});
+
+const IncidentForm = mongoose.model('IncidentForm', incidentFormSchema);
 
 // Action Item Schema
 const actionItemSchema = new mongoose.Schema({
@@ -697,75 +1279,302 @@ const documentSchema = new mongoose.Schema({
   updatedAt: { type: Date, default: Date.now }
 });
 
-// OSHA 300 Log Schema
+// OSHA 300 Log Schema - Comprehensive
 const osha300LogSchema = new mongoose.Schema({
   organization: { type: mongoose.Schema.Types.ObjectId, ref: 'Organization', required: true },
   year: { type: Number, required: true },
+  
+  // Establishment Information (Form 300A)
   establishment: {
     name: String,
-    address: String,
+    streetAddress: String,
     city: String,
     state: String,
     zip: String,
     industry: String,
-    naicsCode: String
+    naicsCode: String,
+    sicCode: String,
+    employerRepresentative: String,
+    employerTitle: String,
+    employerPhone: String
   },
+  
+  // OSHA 300 Log Entries
   entries: [{
-    caseNumber: String,
-    employeeName: String,
-    jobTitle: String,
-    dateOfInjury: Date,
+    // Case Information
+    caseNumber: { type: String, required: true },
+    status: { type: String, enum: ['active', 'closed', 'updated'], default: 'active' },
+    privacyCase: { type: Boolean, default: false },
+    linkedIncident: { type: mongoose.Schema.Types.ObjectId, ref: 'Incident' },
+    
+    // Employee Information
+    employee: {
+      name: String,
+      privacyName: String, // "Privacy Case" if privacyCase is true
+      jobTitle: String,
+      department: String,
+      employeeId: String
+    },
+    
+    // Date Information
+    dates: {
+      dateOfInjuryIllness: Date,
+      dateEmployerNotified: Date,
+      dateBeganWork: Date,
+      dateOfDeath: Date,
+      dateEnteredLog: { type: Date, default: Date.now },
+      dateLastUpdated: Date
+    },
+    
+    // Location
     whereOccurred: String,
-    describeInjury: String,
-    classifyCase: {
-      death: Boolean,
-      daysAwayFromWork: Boolean,
-      jobTransferOrRestriction: Boolean,
-      otherRecordableCase: Boolean
+    
+    // Description
+    describeInjuryIllness: String,
+    whatObjectSubstance: String,
+    
+    // Case Classification
+    classification: {
+      death: { type: Boolean, default: false },
+      daysAwayFromWork: { type: Boolean, default: false },
+      jobTransferOrRestriction: { type: Boolean, default: false },
+      otherRecordableCase: { type: Boolean, default: false }
     },
-    daysAwayFromWork: Number,
-    daysJobTransferRestriction: Number,
-    injuryType: {
-      injury: Boolean,
-      skinDisorder: Boolean,
-      respiratoryCondition: Boolean,
-      poisoning: Boolean,
-      hearingLoss: Boolean,
-      allOtherIllnesses: Boolean
+    
+    // Days Away/Restricted
+    daysCount: {
+      daysAwayFromWork: { type: Number, default: 0 },
+      daysJobTransferRestriction: { type: Number, default: 0 },
+      ongoing: Boolean,
+      estimatedReturnDate: Date
     },
-    incident: { type: mongoose.Schema.Types.ObjectId, ref: 'Incident' }
+    
+    // Injury or Illness Type (check one)
+    injuryIllnessType: {
+      injury: { type: Boolean, default: false },
+      skinDisorder: { type: Boolean, default: false },
+      respiratoryCondition: { type: Boolean, default: false },
+      poisoning: { type: Boolean, default: false },
+      hearingLoss: { type: Boolean, default: false },
+      allOtherIllnesses: { type: Boolean, default: false }
+    },
+    
+    // Standard Threshold Shift (Hearing Loss)
+    hearingLossSTS: {
+      identified: Boolean,
+      dateIdentified: Date,
+      baselineDate: Date,
+      affectedEar: { type: String, enum: ['left', 'right', 'both'] },
+      averageShiftDB: Number,
+      ageAdjusted: Boolean,
+      revisedBaseline: Boolean
+    },
+    
+    // OSHA Form 301 - Detailed Information
+    form301: {
+      completed: { type: Boolean, default: false },
+      completedDate: Date,
+      completedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+      
+      // About the Employee
+      employeeInfo: {
+        fullName: String,
+        address: {
+          street: String,
+          city: String,
+          state: String,
+          zip: String
+        },
+        dateOfBirth: Date,
+        dateHired: Date,
+        gender: { type: String, enum: ['male', 'female'] },
+        timeBeganWork: String
+      },
+      
+      // About the Case
+      caseInfo: {
+        dateOfInjury: Date,
+        timeOfInjury: String,
+        timeEmployeeBeganWork: String,
+        whatWasEmployeeDoing: String,
+        howDidIncidentOccur: String,
+        whatObjectOrSubstance: String,
+        whatWasInjuryIllness: String,
+        whatBodyPartWasAffected: String
+      },
+      
+      // About the Treating Physician
+      physicianInfo: {
+        nameOfPhysician: String,
+        facilityName: String,
+        facilityAddress: {
+          street: String,
+          city: String,
+          state: String,
+          zip: String
+        },
+        facilityPhone: String,
+        wasEmployeeHospitalized: Boolean,
+        hospitalName: String,
+        emergencyRoomOnly: Boolean
+      },
+      
+      // Preparer Information
+      preparer: {
+        name: String,
+        title: String,
+        phone: String,
+        date: Date
+      }
+    },
+    
+    // Documents
+    documents: [{
+      documentType: { 
+        type: String, 
+        enum: ['form_300', 'form_301', 'medical_record', 'first_report_injury', 'witness_statement', 'investigation_report', 'return_to_work', 'restriction_form', 'death_certificate', 'osha_correspondence', 'other'] 
+      },
+      filename: String,
+      originalName: String,
+      mimeType: String,
+      size: Number,
+      description: String,
+      uploadedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+      uploadedAt: { type: Date, default: Date.now },
+      confidential: { type: Boolean, default: false }
+    }],
+    
+    // Return to Work Tracking
+    returnToWork: {
+      status: { type: String, enum: ['off_work', 'restricted_duty', 'full_duty', 'terminated', 'deceased'] },
+      restrictedDutyStartDate: Date,
+      restrictedDutyEndDate: Date,
+      fullDutyReturnDate: Date,
+      restrictions: [String],
+      accommodations: [String],
+      fitnessForDutyCleared: Boolean,
+      fitnessForDutyClearanceDate: Date,
+      clearingPhysician: String
+    },
+    
+    // Updates/History
+    updateHistory: [{
+      date: Date,
+      updatedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+      fieldChanged: String,
+      previousValue: mongoose.Schema.Types.Mixed,
+      newValue: mongoose.Schema.Types.Mixed,
+      reason: String
+    }],
+    
+    // Notes
+    notes: String,
+    internalNotes: String,
+    
+    createdAt: { type: Date, default: Date.now },
+    createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }
   }],
+  
+  // Annual Summary (Form 300A)
   summary: {
-    totalDeaths: Number,
-    totalDaysAway: Number,
-    totalDaysTransferRestriction: Number,
-    totalOtherRecordable: Number,
-    totalInjuries: Number,
-    totalSkinDisorders: Number,
-    totalRespiratoryConditions: Number,
-    totalPoisonings: Number,
-    totalHearingLoss: Number,
-    totalOtherIllnesses: Number,
-    totalDaysAwayFromWork: Number,
-    totalDaysJobTransferRestriction: Number
+    // Total Counts
+    totalDeaths: { type: Number, default: 0 },
+    totalDaysAwayFromWork: { type: Number, default: 0 },
+    totalDaysTransferRestriction: { type: Number, default: 0 },
+    totalOtherRecordable: { type: Number, default: 0 },
+    
+    // Injury/Illness Types
+    totalInjuries: { type: Number, default: 0 },
+    totalSkinDisorders: { type: Number, default: 0 },
+    totalRespiratoryConditions: { type: Number, default: 0 },
+    totalPoisonings: { type: Number, default: 0 },
+    totalHearingLoss: { type: Number, default: 0 },
+    totalOtherIllnesses: { type: Number, default: 0 },
+    
+    // Total Days
+    totalDaysAwayFromWorkCount: { type: Number, default: 0 },
+    totalDaysJobTransferRestriction: { type: Number, default: 0 },
+    
+    // Calculated at year end
+    calculatedAt: Date,
+    calculatedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }
   },
-  annualAverage: {
-    employees: Number,
-    hoursWorked: Number
+  
+  // Employment Information
+  employment: {
+    annualAverageEmployees: Number,
+    totalHoursWorked: Number,
+    
+    // Quarterly data for more accurate calculations
+    quarterly: [{
+      quarter: Number,
+      averageEmployees: Number,
+      hoursWorked: Number
+    }]
   },
+  
+  // Injury/Illness Rates (Calculated)
+  rates: {
+    trir: Number, // Total Recordable Incident Rate
+    dart: Number, // Days Away, Restricted, or Transferred Rate
+    ltir: Number, // Lost Time Incident Rate
+    severity: Number, // Severity Rate
+    frequency: Number, // Frequency Rate
+    calculatedAt: Date
+  },
+  
+  // Certification (Form 300A)
   certification: {
-    certifiedBy: String,
-    title: String,
-    phone: String,
-    date: Date,
-    signature: String
+    certified: { type: Boolean, default: false },
+    certifiedBy: {
+      name: String,
+      title: String,
+      phone: String,
+      email: String
+    },
+    certificationDate: Date,
+    signatureFilename: String,
+    
+    // Posting Information
+    postedStartDate: Date,
+    postedEndDate: Date,
+    postedLocations: [String],
+    
+    // Company Executive
+    companyExecutive: {
+      name: String,
+      title: String
+    }
   },
+  
+  // Status
   status: {
     type: String,
-    enum: ['draft', 'finalized', 'submitted'],
+    enum: ['draft', 'in_progress', 'ready_for_certification', 'certified', 'posted', 'archived'],
     default: 'draft'
   },
+  
+  // Documents for the entire log
+  logDocuments: [{
+    documentType: { type: String, enum: ['form_300', 'form_300a', 'supporting_document', 'audit_report', 'other'] },
+    filename: String,
+    originalName: String,
+    uploadedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    uploadedAt: Date,
+    description: String
+  }],
+  
+  // Audit Trail
+  auditTrail: [{
+    action: String,
+    performedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    performedAt: Date,
+    details: String
+  }],
+  
+  createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   createdAt: { type: Date, default: Date.now },
+  updatedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   updatedAt: { type: Date, default: Date.now }
 });
 
@@ -1722,6 +2531,310 @@ const CAPA = mongoose.model('CAPA', capaSchema);
 const Meeting = mongoose.model('Meeting', meetingSchema);
 
 // =============================================================================
+// PLATFORM ADMINISTRATION SCHEMAS
+// =============================================================================
+
+// Platform Announcement Schema
+const platformAnnouncementSchema = new mongoose.Schema({
+  title: { type: String, required: true },
+  content: { type: String, required: true },
+  type: { 
+    type: String, 
+    enum: ['info', 'warning', 'critical', 'maintenance', 'feature', 'promotion'],
+    default: 'info'
+  },
+  priority: { type: String, enum: ['low', 'medium', 'high', 'urgent'], default: 'medium' },
+  targetAudience: {
+    type: { type: String, enum: ['all', 'tier', 'specific_orgs'], default: 'all' },
+    tiers: [String],
+    organizations: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Organization' }]
+  },
+  displayLocation: [{ type: String, enum: ['dashboard', 'login', 'banner', 'modal'] }],
+  startDate: { type: Date, default: Date.now },
+  endDate: Date,
+  isActive: { type: Boolean, default: true },
+  dismissible: { type: Boolean, default: true },
+  requireAcknowledgment: { type: Boolean, default: false },
+  acknowledgments: [{
+    organization: { type: mongoose.Schema.Types.ObjectId, ref: 'Organization' },
+    user: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    acknowledgedAt: Date
+  }],
+  createdBy: String,
+  createdAt: { type: Date, default: Date.now },
+  updatedAt: { type: Date, default: Date.now }
+});
+
+// Support Ticket Schema
+const supportTicketSchema = new mongoose.Schema({
+  ticketNumber: { type: String, unique: true },
+  organization: { type: mongoose.Schema.Types.ObjectId, ref: 'Organization' },
+  submittedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  submitterEmail: String,
+  submitterName: String,
+  
+  category: { 
+    type: String, 
+    enum: ['bug', 'feature_request', 'question', 'billing', 'account', 'data', 'integration', 'training', 'other'],
+    required: true
+  },
+  subcategory: String,
+  priority: { type: String, enum: ['low', 'medium', 'high', 'critical'], default: 'medium' },
+  status: { 
+    type: String, 
+    enum: ['new', 'open', 'in_progress', 'waiting_customer', 'waiting_internal', 'resolved', 'closed'],
+    default: 'new'
+  },
+  
+  subject: { type: String, required: true },
+  description: { type: String, required: true },
+  
+  // Affected area
+  affectedModule: String,
+  affectedUrl: String,
+  browserInfo: String,
+  
+  // Attachments
+  attachments: [{
+    filename: String,
+    originalName: String,
+    mimeType: String,
+    size: Number,
+    uploadedAt: Date
+  }],
+  
+  // Assignment
+  assignedTo: String, // Platform admin name/email
+  escalatedTo: String,
+  escalatedAt: Date,
+  
+  // Communication
+  messages: [{
+    sender: { type: String, enum: ['customer', 'support'] },
+    senderName: String,
+    message: String,
+    attachments: [{ filename: String, originalName: String }],
+    sentAt: { type: Date, default: Date.now },
+    internal: { type: Boolean, default: false }
+  }],
+  
+  // Resolution
+  resolution: String,
+  resolutionCategory: String,
+  resolvedAt: Date,
+  resolvedBy: String,
+  
+  // Satisfaction
+  satisfactionRating: { type: Number, min: 1, max: 5 },
+  satisfactionFeedback: String,
+  
+  // SLA
+  slaDeadline: Date,
+  slaBreached: { type: Boolean, default: false },
+  
+  // Timestamps
+  firstResponseAt: Date,
+  createdAt: { type: Date, default: Date.now },
+  updatedAt: { type: Date, default: Date.now },
+  closedAt: Date
+});
+
+// Feature Flag Schema
+const featureFlagSchema = new mongoose.Schema({
+  name: { type: String, required: true, unique: true },
+  key: { type: String, required: true, unique: true },
+  description: String,
+  
+  // Status
+  enabled: { type: Boolean, default: false },
+  
+  // Targeting
+  targetType: { type: String, enum: ['all', 'percentage', 'tiers', 'organizations', 'users'], default: 'all' },
+  percentage: { type: Number, min: 0, max: 100 },
+  targetTiers: [String],
+  targetOrganizations: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Organization' }],
+  targetUsers: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
+  
+  // Schedule
+  enabledFrom: Date,
+  enabledUntil: Date,
+  
+  // Metadata
+  category: String,
+  tags: [String],
+  
+  createdBy: String,
+  createdAt: { type: Date, default: Date.now },
+  updatedAt: { type: Date, default: Date.now }
+});
+
+// Platform Metrics Schema (Daily aggregation)
+const platformMetricsSchema = new mongoose.Schema({
+  date: { type: Date, required: true },
+  
+  // User Metrics
+  users: {
+    total: Number,
+    active: Number, // Logged in within last 30 days
+    newToday: Number,
+    newThisWeek: Number,
+    newThisMonth: Number
+  },
+  
+  // Organization Metrics
+  organizations: {
+    total: Number,
+    active: Number,
+    newToday: Number,
+    byTier: {
+      starter: Number,
+      professional: Number,
+      enterprise: Number
+    },
+    byStatus: {
+      trial: Number,
+      active: Number,
+      cancelled: Number,
+      expired: Number
+    }
+  },
+  
+  // Revenue Metrics (MRR)
+  revenue: {
+    mrr: Number,
+    arr: Number,
+    newMrr: Number,
+    churnedMrr: Number,
+    expansionMrr: Number,
+    netNewMrr: Number
+  },
+  
+  // Usage Metrics
+  usage: {
+    apiCalls: Number,
+    incidentsCreated: Number,
+    inspectionsCompleted: Number,
+    trainingCompleted: Number,
+    documentsUploaded: Number,
+    reportsGenerated: Number,
+    storageUsedMB: Number
+  },
+  
+  // Engagement Metrics
+  engagement: {
+    dailyActiveUsers: Number,
+    weeklyActiveUsers: Number,
+    monthlyActiveUsers: Number,
+    averageSessionDuration: Number,
+    pageViews: Number
+  },
+  
+  createdAt: { type: Date, default: Date.now }
+});
+
+// Revenue Transaction Schema
+const revenueTransactionSchema = new mongoose.Schema({
+  organization: { type: mongoose.Schema.Types.ObjectId, ref: 'Organization', required: true },
+  
+  type: { 
+    type: String, 
+    enum: ['subscription', 'upgrade', 'downgrade', 'addon', 'refund', 'credit', 'chargeback'],
+    required: true 
+  },
+  
+  // Subscription details
+  previousTier: String,
+  newTier: String,
+  
+  // Amount
+  amount: { type: Number, required: true },
+  currency: { type: String, default: 'USD' },
+  
+  // Billing
+  billingPeriod: { start: Date, end: Date },
+  invoiceNumber: String,
+  
+  // Payment
+  paymentMethod: String,
+  paymentStatus: { type: String, enum: ['pending', 'completed', 'failed', 'refunded'], default: 'pending' },
+  paymentDate: Date,
+  transactionId: String,
+  
+  // Notes
+  description: String,
+  notes: String,
+  
+  createdAt: { type: Date, default: Date.now }
+});
+
+// API Usage Log Schema
+const apiUsageLogSchema = new mongoose.Schema({
+  organization: { type: mongoose.Schema.Types.ObjectId, ref: 'Organization' },
+  user: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  
+  endpoint: String,
+  method: String,
+  statusCode: Number,
+  responseTime: Number, // milliseconds
+  
+  requestSize: Number,
+  responseSize: Number,
+  
+  ipAddress: String,
+  userAgent: String,
+  
+  // Rate limiting
+  rateLimitRemaining: Number,
+  rateLimitReset: Date,
+  
+  timestamp: { type: Date, default: Date.now }
+});
+
+// System Health Log Schema
+const systemHealthSchema = new mongoose.Schema({
+  timestamp: { type: Date, default: Date.now },
+  
+  // Server metrics
+  server: {
+    cpuUsage: Number,
+    memoryUsage: Number,
+    diskUsage: Number,
+    uptime: Number
+  },
+  
+  // Database metrics
+  database: {
+    connections: Number,
+    queryTime: Number,
+    operationsPerSecond: Number
+  },
+  
+  // Application metrics
+  application: {
+    activeConnections: Number,
+    requestsPerMinute: Number,
+    averageResponseTime: Number,
+    errorRate: Number
+  },
+  
+  // Status
+  status: { type: String, enum: ['healthy', 'degraded', 'down'], default: 'healthy' },
+  alerts: [{
+    type: String,
+    message: String,
+    severity: String
+  }]
+});
+
+const PlatformAnnouncement = mongoose.model('PlatformAnnouncement', platformAnnouncementSchema);
+const SupportTicket = mongoose.model('SupportTicket', supportTicketSchema);
+const FeatureFlag = mongoose.model('FeatureFlag', featureFlagSchema);
+const PlatformMetrics = mongoose.model('PlatformMetrics', platformMetricsSchema);
+const RevenueTransaction = mongoose.model('RevenueTransaction', revenueTransactionSchema);
+const ApiUsageLog = mongoose.model('ApiUsageLog', apiUsageLogSchema);
+const SystemHealth = mongoose.model('SystemHealth', systemHealthSchema);
+
+// =============================================================================
 // UTILITY FUNCTIONS
 // =============================================================================
 
@@ -2356,86 +3469,341 @@ const authenticateSuperAdmin = async (req, res, next) => {
   }
 };
 
-// Get all organizations (Super Admin)
+// ===== DASHBOARD & STATISTICS =====
+
+// Get comprehensive dashboard stats
+app.get('/api/superadmin/dashboard', authenticateSuperAdmin, async (req, res) => {
+  try {
+    const now = new Date();
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const startOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const endOfLastMonth = new Date(now.getFullYear(), now.getMonth(), 0);
+    const thirtyDaysAgo = new Date(now - 30 * 24 * 60 * 60 * 1000);
+    const sevenDaysAgo = new Date(now - 7 * 24 * 60 * 60 * 1000);
+    const yesterday = new Date(now - 24 * 60 * 60 * 1000);
+
+    // Organization metrics
+    const [totalOrgs, activeOrgs, newOrgsMonth, newOrgsWeek, trialOrgs] = await Promise.all([
+      Organization.countDocuments(),
+      Organization.countDocuments({ isActive: true }),
+      Organization.countDocuments({ createdAt: { $gte: startOfMonth } }),
+      Organization.countDocuments({ createdAt: { $gte: sevenDaysAgo } }),
+      Organization.countDocuments({ 'subscription.status': 'trial' })
+    ]);
+
+    // User metrics
+    const [totalUsers, activeUsers, newUsersMonth] = await Promise.all([
+      User.countDocuments(),
+      User.countDocuments({ lastLogin: { $gte: thirtyDaysAgo } }),
+      User.countDocuments({ createdAt: { $gte: startOfMonth } })
+    ]);
+
+    // Tier breakdown
+    const [starterOrgs, professionalOrgs, enterpriseOrgs] = await Promise.all([
+      Organization.countDocuments({ 'subscription.tier': 'starter' }),
+      Organization.countDocuments({ 'subscription.tier': 'professional' }),
+      Organization.countDocuments({ 'subscription.tier': 'enterprise' })
+    ]);
+
+    // Revenue calculations
+    const currentMRR = (starterOrgs * 199) + (professionalOrgs * 499) + (enterpriseOrgs * 1299);
+    const currentARR = currentMRR * 12;
+
+    // Activity metrics
+    const [incidentsMonth, inspectionsMonth, trainingsMonth] = await Promise.all([
+      Incident.countDocuments({ createdAt: { $gte: startOfMonth } }),
+      Inspection.countDocuments({ createdAt: { $gte: startOfMonth } }),
+      TrainingRecord.countDocuments({ createdAt: { $gte: startOfMonth } })
+    ]);
+
+    // Growth trends
+    const lastMonthOrgs = await Organization.countDocuments({ 
+      createdAt: { $gte: startOfLastMonth, $lte: endOfLastMonth } 
+    });
+    const orgGrowthRate = lastMonthOrgs > 0 ? ((newOrgsMonth - lastMonthOrgs) / lastMonthOrgs * 100).toFixed(1) : 100;
+
+    // Top organizations by activity
+    const topOrgs = await Incident.aggregate([
+      { $match: { createdAt: { $gte: startOfMonth } } },
+      { $group: { _id: '$organization', count: { $sum: 1 } } },
+      { $sort: { count: -1 } },
+      { $limit: 5 },
+      { $lookup: { from: 'organizations', localField: '_id', foreignField: '_id', as: 'org' } },
+      { $unwind: '$org' },
+      { $project: { name: '$org.name', tier: '$org.subscription.tier', activityCount: '$count' } }
+    ]);
+
+    // Recent signups
+    const recentSignups = await Organization.find()
+      .sort({ createdAt: -1 })
+      .limit(10)
+      .select('name industry subscription.tier createdAt');
+
+    res.json({
+      overview: {
+        totalOrgs,
+        activeOrgs,
+        totalUsers,
+        activeUsers,
+        trialOrgs,
+        currentMRR,
+        currentARR
+      },
+      growth: {
+        newOrgsMonth,
+        newOrgsWeek,
+        newUsersMonth,
+        orgGrowthRate: parseFloat(orgGrowthRate)
+      },
+      tiers: {
+        starter: starterOrgs,
+        professional: professionalOrgs,
+        enterprise: enterpriseOrgs
+      },
+      activity: {
+        incidentsMonth,
+        inspectionsMonth,
+        trainingsMonth
+      },
+      topOrgs,
+      recentSignups
+    });
+  } catch (error) {
+    console.error('Dashboard error:', error);
+    res.status(500).json({ error: 'Failed to load dashboard' });
+  }
+});
+
+// Get detailed statistics
+app.get('/api/superadmin/stats', authenticateSuperAdmin, async (req, res) => {
+  try {
+    const { period = '30d' } = req.query;
+    const now = new Date();
+    let startDate;
+    
+    switch(period) {
+      case '7d': startDate = new Date(now - 7 * 24 * 60 * 60 * 1000); break;
+      case '30d': startDate = new Date(now - 30 * 24 * 60 * 60 * 1000); break;
+      case '90d': startDate = new Date(now - 90 * 24 * 60 * 60 * 1000); break;
+      case '1y': startDate = new Date(now - 365 * 24 * 60 * 60 * 1000); break;
+      default: startDate = new Date(now - 30 * 24 * 60 * 60 * 1000);
+    }
+
+    // Aggregate metrics by day
+    const dailySignups = await Organization.aggregate([
+      { $match: { createdAt: { $gte: startDate } } },
+      { $group: { _id: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt' } }, count: { $sum: 1 } } },
+      { $sort: { _id: 1 } }
+    ]);
+
+    const dailyIncidents = await Incident.aggregate([
+      { $match: { createdAt: { $gte: startDate } } },
+      { $group: { _id: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt' } }, count: { $sum: 1 } } },
+      { $sort: { _id: 1 } }
+    ]);
+
+    // Industry breakdown
+    const byIndustry = await Organization.aggregate([
+      { $group: { _id: '$industry', count: { $sum: 1 } } },
+      { $sort: { count: -1 } }
+    ]);
+
+    // Subscription status breakdown
+    const byStatus = await Organization.aggregate([
+      { $group: { _id: '$subscription.status', count: { $sum: 1 } } }
+    ]);
+
+    // Feature usage (what modules are being used most)
+    const featureUsage = {
+      incidents: await Incident.countDocuments({ createdAt: { $gte: startDate } }),
+      inspections: await Inspection.countDocuments({ createdAt: { $gte: startDate } }),
+      training: await TrainingRecord.countDocuments({ createdAt: { $gte: startDate } }),
+      documents: await Document.countDocuments({ createdAt: { $gte: startDate } }),
+      actionItems: await ActionItem.countDocuments({ createdAt: { $gte: startDate } }),
+      riskAssessments: await RiskAssessment.countDocuments({ createdAt: { $gte: startDate } })
+    };
+
+    res.json({
+      dailySignups,
+      dailyIncidents,
+      byIndustry,
+      byStatus,
+      featureUsage,
+      period
+    });
+  } catch (error) {
+    console.error('Stats error:', error);
+    res.status(500).json({ error: 'Failed to get stats' });
+  }
+});
+
+// ===== ORGANIZATION MANAGEMENT =====
+
+// Get all organizations with filtering and pagination
 app.get('/api/superadmin/organizations', authenticateSuperAdmin, async (req, res) => {
   try {
-    const organizations = await Organization.find()
-      .sort({ createdAt: -1 });
+    const { page = 1, limit = 20, search, tier, status, industry, sort = '-createdAt' } = req.query;
     
-    // Get user counts for each organization
-    const orgsWithCounts = await Promise.all(organizations.map(async (org) => {
-      const userCount = await User.countDocuments({ organization: org._id });
+    const query = {};
+    if (search) {
+      query.$or = [
+        { name: { $regex: search, $options: 'i' } },
+        { 'contact.email': { $regex: search, $options: 'i' } }
+      ];
+    }
+    if (tier) query['subscription.tier'] = tier;
+    if (status) query['subscription.status'] = status;
+    if (industry) query.industry = industry;
+    
+    const total = await Organization.countDocuments(query);
+    const organizations = await Organization.find(query)
+      .sort(sort)
+      .skip((page - 1) * limit)
+      .limit(parseInt(limit));
+    
+    // Enrich with user counts and activity
+    const enrichedOrgs = await Promise.all(organizations.map(async (org) => {
+      const [userCount, incidentCount, lastActivity] = await Promise.all([
+        User.countDocuments({ organization: org._id }),
+        Incident.countDocuments({ organization: org._id }),
+        AuditLog.findOne({ organization: org._id }).sort({ timestamp: -1 }).select('timestamp')
+      ]);
+      
       return {
         ...org.toObject(),
-        userCount
+        userCount,
+        incidentCount,
+        lastActivity: lastActivity?.timestamp
       };
     }));
     
-    res.json({ organizations: orgsWithCounts });
+    res.json({
+      organizations: enrichedOrgs,
+      pagination: { total, page: parseInt(page), limit: parseInt(limit), pages: Math.ceil(total / limit) }
+    });
   } catch (error) {
     console.error('Get organizations error:', error);
     res.status(500).json({ error: 'Failed to get organizations' });
   }
 });
 
-// Get super admin stats
-app.get('/api/superadmin/stats', authenticateSuperAdmin, async (req, res) => {
+// Get single organization details
+app.get('/api/superadmin/organizations/:id', authenticateSuperAdmin, async (req, res) => {
   try {
-    const totalOrgs = await Organization.countDocuments();
-    const totalUsers = await User.countDocuments();
+    const org = await Organization.findById(req.params.id);
+    if (!org) return res.status(404).json({ error: 'Organization not found' });
     
-    // Count by subscription tier
-    const starterOrgs = await Organization.countDocuments({ 'subscription.tier': 'starter' });
-    const professionalOrgs = await Organization.countDocuments({ 'subscription.tier': 'professional' });
-    const enterpriseOrgs = await Organization.countDocuments({ 'subscription.tier': 'enterprise' });
+    // Get detailed metrics
+    const [
+      userCount, adminCount, incidentCount, openIncidents,
+      inspectionCount, documentCount, trainingRecords
+    ] = await Promise.all([
+      User.countDocuments({ organization: org._id }),
+      User.countDocuments({ organization: org._id, role: 'admin' }),
+      Incident.countDocuments({ organization: org._id }),
+      Incident.countDocuments({ organization: org._id, status: { $nin: ['closed'] } }),
+      Inspection.countDocuments({ organization: org._id }),
+      Document.countDocuments({ organization: org._id }),
+      TrainingRecord.countDocuments({ organization: org._id })
+    ]);
     
-    // Calculate revenue
-    const revenue = (starterOrgs * 199) + (professionalOrgs * 499) + (enterpriseOrgs * 1299);
+    // Get users list
+    const users = await User.find({ organization: org._id })
+      .select('firstName lastName email role lastLogin createdAt isActive')
+      .sort({ createdAt: -1 })
+      .limit(50);
     
-    // Active trials (organizations less than 14 days old)
-    const trialCutoff = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000);
-    const activeTrials = await Organization.countDocuments({ createdAt: { $gte: trialCutoff } });
+    // Get recent activity
+    const recentActivity = await AuditLog.find({ organization: org._id })
+      .sort({ timestamp: -1 })
+      .limit(20)
+      .populate('user', 'firstName lastName');
+    
+    // Get subscription history (if RevenueTransaction exists)
+    const transactions = await RevenueTransaction.find({ organization: org._id })
+      .sort({ createdAt: -1 })
+      .limit(10);
     
     res.json({
-      totalOrgs,
-      totalUsers,
-      activeTrials,
-      revenue,
-      byTier: {
-        starter: starterOrgs,
-        professional: professionalOrgs,
-        enterprise: enterpriseOrgs
-      }
+      organization: org,
+      metrics: {
+        userCount, adminCount, incidentCount, openIncidents,
+        inspectionCount, documentCount, trainingRecords
+      },
+      users,
+      recentActivity,
+      transactions
     });
   } catch (error) {
-    console.error('Get stats error:', error);
-    res.status(500).json({ error: 'Failed to get stats' });
+    console.error('Get organization details error:', error);
+    res.status(500).json({ error: 'Failed to get organization' });
   }
 });
 
-// Create organization (Super Admin)
+// Create organization
 app.post('/api/superadmin/organizations', authenticateSuperAdmin, async (req, res) => {
   try {
-    const { name, industry, email, phone, subscription } = req.body;
+    const { name, industry, email, phone, subscription, adminUser } = req.body;
+    
+    const slug = name.toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-');
     
     const organization = new Organization({
       name,
+      slug: `${slug}-${Date.now()}`,
       industry,
-      contact: { email, phone },
+      email,
+      phone,
       subscription: {
         tier: subscription?.tier || 'starter',
-        status: 'active',
+        status: subscription?.status || 'active',
         startDate: new Date(),
         billingCycle: 'monthly'
       },
       settings: {
         timezone: 'America/New_York',
-        dateFormat: 'MM/DD/YYYY',
-        currency: 'USD'
+        dateFormat: 'MM/DD/YYYY'
       }
     });
     
     await organization.save();
+    
+    // Create admin user if provided
+    if (adminUser?.email && adminUser?.password) {
+      const hashedPassword = await bcrypt.hash(adminUser.password, 12);
+      await User.create({
+        organization: organization._id,
+        email: adminUser.email.toLowerCase(),
+        password: hashedPassword,
+        firstName: adminUser.firstName || 'Admin',
+        lastName: adminUser.lastName || 'User',
+        role: 'admin',
+        isActive: true,
+        permissions: {
+          incidents: { view: true, create: true, edit: true, delete: true, approve: true },
+          actionItems: { view: true, create: true, edit: true, delete: true, approve: true },
+          inspections: { view: true, create: true, edit: true, delete: true, approve: true },
+          training: { view: true, create: true, edit: true, delete: true, approve: true },
+          documents: { view: true, create: true, edit: true, delete: true, approve: true },
+          reports: { view: true, create: true, export: true },
+          admin: { users: true, settings: true, billing: true }
+        },
+        verification: { email: { verified: true }, phone: { verified: true } }
+      });
+    }
+    
+    // Log revenue transaction
+    const tierPrices = { starter: 199, professional: 499, enterprise: 1299 };
+    await RevenueTransaction.create({
+      organization: organization._id,
+      type: 'subscription',
+      newTier: subscription?.tier || 'starter',
+      amount: tierPrices[subscription?.tier || 'starter'],
+      billingPeriod: { start: new Date(), end: new Date(Date.now() + 30*24*60*60*1000) },
+      paymentStatus: 'completed',
+      paymentDate: new Date(),
+      description: 'Initial subscription'
+    });
+    
     res.status(201).json({ organization });
   } catch (error) {
     console.error('Create organization error:', error);
@@ -2443,48 +3811,498 @@ app.post('/api/superadmin/organizations', authenticateSuperAdmin, async (req, re
   }
 });
 
-// Update organization (Super Admin)
+// Update organization
 app.put('/api/superadmin/organizations/:id', authenticateSuperAdmin, async (req, res) => {
   try {
-    const { name, industry, email, phone, subscription } = req.body;
+    const { name, industry, email, phone, subscription, isActive, settings } = req.body;
     
-    const updates = {};
-    if (name) updates.name = name;
-    if (industry) updates.industry = industry;
-    if (email) updates['contact.email'] = email;
-    if (phone) updates['contact.phone'] = phone;
-    if (subscription?.tier) updates['subscription.tier'] = subscription.tier;
+    const org = await Organization.findById(req.params.id);
+    if (!org) return res.status(404).json({ error: 'Organization not found' });
     
-    const organization = await Organization.findByIdAndUpdate(
-      req.params.id,
-      { $set: updates },
-      { new: true }
-    );
+    const oldTier = org.subscription?.tier;
     
-    if (!organization) {
-      return res.status(404).json({ error: 'Organization not found' });
+    // Update fields
+    if (name) org.name = name;
+    if (industry) org.industry = industry;
+    if (email) org.email = email;
+    if (phone) org.phone = phone;
+    if (subscription?.tier) org.subscription.tier = subscription.tier;
+    if (subscription?.status) org.subscription.status = subscription.status;
+    if (typeof isActive === 'boolean') org.isActive = isActive;
+    if (settings) org.settings = { ...org.settings, ...settings };
+    
+    org.updatedAt = new Date();
+    await org.save();
+    
+    // Log tier change as revenue transaction
+    if (subscription?.tier && subscription.tier !== oldTier) {
+      const tierPrices = { starter: 199, professional: 499, enterprise: 1299 };
+      const type = tierPrices[subscription.tier] > tierPrices[oldTier] ? 'upgrade' : 'downgrade';
+      
+      await RevenueTransaction.create({
+        organization: org._id,
+        type,
+        previousTier: oldTier,
+        newTier: subscription.tier,
+        amount: tierPrices[subscription.tier] - tierPrices[oldTier],
+        description: `${type.charAt(0).toUpperCase() + type.slice(1)} from ${oldTier} to ${subscription.tier}`
+      });
     }
     
-    res.json({ organization });
+    res.json({ organization: org });
   } catch (error) {
     console.error('Update organization error:', error);
     res.status(500).json({ error: 'Failed to update organization' });
   }
 });
 
-// Delete organization (Super Admin)
+// Delete organization
 app.delete('/api/superadmin/organizations/:id', authenticateSuperAdmin, async (req, res) => {
   try {
-    // Delete all users in the organization
-    await User.deleteMany({ organization: req.params.id });
+    const org = await Organization.findById(req.params.id);
+    if (!org) return res.status(404).json({ error: 'Organization not found' });
     
-    // Delete the organization
-    await Organization.findByIdAndDelete(req.params.id);
+    // Delete all related data (in production, consider soft delete)
+    await Promise.all([
+      User.deleteMany({ organization: org._id }),
+      Incident.deleteMany({ organization: org._id }),
+      ActionItem.deleteMany({ organization: org._id }),
+      Inspection.deleteMany({ organization: org._id }),
+      Training.deleteMany({ organization: org._id }),
+      TrainingRecord.deleteMany({ organization: org._id }),
+      Document.deleteMany({ organization: org._id }),
+      AuditLog.deleteMany({ organization: org._id })
+    ]);
     
-    res.json({ success: true, message: 'Organization deleted' });
+    await Organization.findByIdAndDelete(org._id);
+    
+    res.json({ success: true, message: 'Organization and all data deleted' });
   } catch (error) {
     console.error('Delete organization error:', error);
     res.status(500).json({ error: 'Failed to delete organization' });
+  }
+});
+
+// ===== USER MANAGEMENT (Platform-wide) =====
+
+// Get all users across platform
+app.get('/api/superadmin/users', authenticateSuperAdmin, async (req, res) => {
+  try {
+    const { page = 1, limit = 50, search, role, orgId } = req.query;
+    
+    const query = {};
+    if (search) {
+      query.$or = [
+        { firstName: { $regex: search, $options: 'i' } },
+        { lastName: { $regex: search, $options: 'i' } },
+        { email: { $regex: search, $options: 'i' } }
+      ];
+    }
+    if (role) query.role = role;
+    if (orgId) query.organization = orgId;
+    
+    const total = await User.countDocuments(query);
+    const users = await User.find(query)
+      .populate('organization', 'name subscription.tier')
+      .sort({ createdAt: -1 })
+      .skip((page - 1) * limit)
+      .limit(parseInt(limit))
+      .select('-password');
+    
+    res.json({
+      users,
+      pagination: { total, page: parseInt(page), limit: parseInt(limit), pages: Math.ceil(total / limit) }
+    });
+  } catch (error) {
+    console.error('Get users error:', error);
+    res.status(500).json({ error: 'Failed to get users' });
+  }
+});
+
+// Impersonate user (login as)
+app.post('/api/superadmin/impersonate/:userId', authenticateSuperAdmin, async (req, res) => {
+  try {
+    const user = await User.findById(req.params.userId).populate('organization');
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    
+    const token = jwt.sign({ 
+      userId: user._id,
+      impersonatedBy: req.superAdmin.email 
+    }, CONFIG.JWT_SECRET, { expiresIn: '2h' });
+    
+    res.json({
+      token,
+      user: {
+        id: user._id,
+        email: user.email,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        role: user.role,
+        organization: {
+          id: user.organization._id,
+          name: user.organization.name,
+          subscription: user.organization.subscription
+        },
+        impersonated: true
+      }
+    });
+  } catch (error) {
+    console.error('Impersonate error:', error);
+    res.status(500).json({ error: 'Failed to impersonate user' });
+  }
+});
+
+// ===== ANNOUNCEMENTS =====
+
+// Get announcements
+app.get('/api/superadmin/announcements', authenticateSuperAdmin, async (req, res) => {
+  try {
+    const announcements = await PlatformAnnouncement.find()
+      .sort({ createdAt: -1 })
+      .limit(50);
+    res.json({ announcements });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to get announcements' });
+  }
+});
+
+// Create announcement
+app.post('/api/superadmin/announcements', authenticateSuperAdmin, async (req, res) => {
+  try {
+    const announcement = new PlatformAnnouncement({
+      ...req.body,
+      createdBy: req.superAdmin.email
+    });
+    await announcement.save();
+    res.status(201).json({ announcement });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to create announcement' });
+  }
+});
+
+// Update announcement
+app.put('/api/superadmin/announcements/:id', authenticateSuperAdmin, async (req, res) => {
+  try {
+    const announcement = await PlatformAnnouncement.findByIdAndUpdate(
+      req.params.id,
+      { ...req.body, updatedAt: new Date() },
+      { new: true }
+    );
+    res.json({ announcement });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to update announcement' });
+  }
+});
+
+// Delete announcement
+app.delete('/api/superadmin/announcements/:id', authenticateSuperAdmin, async (req, res) => {
+  try {
+    await PlatformAnnouncement.findByIdAndDelete(req.params.id);
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to delete announcement' });
+  }
+});
+
+// ===== SUPPORT TICKETS =====
+
+// Get support tickets
+app.get('/api/superadmin/tickets', authenticateSuperAdmin, async (req, res) => {
+  try {
+    const { status, priority, category, page = 1, limit = 20 } = req.query;
+    
+    const query = {};
+    if (status) query.status = status;
+    if (priority) query.priority = priority;
+    if (category) query.category = category;
+    
+    const total = await SupportTicket.countDocuments(query);
+    const tickets = await SupportTicket.find(query)
+      .populate('organization', 'name')
+      .sort({ createdAt: -1 })
+      .skip((page - 1) * limit)
+      .limit(parseInt(limit));
+    
+    // Get status counts
+    const statusCounts = await SupportTicket.aggregate([
+      { $group: { _id: '$status', count: { $sum: 1 } } }
+    ]);
+    
+    res.json({
+      tickets,
+      statusCounts: statusCounts.reduce((acc, s) => ({ ...acc, [s._id]: s.count }), {}),
+      pagination: { total, page: parseInt(page), limit: parseInt(limit), pages: Math.ceil(total / limit) }
+    });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to get tickets' });
+  }
+});
+
+// Get single ticket
+app.get('/api/superadmin/tickets/:id', authenticateSuperAdmin, async (req, res) => {
+  try {
+    const ticket = await SupportTicket.findById(req.params.id)
+      .populate('organization', 'name subscription')
+      .populate('submittedBy', 'firstName lastName email');
+    if (!ticket) return res.status(404).json({ error: 'Ticket not found' });
+    res.json({ ticket });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to get ticket' });
+  }
+});
+
+// Update ticket
+app.put('/api/superadmin/tickets/:id', authenticateSuperAdmin, async (req, res) => {
+  try {
+    const { status, priority, assignedTo, resolution } = req.body;
+    
+    const ticket = await SupportTicket.findById(req.params.id);
+    if (!ticket) return res.status(404).json({ error: 'Ticket not found' });
+    
+    if (status) ticket.status = status;
+    if (priority) ticket.priority = priority;
+    if (assignedTo) ticket.assignedTo = assignedTo;
+    if (resolution) {
+      ticket.resolution = resolution;
+      ticket.resolvedAt = new Date();
+      ticket.resolvedBy = req.superAdmin.email;
+    }
+    
+    // Track first response time
+    if (!ticket.firstResponseAt && req.body.message) {
+      ticket.firstResponseAt = new Date();
+    }
+    
+    ticket.updatedAt = new Date();
+    await ticket.save();
+    
+    res.json({ ticket });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to update ticket' });
+  }
+});
+
+// Add message to ticket
+app.post('/api/superadmin/tickets/:id/messages', authenticateSuperAdmin, async (req, res) => {
+  try {
+    const { message, internal } = req.body;
+    
+    const ticket = await SupportTicket.findById(req.params.id);
+    if (!ticket) return res.status(404).json({ error: 'Ticket not found' });
+    
+    ticket.messages.push({
+      sender: 'support',
+      senderName: req.superAdmin.email,
+      message,
+      internal: internal || false
+    });
+    
+    if (!ticket.firstResponseAt) {
+      ticket.firstResponseAt = new Date();
+    }
+    
+    if (ticket.status === 'new') {
+      ticket.status = 'open';
+    }
+    
+    ticket.updatedAt = new Date();
+    await ticket.save();
+    
+    res.json({ ticket });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to add message' });
+  }
+});
+
+// ===== FEATURE FLAGS =====
+
+// Get feature flags
+app.get('/api/superadmin/feature-flags', authenticateSuperAdmin, async (req, res) => {
+  try {
+    const flags = await FeatureFlag.find().sort({ name: 1 });
+    res.json({ flags });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to get feature flags' });
+  }
+});
+
+// Create/Update feature flag
+app.post('/api/superadmin/feature-flags', authenticateSuperAdmin, async (req, res) => {
+  try {
+    const { key, name, description, enabled, targetType, percentage, targetTiers } = req.body;
+    
+    let flag = await FeatureFlag.findOne({ key });
+    if (flag) {
+      Object.assign(flag, req.body);
+      flag.updatedAt = new Date();
+    } else {
+      flag = new FeatureFlag({
+        ...req.body,
+        createdBy: req.superAdmin.email
+      });
+    }
+    
+    await flag.save();
+    res.json({ flag });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to save feature flag' });
+  }
+});
+
+// Delete feature flag
+app.delete('/api/superadmin/feature-flags/:id', authenticateSuperAdmin, async (req, res) => {
+  try {
+    await FeatureFlag.findByIdAndDelete(req.params.id);
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to delete feature flag' });
+  }
+});
+
+// ===== REVENUE & BILLING =====
+
+// Get revenue overview
+app.get('/api/superadmin/revenue', authenticateSuperAdmin, async (req, res) => {
+  try {
+    const tierPrices = { starter: 199, professional: 499, enterprise: 1299 };
+    
+    const [starterOrgs, professionalOrgs, enterpriseOrgs] = await Promise.all([
+      Organization.countDocuments({ 'subscription.tier': 'starter', 'subscription.status': 'active' }),
+      Organization.countDocuments({ 'subscription.tier': 'professional', 'subscription.status': 'active' }),
+      Organization.countDocuments({ 'subscription.tier': 'enterprise', 'subscription.status': 'active' })
+    ]);
+    
+    const mrr = (starterOrgs * tierPrices.starter) + 
+                (professionalOrgs * tierPrices.professional) + 
+                (enterpriseOrgs * tierPrices.enterprise);
+    
+    // Get recent transactions
+    const transactions = await RevenueTransaction.find()
+      .populate('organization', 'name')
+      .sort({ createdAt: -1 })
+      .limit(50);
+    
+    // Monthly revenue trend
+    const monthlyRevenue = await RevenueTransaction.aggregate([
+      { $match: { createdAt: { $gte: new Date(Date.now() - 365*24*60*60*1000) } } },
+      { $group: {
+        _id: { $dateToString: { format: '%Y-%m', date: '$createdAt' } },
+        total: { $sum: '$amount' },
+        count: { $sum: 1 }
+      }},
+      { $sort: { _id: 1 } }
+    ]);
+    
+    res.json({
+      current: {
+        mrr,
+        arr: mrr * 12,
+        byTier: {
+          starter: { count: starterOrgs, revenue: starterOrgs * tierPrices.starter },
+          professional: { count: professionalOrgs, revenue: professionalOrgs * tierPrices.professional },
+          enterprise: { count: enterpriseOrgs, revenue: enterpriseOrgs * tierPrices.enterprise }
+        }
+      },
+      transactions,
+      monthlyRevenue
+    });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to get revenue' });
+  }
+});
+
+// ===== SYSTEM HEALTH =====
+
+// Get system health
+app.get('/api/superadmin/health', authenticateSuperAdmin, async (req, res) => {
+  try {
+    const dbStatus = mongoose.connection.readyState === 1 ? 'connected' : 'disconnected';
+    
+    // Get collection stats
+    const collections = await Promise.all([
+      { name: 'organizations', count: await Organization.countDocuments() },
+      { name: 'users', count: await User.countDocuments() },
+      { name: 'incidents', count: await Incident.countDocuments() },
+      { name: 'inspections', count: await Inspection.countDocuments() },
+      { name: 'documents', count: await Document.countDocuments() }
+    ]);
+    
+    res.json({
+      status: dbStatus === 'connected' ? 'healthy' : 'degraded',
+      database: dbStatus,
+      uptime: process.uptime(),
+      memory: process.memoryUsage(),
+      collections,
+      timestamp: new Date()
+    });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to get health status' });
+  }
+});
+
+// ===== AUDIT LOGS (Platform-wide) =====
+
+// Get platform audit logs
+app.get('/api/superadmin/audit-logs', authenticateSuperAdmin, async (req, res) => {
+  try {
+    const { page = 1, limit = 50, orgId, action, module } = req.query;
+    
+    const query = {};
+    if (orgId) query.organization = orgId;
+    if (action) query.action = action;
+    if (module) query.module = module;
+    
+    const total = await AuditLog.countDocuments(query);
+    const logs = await AuditLog.find(query)
+      .populate('organization', 'name')
+      .populate('user', 'firstName lastName email')
+      .sort({ timestamp: -1 })
+      .skip((page - 1) * limit)
+      .limit(parseInt(limit));
+    
+    res.json({
+      logs,
+      pagination: { total, page: parseInt(page), limit: parseInt(limit), pages: Math.ceil(total / limit) }
+    });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to get audit logs' });
+  }
+});
+
+// ===== BULK OPERATIONS =====
+
+// Bulk update organizations
+app.post('/api/superadmin/bulk/organizations', authenticateSuperAdmin, async (req, res) => {
+  try {
+    const { organizationIds, updates } = req.body;
+    
+    const result = await Organization.updateMany(
+      { _id: { $in: organizationIds } },
+      { $set: { ...updates, updatedAt: new Date() } }
+    );
+    
+    res.json({ success: true, modifiedCount: result.modifiedCount });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to bulk update' });
+  }
+});
+
+// Export organizations data
+app.get('/api/superadmin/export/organizations', authenticateSuperAdmin, async (req, res) => {
+  try {
+    const organizations = await Organization.find()
+      .select('name industry email phone subscription createdAt')
+      .lean();
+    
+    // Add user counts
+    const enriched = await Promise.all(organizations.map(async (org) => ({
+      ...org,
+      userCount: await User.countDocuments({ organization: org._id })
+    })));
+    
+    res.json({ data: enriched, exportedAt: new Date() });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to export' });
   }
 });
 
@@ -6228,6 +8046,2143 @@ app.use((err, req, res, next) => {
 // =============================================================================
 
 let DEMO_MODE = false;
+
+// =============================================================================
+// ENHANCED FEATURES - NOTIFICATIONS, INBOX, HIERARCHY, CUSTOM REPORTS
+// =============================================================================
+
+// Notification Schema - Real-time user notifications
+const notificationSchema = new mongoose.Schema({
+  organization: { type: mongoose.Schema.Types.ObjectId, ref: 'Organization', required: true },
+  recipient: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+  sender: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  
+  type: {
+    type: String,
+    enum: [
+      'action_assigned', 'action_due_soon', 'action_overdue', 'action_completed', 'action_rejected',
+      'incident_assigned', 'incident_status_change', 'incident_comment', 'incident_needs_review',
+      'audit_assigned', 'audit_due_soon', 'audit_overdue', 'audit_completed',
+      'training_assigned', 'training_due_soon', 'training_overdue', 'training_completed',
+      'inspection_assigned', 'inspection_due_soon', 'inspection_completed',
+      'approval_needed', 'approval_granted', 'approval_rejected',
+      'mention', 'comment', 'document_shared', 'system_alert', 'reminder',
+      'icare_received', 'icare_followup_due',
+      'report_ready', 'export_ready'
+    ],
+    required: true
+  },
+  
+  priority: { type: String, enum: ['low', 'normal', 'high', 'urgent'], default: 'normal' },
+  
+  title: { type: String, required: true },
+  message: String,
+  
+  // Related entity
+  entityType: { type: String, enum: ['incident', 'action', 'inspection', 'training', 'audit', 'document', 'icare', 'report', 'user'] },
+  entityId: { type: mongoose.Schema.Types.ObjectId },
+  entityNumber: String,
+  
+  // Links
+  actionUrl: String,
+  actionLabel: String,
+  
+  // Status
+  isRead: { type: Boolean, default: false },
+  readAt: Date,
+  isDismissed: { type: Boolean, default: false },
+  dismissedAt: Date,
+  
+  // Email/Push notification status
+  emailSent: { type: Boolean, default: false },
+  emailSentAt: Date,
+  pushSent: { type: Boolean, default: false },
+  pushSentAt: Date,
+  
+  // Expiry
+  expiresAt: Date,
+  
+  createdAt: { type: Date, default: Date.now }
+});
+
+notificationSchema.index({ recipient: 1, isRead: 1, createdAt: -1 });
+notificationSchema.index({ organization: 1, createdAt: -1 });
+const Notification = mongoose.model('Notification', notificationSchema);
+
+// User Hierarchy Schema - Reporting structure
+const userHierarchySchema = new mongoose.Schema({
+  organization: { type: mongoose.Schema.Types.ObjectId, ref: 'Organization', required: true },
+  user: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, unique: true },
+  
+  // Direct supervisor
+  reportsTo: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  
+  // All supervisors up the chain (for quick lookups)
+  supervisorChain: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
+  
+  // Direct reports
+  directReports: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
+  
+  // All reports (including indirect) count
+  totalReportsCount: { type: Number, default: 0 },
+  
+  // Level in hierarchy (0 = top, 1 = reports to top, etc.)
+  hierarchyLevel: { type: Number, default: 0 },
+  
+  // Can approve for these users
+  canApproveFor: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
+  
+  // Can assign tasks to these users
+  canAssignTo: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
+  
+  // Delegation (when supervisor is out)
+  delegatedTo: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  delegationStart: Date,
+  delegationEnd: Date,
+  
+  updatedAt: { type: Date, default: Date.now }
+});
+
+const UserHierarchy = mongoose.model('UserHierarchy', userHierarchySchema);
+
+// I-CARE Notes Schema - Behavior-Based Safety Observations
+const iCareNoteSchema = new mongoose.Schema({
+  organization: { type: mongoose.Schema.Types.ObjectId, ref: 'Organization', required: true },
+  noteNumber: { type: String, unique: true },
+  
+  // Observer
+  observer: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+  observerName: String,
+  
+  // Observed Person (can be anonymous)
+  observedPerson: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  observedPersonName: String,
+  isAnonymous: { type: Boolean, default: false },
+  
+  // Observation Details
+  type: {
+    type: String,
+    enum: ['safe_behavior', 'at_risk_behavior', 'positive_recognition', 'coaching_opportunity', 'safety_suggestion', 'hazard_observation'],
+    required: true
+  },
+  
+  category: {
+    type: String,
+    enum: ['ppe', 'body_positioning', 'tool_equipment', 'housekeeping', 'procedures', 'communication', 'awareness', 'line_of_fire', 'ergonomics', 'lifting', 'driving', 'other']
+  },
+  
+  // Location
+  location: String,
+  department: String,
+  
+  // Description
+  observation: { type: String, required: true },
+  immediateAction: String, // What was done immediately
+  
+  // Conversation held?
+  conversationHeld: { type: Boolean, default: false },
+  conversationNotes: String,
+  
+  // Recognition
+  recognitionType: { type: String, enum: ['verbal', 'written', 'award', 'none'] },
+  recognitionDetails: String,
+  
+  // Follow-up
+  followUpRequired: { type: Boolean, default: false },
+  followUpType: { type: String, enum: ['training', 'coaching', 'investigation', 'equipment', 'procedure', 'other'] },
+  followUpDescription: String,
+  followUpAssignedTo: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  followUpDueDate: Date,
+  followUpCompletedDate: Date,
+  followUpStatus: { type: String, enum: ['pending', 'in_progress', 'completed', 'cancelled'], default: 'pending' },
+  followUpNotes: String,
+  
+  // Linked records
+  linkedIncident: { type: mongoose.Schema.Types.ObjectId, ref: 'Incident' },
+  linkedAction: { type: mongoose.Schema.Types.ObjectId, ref: 'ActionItem' },
+  linkedTraining: { type: mongoose.Schema.Types.ObjectId, ref: 'TrainingRecord' },
+  
+  // Attachments
+  photos: [{
+    filename: String,
+    caption: String,
+    uploadedAt: { type: Date, default: Date.now }
+  }],
+  
+  // Acknowledgment (by observed person)
+  acknowledged: { type: Boolean, default: false },
+  acknowledgedAt: Date,
+  acknowledgedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  
+  // Status
+  status: { type: String, enum: ['draft', 'submitted', 'reviewed', 'closed'], default: 'draft' },
+  
+  // Tags for analytics
+  tags: [String],
+  
+  createdAt: { type: Date, default: Date.now },
+  updatedAt: { type: Date, default: Date.now }
+});
+
+const ICareNote = mongoose.model('ICareNote', iCareNoteSchema);
+
+// Scheduled Audit Schema
+const scheduledAuditSchema = new mongoose.Schema({
+  organization: { type: mongoose.Schema.Types.ObjectId, ref: 'Organization', required: true },
+  auditNumber: { type: String, unique: true },
+  
+  // Basic Info
+  title: { type: String, required: true },
+  description: String,
+  
+  // Type & Category
+  auditType: {
+    type: String,
+    enum: ['internal', 'external', 'regulatory', 'compliance', 'safety', 'environmental', 'quality', 'process', 'supplier', 'management_system'],
+    required: true
+  },
+  category: String,
+  
+  // Standard/Framework being audited
+  standard: String, // ISO 45001, OSHA, ISO 14001, etc.
+  
+  // Schedule
+  scheduledDate: { type: Date, required: true },
+  scheduledEndDate: Date,
+  duration: Number, // in hours
+  
+  // Recurrence
+  isRecurring: { type: Boolean, default: false },
+  recurrence: {
+    frequency: { type: String, enum: ['daily', 'weekly', 'monthly', 'quarterly', 'annually'] },
+    interval: Number,
+    endDate: Date,
+    occurrences: Number
+  },
+  
+  // Scope
+  scope: String,
+  departments: [String],
+  locations: [String],
+  processes: [String],
+  
+  // Team
+  leadAuditor: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+  auditTeam: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
+  auditees: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
+  
+  // Checklist/Protocol
+  checklist: [{
+    section: String,
+    question: String,
+    expectedEvidence: String,
+    weight: Number,
+    response: { type: String, enum: ['conforming', 'minor_nc', 'major_nc', 'observation', 'opportunity', 'na', 'pending'] },
+    findings: String,
+    evidence: String,
+    photos: [String]
+  }],
+  
+  // Findings Summary
+  findings: [{
+    findingNumber: String,
+    type: { type: String, enum: ['major_nonconformity', 'minor_nonconformity', 'observation', 'opportunity_for_improvement', 'positive_finding'] },
+    description: String,
+    requirement: String,
+    evidence: String,
+    rootCause: String,
+    correctiveAction: { type: mongoose.Schema.Types.ObjectId, ref: 'ActionItem' },
+    status: { type: String, enum: ['open', 'in_progress', 'closed', 'verified'], default: 'open' },
+    dueDate: Date,
+    closedDate: Date
+  }],
+  
+  // Documents
+  documents: [{
+    type: { type: String, enum: ['audit_plan', 'checklist', 'evidence', 'report', 'corrective_action', 'other'] },
+    filename: String,
+    originalName: String,
+    uploadedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    uploadedAt: Date
+  }],
+  
+  // Status & Workflow
+  status: {
+    type: String,
+    enum: ['scheduled', 'in_preparation', 'in_progress', 'pending_report', 'pending_review', 'completed', 'cancelled'],
+    default: 'scheduled'
+  },
+  
+  // Scores
+  overallScore: Number,
+  conformityRate: Number,
+  
+  // Report
+  reportSummary: String,
+  conclusions: String,
+  recommendations: String,
+  reportApprovedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  reportApprovedAt: Date,
+  
+  // Notifications
+  remindersSent: [{
+    type: { type: String, enum: ['upcoming', 'due', 'overdue'] },
+    sentAt: Date,
+    recipients: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }]
+  }],
+  
+  createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  createdAt: { type: Date, default: Date.now },
+  updatedAt: { type: Date, default: Date.now }
+});
+
+const ScheduledAudit = mongoose.model('ScheduledAudit', scheduledAuditSchema);
+
+// Custom Dashboard Widget Schema
+const dashboardWidgetSchema = new mongoose.Schema({
+  organization: { type: mongoose.Schema.Types.ObjectId, ref: 'Organization', required: true },
+  createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+  
+  name: { type: String, required: true },
+  description: String,
+  
+  // Widget Type
+  widgetType: {
+    type: String,
+    enum: ['stat_card', 'line_chart', 'bar_chart', 'pie_chart', 'donut_chart', 'table', 'list', 'gauge', 'heatmap', 'map', 'calendar', 'timeline', 'kpi', 'custom'],
+    required: true
+  },
+  
+  // Data Source
+  dataSource: {
+    type: String,
+    enum: ['incidents', 'actions', 'inspections', 'training', 'audits', 'observations', 'icare', 'osha', 'custom_query'],
+    required: true
+  },
+  
+  // Filters/Query
+  filters: {
+    dateRange: { type: String, enum: ['today', 'yesterday', 'this_week', 'last_week', 'this_month', 'last_month', 'this_quarter', 'last_quarter', 'this_year', 'last_year', 'custom'] },
+    startDate: Date,
+    endDate: Date,
+    departments: [String],
+    locations: [String],
+    statuses: [String],
+    types: [String],
+    severities: [String],
+    customFilters: mongoose.Schema.Types.Mixed
+  },
+  
+  // Aggregation
+  aggregation: {
+    groupBy: String, // 'day', 'week', 'month', 'department', 'type', etc.
+    metric: String, // 'count', 'sum', 'avg', 'min', 'max'
+    field: String
+  },
+  
+  // Display Options
+  display: {
+    title: String,
+    subtitle: String,
+    color: String,
+    icon: String,
+    showTrend: Boolean,
+    trendPeriod: String,
+    format: String, // 'number', 'percent', 'currency', 'duration'
+    decimals: Number,
+    threshold: { warning: Number, danger: Number },
+    size: { type: String, enum: ['small', 'medium', 'large', 'xlarge'], default: 'medium' }
+  },
+  
+  // Chart specific options
+  chartOptions: {
+    xAxis: String,
+    yAxis: String,
+    series: [{ name: String, field: String, color: String }],
+    stacked: Boolean,
+    showLegend: Boolean,
+    showLabels: Boolean
+  },
+  
+  // Refresh
+  refreshInterval: Number, // in seconds, 0 = manual only
+  lastRefreshed: Date,
+  cachedData: mongoose.Schema.Types.Mixed,
+  
+  // Sharing
+  isPublic: { type: Boolean, default: false },
+  sharedWith: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
+  
+  isActive: { type: Boolean, default: true },
+  createdAt: { type: Date, default: Date.now },
+  updatedAt: { type: Date, default: Date.now }
+});
+
+const DashboardWidget = mongoose.model('DashboardWidget', dashboardWidgetSchema);
+
+// Custom Dashboard Schema
+const customDashboardSchema = new mongoose.Schema({
+  organization: { type: mongoose.Schema.Types.ObjectId, ref: 'Organization', required: true },
+  createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+  
+  name: { type: String, required: true },
+  description: String,
+  
+  // Layout
+  layout: [{
+    widgetId: { type: mongoose.Schema.Types.ObjectId, ref: 'DashboardWidget' },
+    position: { x: Number, y: Number }, // Grid position
+    size: { width: Number, height: Number }, // Grid units
+    order: Number
+  }],
+  
+  // Settings
+  isDefault: { type: Boolean, default: false }, // User's default dashboard
+  isOrgDefault: { type: Boolean, default: false }, // Org-wide default
+  
+  // Sharing
+  isPublic: { type: Boolean, default: false },
+  sharedWith: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
+  sharedWithRoles: [String],
+  
+  // Auto-refresh
+  autoRefresh: { type: Boolean, default: true },
+  refreshInterval: { type: Number, default: 300 }, // seconds
+  
+  isActive: { type: Boolean, default: true },
+  createdAt: { type: Date, default: Date.now },
+  updatedAt: { type: Date, default: Date.now }
+});
+
+const CustomDashboard = mongoose.model('CustomDashboard', customDashboardSchema);
+
+// Custom Report Schema
+const customReportSchema = new mongoose.Schema({
+  organization: { type: mongoose.Schema.Types.ObjectId, ref: 'Organization', required: true },
+  createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+  
+  name: { type: String, required: true },
+  description: String,
+  
+  // Report Type
+  reportType: {
+    type: String,
+    enum: ['tabular', 'summary', 'trend', 'comparison', 'cross_tab', 'kpi', 'executive'],
+    default: 'tabular'
+  },
+  
+  // Data Sources
+  primarySource: {
+    type: String,
+    enum: ['incidents', 'actions', 'inspections', 'training', 'audits', 'observations', 'icare', 'osha', 'users', 'contractors'],
+    required: true
+  },
+  
+  // Columns/Fields to include
+  columns: [{
+    field: String,
+    label: String,
+    type: { type: String, enum: ['text', 'number', 'date', 'boolean', 'lookup'] },
+    format: String,
+    width: Number,
+    sortable: Boolean,
+    visible: { type: Boolean, default: true },
+    order: Number,
+    aggregation: { type: String, enum: ['none', 'count', 'sum', 'avg', 'min', 'max'] }
+  }],
+  
+  // Filters
+  filters: [{
+    field: String,
+    operator: { type: String, enum: ['equals', 'not_equals', 'contains', 'not_contains', 'starts_with', 'ends_with', 'greater_than', 'less_than', 'between', 'in', 'not_in', 'is_empty', 'is_not_empty'] },
+    value: mongoose.Schema.Types.Mixed,
+    isRequired: Boolean
+  }],
+  
+  // User-adjustable filters (shown in UI)
+  userFilters: [{
+    field: String,
+    label: String,
+    type: { type: String, enum: ['text', 'select', 'multiselect', 'date', 'daterange', 'number'] },
+    options: [{ value: String, label: String }],
+    defaultValue: mongoose.Schema.Types.Mixed
+  }],
+  
+  // Grouping & Sorting
+  groupBy: [String],
+  sortBy: [{ field: String, direction: { type: String, enum: ['asc', 'desc'] } }],
+  
+  // Summary/Totals
+  showSummary: { type: Boolean, default: false },
+  summaryFields: [{
+    field: String,
+    aggregation: String,
+    label: String
+  }],
+  
+  // Scheduling
+  isScheduled: { type: Boolean, default: false },
+  schedule: {
+    frequency: { type: String, enum: ['daily', 'weekly', 'monthly', 'quarterly'] },
+    dayOfWeek: Number, // 0-6 for weekly
+    dayOfMonth: Number, // 1-31 for monthly
+    time: String, // HH:mm
+    timezone: String,
+    nextRun: Date,
+    lastRun: Date
+  },
+  
+  // Delivery
+  deliveryMethod: [{ type: String, enum: ['email', 'dashboard', 'download'] }],
+  recipients: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
+  recipientEmails: [String],
+  
+  // Export Options
+  exportFormats: [{ type: String, enum: ['pdf', 'excel', 'csv', 'html'] }],
+  
+  // Sharing
+  isPublic: { type: Boolean, default: false },
+  sharedWith: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
+  
+  // Execution History
+  lastRunAt: Date,
+  lastRunBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  lastRunDuration: Number, // milliseconds
+  runCount: { type: Number, default: 0 },
+  
+  isActive: { type: Boolean, default: true },
+  createdAt: { type: Date, default: Date.now },
+  updatedAt: { type: Date, default: Date.now }
+});
+
+const CustomReport = mongoose.model('CustomReport', customReportSchema);
+
+// Incident Lifecycle Transition Schema
+const incidentLifecycleSchema = new mongoose.Schema({
+  organization: { type: mongoose.Schema.Types.ObjectId, ref: 'Organization', required: true },
+  incident: { type: mongoose.Schema.Types.ObjectId, ref: 'Incident', required: true },
+  
+  // Transition
+  fromStatus: String,
+  toStatus: String,
+  
+  // Who/When
+  performedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+  performedAt: { type: Date, default: Date.now },
+  
+  // Details
+  action: {
+    type: String,
+    enum: ['created', 'submitted', 'acknowledged', 'investigation_started', 'investigation_completed', 'sent_for_review', 'reviewed', 'sent_for_validation', 'validated', 'approved', 'completed', 'closed', 'reopened', 'archived', 'escalated', 'returned', 'rejected']
+  },
+  
+  comments: String,
+  attachments: [String],
+  
+  // If returned/rejected
+  returnReason: String,
+  
+  // Time spent in previous status
+  timeInPreviousStatus: Number, // milliseconds
+  
+  // Notifications sent
+  notificationsSent: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Notification' }]
+});
+
+incidentLifecycleSchema.index({ incident: 1, performedAt: -1 });
+const IncidentLifecycle = mongoose.model('IncidentLifecycle', incidentLifecycleSchema);
+
+// Document Upload Schema (for LTIs, RIs, and general documents)
+const documentUploadSchema = new mongoose.Schema({
+  organization: { type: mongoose.Schema.Types.ObjectId, ref: 'Organization', required: true },
+  
+  // Document Info
+  filename: { type: String, required: true },
+  originalName: { type: String, required: true },
+  mimeType: String,
+  size: Number, // bytes
+  
+  // Classification
+  documentType: {
+    type: String,
+    enum: [
+      'incident_report', 'investigation_report', 'witness_statement', 'medical_record', 'photo', 'video',
+      'osha_300', 'osha_300a', 'osha_301', 'first_report_injury', 'workers_comp_claim',
+      'lti_documentation', 'ri_documentation', 'return_to_work', 'fitness_for_duty',
+      'audit_report', 'audit_evidence', 'inspection_report', 'checklist',
+      'training_certificate', 'training_material', 'competency_record',
+      'sds', 'procedure', 'policy', 'permit', 'certification',
+      'corrective_action', 'root_cause_analysis', 'risk_assessment',
+      'other'
+    ],
+    required: true
+  },
+  category: String,
+  
+  // Linked Entity
+  entityType: { type: String, enum: ['incident', 'action', 'inspection', 'training', 'audit', 'icare', 'osha', 'contractor', 'user', 'general'] },
+  entityId: { type: mongoose.Schema.Types.ObjectId },
+  
+  // Description
+  title: String,
+  description: String,
+  tags: [String],
+  
+  // Access Control
+  isConfidential: { type: Boolean, default: false },
+  accessLevel: { type: String, enum: ['public', 'organization', 'department', 'restricted'], default: 'organization' },
+  allowedUsers: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
+  allowedRoles: [String],
+  
+  // Version Control
+  version: { type: Number, default: 1 },
+  previousVersions: [{
+    version: Number,
+    filename: String,
+    uploadedAt: Date,
+    uploadedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }
+  }],
+  
+  // Expiry
+  expiryDate: Date,
+  expiryNotificationSent: Boolean,
+  
+  // Approval
+  requiresApproval: { type: Boolean, default: false },
+  approvalStatus: { type: String, enum: ['pending', 'approved', 'rejected'], default: 'approved' },
+  approvedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  approvedAt: Date,
+  
+  // Upload Info
+  uploadedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+  uploadedAt: { type: Date, default: Date.now },
+  
+  // Storage
+  storagePath: String,
+  storageType: { type: String, enum: ['local', 's3', 'azure', 'gcs'], default: 'local' },
+  
+  isActive: { type: Boolean, default: true },
+  isArchived: { type: Boolean, default: false },
+  archivedAt: Date,
+  archivedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }
+});
+
+documentUploadSchema.index({ organization: 1, entityType: 1, entityId: 1 });
+documentUploadSchema.index({ organization: 1, documentType: 1 });
+const DocumentUpload = mongoose.model('DocumentUpload', documentUploadSchema);
+
+// User Preferences Schema
+const userPreferencesSchema = new mongoose.Schema({
+  user: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, unique: true },
+  
+  // Notification Preferences
+  notifications: {
+    email: {
+      enabled: { type: Boolean, default: true },
+      frequency: { type: String, enum: ['instant', 'hourly', 'daily', 'weekly'], default: 'instant' },
+      types: {
+        actionAssigned: { type: Boolean, default: true },
+        actionDue: { type: Boolean, default: true },
+        actionCompleted: { type: Boolean, default: true },
+        incidentAssigned: { type: Boolean, default: true },
+        incidentStatusChange: { type: Boolean, default: true },
+        auditReminders: { type: Boolean, default: true },
+        trainingDue: { type: Boolean, default: true },
+        approvalNeeded: { type: Boolean, default: true },
+        mentions: { type: Boolean, default: true },
+        systemAlerts: { type: Boolean, default: true }
+      }
+    },
+    push: {
+      enabled: { type: Boolean, default: true },
+      types: {
+        urgent: { type: Boolean, default: true },
+        actionAssigned: { type: Boolean, default: true },
+        approvalNeeded: { type: Boolean, default: true }
+      }
+    },
+    inApp: {
+      enabled: { type: Boolean, default: true },
+      playSound: { type: Boolean, default: true }
+    }
+  },
+  
+  // Dashboard Preferences
+  dashboard: {
+    defaultDashboard: { type: mongoose.Schema.Types.ObjectId, ref: 'CustomDashboard' },
+    showWelcome: { type: Boolean, default: true },
+    compactMode: { type: Boolean, default: false },
+    theme: { type: String, enum: ['light', 'dark', 'auto'], default: 'light' }
+  },
+  
+  // Inbox Preferences
+  inbox: {
+    defaultView: { type: String, enum: ['all', 'my_tasks', 'my_approvals', 'overdue'], default: 'my_tasks' },
+    sortBy: { type: String, default: 'dueDate' },
+    showCompleted: { type: Boolean, default: false },
+    itemsPerPage: { type: Number, default: 20 }
+  },
+  
+  // Regional
+  timezone: String,
+  dateFormat: { type: String, default: 'MM/DD/YYYY' },
+  timeFormat: { type: String, enum: ['12h', '24h'], default: '12h' },
+  language: { type: String, default: 'en' },
+  
+  // Accessibility
+  accessibility: {
+    highContrast: { type: Boolean, default: false },
+    largeText: { type: Boolean, default: false },
+    reduceMotion: { type: Boolean, default: false },
+    screenReader: { type: Boolean, default: false }
+  },
+  
+  updatedAt: { type: Date, default: Date.now }
+});
+
+const UserPreferences = mongoose.model('UserPreferences', userPreferencesSchema);
+
+// Archive Schema - For archived incidents
+const archivedIncidentSchema = new mongoose.Schema({
+  organization: { type: mongoose.Schema.Types.ObjectId, ref: 'Organization', required: true },
+  originalIncidentId: { type: mongoose.Schema.Types.ObjectId, required: true },
+  incidentNumber: String,
+  
+  // Store complete incident data
+  incidentData: mongoose.Schema.Types.Mixed,
+  
+  // Archive Info
+  archivedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+  archivedAt: { type: Date, default: Date.now },
+  archiveReason: String,
+  
+  // Retention
+  retentionPeriod: Number, // days
+  deleteAfter: Date,
+  
+  // Restore Info
+  canRestore: { type: Boolean, default: true },
+  restoredAt: Date,
+  restoredBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }
+});
+
+const ArchivedIncident = mongoose.model('ArchivedIncident', archivedIncidentSchema);
+
+// -----------------------------------------------------------------------------
+// NOTIFICATION HELPER FUNCTIONS
+// -----------------------------------------------------------------------------
+
+const createNotification = async (options) => {
+  try {
+    const notification = await Notification.create({
+      organization: options.organization,
+      recipient: options.recipient,
+      sender: options.sender,
+      type: options.type,
+      priority: options.priority || 'normal',
+      title: options.title,
+      message: options.message,
+      entityType: options.entityType,
+      entityId: options.entityId,
+      entityNumber: options.entityNumber,
+      actionUrl: options.actionUrl,
+      actionLabel: options.actionLabel,
+      expiresAt: options.expiresAt
+    });
+    
+    // TODO: Send email/push notification based on user preferences
+    // This would integrate with email service
+    
+    return notification;
+  } catch (error) {
+    console.error('Failed to create notification:', error);
+    return null;
+  }
+};
+
+const notifyActionAssigned = async (action, assignedBy) => {
+  if (!action.assignedTo) return;
+  
+  await createNotification({
+    organization: action.organization,
+    recipient: action.assignedTo,
+    sender: assignedBy,
+    type: 'action_assigned',
+    priority: action.priority === 'critical' ? 'urgent' : 'normal',
+    title: 'New Action Item Assigned',
+    message: `You have been assigned: ${action.title}`,
+    entityType: 'action',
+    entityId: action._id,
+    entityNumber: action.actionNumber,
+    actionUrl: `/actions/${action._id}`,
+    actionLabel: 'View Action'
+  });
+};
+
+const notifyActionCompleted = async (action, completedBy) => {
+  // Notify the person who created/assigned the action
+  const recipients = [action.createdBy];
+  if (action.assignedBy && !action.assignedBy.equals(action.createdBy)) {
+    recipients.push(action.assignedBy);
+  }
+  
+  for (const recipient of recipients) {
+    await createNotification({
+      organization: action.organization,
+      recipient: recipient,
+      sender: completedBy,
+      type: 'action_completed',
+      title: 'Action Item Completed',
+      message: `Action "${action.title}" has been completed`,
+      entityType: 'action',
+      entityId: action._id,
+      entityNumber: action.actionNumber,
+      actionUrl: `/actions/${action._id}`,
+      actionLabel: 'View Action'
+    });
+  }
+};
+
+const notifyIncidentStatusChange = async (incident, oldStatus, newStatus, changedBy) => {
+  // Notify relevant parties based on status change
+  const recipients = [];
+  
+  if (incident.reportedBy) recipients.push(incident.reportedBy);
+  if (incident.assignedTo) recipients.push(incident.assignedTo);
+  if (incident.investigation?.leadInvestigator) recipients.push(incident.investigation.leadInvestigator);
+  
+  // Remove duplicates and the person who made the change
+  const uniqueRecipients = [...new Set(recipients.filter(r => r && !r.equals(changedBy)))];
+  
+  for (const recipient of uniqueRecipients) {
+    await createNotification({
+      organization: incident.organization,
+      recipient: recipient,
+      sender: changedBy,
+      type: 'incident_status_change',
+      title: 'Incident Status Updated',
+      message: `Incident ${incident.incidentNumber} moved from ${oldStatus} to ${newStatus}`,
+      entityType: 'incident',
+      entityId: incident._id,
+      entityNumber: incident.incidentNumber,
+      actionUrl: `/incidents/${incident._id}`,
+      actionLabel: 'View Incident'
+    });
+  }
+};
+
+// -----------------------------------------------------------------------------
+// NOTIFICATION ROUTES
+// -----------------------------------------------------------------------------
+
+app.get('/api/notifications', authenticate, async (req, res) => {
+  try {
+    const { page = 1, limit = 20, unreadOnly = 'false' } = req.query;
+    const query = { recipient: req.user._id };
+    if (unreadOnly === 'true') query.isRead = false;
+    
+    const notifications = await Notification.find(query)
+      .populate('sender', 'firstName lastName')
+      .sort({ createdAt: -1 })
+      .skip((page - 1) * limit)
+      .limit(parseInt(limit));
+    
+    const unreadCount = await Notification.countDocuments({ recipient: req.user._id, isRead: false });
+    const total = await Notification.countDocuments(query);
+    
+    res.json({ 
+      notifications, 
+      unreadCount,
+      pagination: { page: parseInt(page), pages: Math.ceil(total / limit), total } 
+    });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to get notifications' });
+  }
+});
+
+app.put('/api/notifications/:id/read', authenticate, async (req, res) => {
+  try {
+    const notification = await Notification.findOneAndUpdate(
+      { _id: req.params.id, recipient: req.user._id },
+      { isRead: true, readAt: new Date() },
+      { new: true }
+    );
+    if (!notification) return res.status(404).json({ error: 'Notification not found' });
+    res.json({ notification });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to mark notification as read' });
+  }
+});
+
+app.put('/api/notifications/read-all', authenticate, async (req, res) => {
+  try {
+    await Notification.updateMany(
+      { recipient: req.user._id, isRead: false },
+      { isRead: true, readAt: new Date() }
+    );
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to mark all as read' });
+  }
+});
+
+app.delete('/api/notifications/:id', authenticate, async (req, res) => {
+  try {
+    await Notification.findOneAndUpdate(
+      { _id: req.params.id, recipient: req.user._id },
+      { isDismissed: true, dismissedAt: new Date() }
+    );
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to dismiss notification' });
+  }
+});
+
+// -----------------------------------------------------------------------------
+// INBOX/TASK CENTER ROUTES
+// -----------------------------------------------------------------------------
+
+app.get('/api/inbox', authenticate, async (req, res) => {
+  try {
+    const { view = 'all', status, priority, dueFilter } = req.query;
+    const userId = req.user._id;
+    const orgId = req.organization._id;
+    
+    // Build date filters
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const thisWeek = new Date(today.getTime() + 7 * 24 * 60 * 60 * 1000);
+    
+    let dateFilter = {};
+    if (dueFilter === 'overdue') dateFilter = { $lt: today };
+    else if (dueFilter === 'today') dateFilter = { $gte: today, $lt: new Date(today.getTime() + 24 * 60 * 60 * 1000) };
+    else if (dueFilter === 'this_week') dateFilter = { $gte: today, $lte: thisWeek };
+    
+    // Get Action Items assigned to user
+    const actionQuery = { organization: orgId, assignedTo: userId };
+    if (status && status !== 'all') actionQuery.status = status;
+    else actionQuery.status = { $nin: ['completed', 'cancelled'] };
+    if (Object.keys(dateFilter).length > 0) actionQuery.dueDate = dateFilter;
+    
+    const actions = await ActionItem.find(actionQuery)
+      .populate('createdBy', 'firstName lastName')
+      .populate('relatedIncident', 'incidentNumber title')
+      .sort({ dueDate: 1 })
+      .limit(50);
+    
+    // Get Inspections assigned to user
+    const inspectionQuery = { organization: orgId, inspector: userId, status: { $nin: ['completed', 'cancelled'] } };
+    if (Object.keys(dateFilter).length > 0) inspectionQuery.scheduledDate = dateFilter;
+    
+    const inspections = await Inspection.find(inspectionQuery)
+      .sort({ scheduledDate: 1 })
+      .limit(20);
+    
+    // Get Audits assigned to user
+    const auditQuery = { 
+      organization: orgId, 
+      $or: [{ leadAuditor: userId }, { auditTeam: userId }],
+      status: { $nin: ['completed', 'cancelled'] }
+    };
+    if (Object.keys(dateFilter).length > 0) auditQuery.scheduledDate = dateFilter;
+    
+    const audits = await ScheduledAudit.find(auditQuery)
+      .populate('leadAuditor', 'firstName lastName')
+      .sort({ scheduledDate: 1 })
+      .limit(20);
+    
+    // Get Training assigned to user
+    const trainingQuery = { organization: orgId, assignedTo: userId, status: { $nin: ['completed', 'expired'] } };
+    if (Object.keys(dateFilter).length > 0) trainingQuery.dueDate = dateFilter;
+    
+    const training = await TrainingRecord.find(trainingQuery)
+      .populate('course', 'title')
+      .sort({ dueDate: 1 })
+      .limit(20);
+    
+    // Get Incidents needing action (assigned to user or needs their approval)
+    const incidentQuery = { 
+      organization: orgId,
+      $or: [
+        { assignedTo: userId },
+        { 'investigation.leadInvestigator': userId },
+        { reviewedBy: userId, status: 'pending_review' }
+      ],
+      status: { $nin: ['closed', 'approved'] }
+    };
+    
+    const incidents = await Incident.find(incidentQuery)
+      .populate('reportedBy', 'firstName lastName')
+      .sort({ dateOccurred: -1 })
+      .limit(20);
+    
+    // Get I-CARE follow-ups
+    const icareQuery = { 
+      organization: orgId, 
+      followUpAssignedTo: userId,
+      followUpStatus: { $nin: ['completed', 'cancelled'] }
+    };
+    
+    const icareFollowups = await ICareNote.find(icareQuery)
+      .populate('observer', 'firstName lastName')
+      .sort({ followUpDueDate: 1 })
+      .limit(20);
+    
+    // Get pending approvals
+    const approvalActions = await ActionItem.find({
+      organization: orgId,
+      status: 'pending_approval',
+      // Would check if user is approver based on hierarchy
+    }).limit(10);
+    
+    // Combine and format for inbox
+    const inboxItems = [];
+    
+    actions.forEach(a => inboxItems.push({
+      id: a._id,
+      type: 'action',
+      typeLabel: 'Action Item',
+      number: a.actionNumber,
+      title: a.title,
+      description: a.description,
+      status: a.status,
+      priority: a.priority,
+      dueDate: a.dueDate,
+      isOverdue: a.dueDate && new Date(a.dueDate) < today,
+      createdBy: a.createdBy,
+      relatedTo: a.relatedIncident?.incidentNumber,
+      url: '/actions/' + a._id
+    }));
+    
+    inspections.forEach(i => inboxItems.push({
+      id: i._id,
+      type: 'inspection',
+      typeLabel: 'Inspection',
+      number: i.inspectionNumber,
+      title: i.title,
+      status: i.status,
+      priority: 'normal',
+      dueDate: i.scheduledDate,
+      isOverdue: i.scheduledDate && new Date(i.scheduledDate) < today,
+      url: '/inspections/' + i._id
+    }));
+    
+    audits.forEach(a => inboxItems.push({
+      id: a._id,
+      type: 'audit',
+      typeLabel: 'Audit',
+      number: a.auditNumber,
+      title: a.title,
+      status: a.status,
+      priority: 'normal',
+      dueDate: a.scheduledDate,
+      isOverdue: a.scheduledDate && new Date(a.scheduledDate) < today,
+      url: '/audits/' + a._id
+    }));
+    
+    training.forEach(t => inboxItems.push({
+      id: t._id,
+      type: 'training',
+      typeLabel: 'Training',
+      title: t.course?.title || 'Training',
+      status: t.status,
+      priority: 'normal',
+      dueDate: t.dueDate,
+      isOverdue: t.dueDate && new Date(t.dueDate) < today,
+      url: '/training/' + t._id
+    }));
+    
+    incidents.forEach(i => inboxItems.push({
+      id: i._id,
+      type: 'incident',
+      typeLabel: 'Incident',
+      number: i.incidentNumber,
+      title: i.title,
+      status: i.status,
+      priority: i.severity === 'catastrophic' || i.severity === 'severe' ? 'critical' : i.severity === 'major' ? 'high' : 'normal',
+      dueDate: null,
+      isOverdue: false,
+      url: '/incidents/' + i._id
+    }));
+    
+    icareFollowups.forEach(i => inboxItems.push({
+      id: i._id,
+      type: 'icare',
+      typeLabel: 'I-CARE Follow-up',
+      number: i.noteNumber,
+      title: i.observation?.substring(0, 100),
+      status: i.followUpStatus,
+      priority: 'normal',
+      dueDate: i.followUpDueDate,
+      isOverdue: i.followUpDueDate && new Date(i.followUpDueDate) < today,
+      url: '/icare/' + i._id
+    }));
+    
+    // Sort by due date and priority
+    inboxItems.sort((a, b) => {
+      // Overdue first
+      if (a.isOverdue && !b.isOverdue) return -1;
+      if (!a.isOverdue && b.isOverdue) return 1;
+      // Then by priority
+      const priorityOrder = { critical: 0, high: 1, normal: 2, low: 3 };
+      if (priorityOrder[a.priority] !== priorityOrder[b.priority]) {
+        return priorityOrder[a.priority] - priorityOrder[b.priority];
+      }
+      // Then by due date
+      if (a.dueDate && b.dueDate) return new Date(a.dueDate) - new Date(b.dueDate);
+      if (a.dueDate) return -1;
+      if (b.dueDate) return 1;
+      return 0;
+    });
+    
+    // Summary counts
+    const summary = {
+      total: inboxItems.length,
+      overdue: inboxItems.filter(i => i.isOverdue).length,
+      dueToday: inboxItems.filter(i => {
+        if (!i.dueDate) return false;
+        const d = new Date(i.dueDate);
+        return d >= today && d < new Date(today.getTime() + 24 * 60 * 60 * 1000);
+      }).length,
+      dueThisWeek: inboxItems.filter(i => {
+        if (!i.dueDate) return false;
+        const d = new Date(i.dueDate);
+        return d >= today && d <= thisWeek;
+      }).length,
+      byType: {
+        actions: actions.length,
+        inspections: inspections.length,
+        audits: audits.length,
+        training: training.length,
+        incidents: incidents.length,
+        icare: icareFollowups.length
+      }
+    };
+    
+    res.json({ items: inboxItems, summary });
+  } catch (error) {
+    console.error('Inbox error:', error);
+    res.status(500).json({ error: 'Failed to get inbox' });
+  }
+});
+
+// -----------------------------------------------------------------------------
+// USER HIERARCHY ROUTES
+// -----------------------------------------------------------------------------
+
+app.get('/api/hierarchy', authenticate, async (req, res) => {
+  try {
+    const hierarchy = await UserHierarchy.findOne({ user: req.user._id })
+      .populate('reportsTo', 'firstName lastName email jobTitle')
+      .populate('directReports', 'firstName lastName email jobTitle');
+    
+    res.json({ hierarchy });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to get hierarchy' });
+  }
+});
+
+app.get('/api/hierarchy/org-chart', authenticate, requireRole(['admin', 'superadmin']), async (req, res) => {
+  try {
+    // Get all users with hierarchy
+    const users = await User.find({ organization: req.organization._id, isActive: true })
+      .select('firstName lastName email jobTitle department role');
+    
+    const hierarchies = await UserHierarchy.find({ organization: req.organization._id })
+      .populate('reportsTo', 'firstName lastName');
+    
+    // Build org chart structure
+    const userMap = {};
+    users.forEach(u => {
+      userMap[u._id.toString()] = {
+        ...u.toObject(),
+        children: []
+      };
+    });
+    
+    hierarchies.forEach(h => {
+      if (h.reportsTo && userMap[h.user.toString()]) {
+        const parent = userMap[h.reportsTo.toString()];
+        if (parent) {
+          parent.children.push(userMap[h.user.toString()]);
+        }
+      }
+    });
+    
+    // Find root nodes (no reportsTo)
+    const roots = [];
+    hierarchies.forEach(h => {
+      if (!h.reportsTo && userMap[h.user.toString()]) {
+        roots.push(userMap[h.user.toString()]);
+      }
+    });
+    
+    // If no hierarchy defined, return flat list
+    if (roots.length === 0) {
+      res.json({ orgChart: users.map(u => ({ ...u.toObject(), children: [] })) });
+    } else {
+      res.json({ orgChart: roots });
+    }
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to get org chart' });
+  }
+});
+
+app.put('/api/hierarchy/:userId', authenticate, requireRole(['admin', 'superadmin']), async (req, res) => {
+  try {
+    const { reportsTo, canApproveFor, canAssignTo } = req.body;
+    
+    let hierarchy = await UserHierarchy.findOne({ user: req.params.userId });
+    
+    if (!hierarchy) {
+      hierarchy = new UserHierarchy({
+        organization: req.organization._id,
+        user: req.params.userId
+      });
+    }
+    
+    if (reportsTo !== undefined) hierarchy.reportsTo = reportsTo || null;
+    if (canApproveFor) hierarchy.canApproveFor = canApproveFor;
+    if (canAssignTo) hierarchy.canAssignTo = canAssignTo;
+    
+    // Rebuild supervisor chain
+    if (hierarchy.reportsTo) {
+      const chain = [];
+      let current = await UserHierarchy.findOne({ user: hierarchy.reportsTo });
+      while (current) {
+        chain.push(current.user);
+        if (current.reportsTo) {
+          current = await UserHierarchy.findOne({ user: current.reportsTo });
+        } else {
+          current = null;
+        }
+      }
+      hierarchy.supervisorChain = chain;
+      hierarchy.hierarchyLevel = chain.length + 1;
+    } else {
+      hierarchy.supervisorChain = [];
+      hierarchy.hierarchyLevel = 0;
+    }
+    
+    hierarchy.updatedAt = new Date();
+    await hierarchy.save();
+    
+    // Update supervisor's directReports
+    if (hierarchy.reportsTo) {
+      await UserHierarchy.findOneAndUpdate(
+        { user: hierarchy.reportsTo },
+        { $addToSet: { directReports: req.params.userId } }
+      );
+    }
+    
+    res.json({ hierarchy });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to update hierarchy' });
+  }
+});
+
+app.get('/api/hierarchy/subordinates', authenticate, async (req, res) => {
+  try {
+    const hierarchy = await UserHierarchy.findOne({ user: req.user._id });
+    
+    if (!hierarchy || hierarchy.directReports.length === 0) {
+      return res.json({ subordinates: [] });
+    }
+    
+    const subordinates = await User.find({ _id: { $in: hierarchy.directReports }, isActive: true })
+      .select('firstName lastName email jobTitle department');
+    
+    res.json({ subordinates });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to get subordinates' });
+  }
+});
+
+// Get users that can be assigned tasks by current user
+app.get('/api/hierarchy/assignable-users', authenticate, async (req, res) => {
+  try {
+    const hierarchy = await UserHierarchy.findOne({ user: req.user._id });
+    
+    let assignableIds = [];
+    
+    // User can always self-assign
+    assignableIds.push(req.user._id);
+    
+    if (hierarchy) {
+      // Can assign to direct reports
+      if (hierarchy.directReports?.length > 0) {
+        assignableIds = assignableIds.concat(hierarchy.directReports);
+      }
+      // Can assign to specific users
+      if (hierarchy.canAssignTo?.length > 0) {
+        assignableIds = assignableIds.concat(hierarchy.canAssignTo);
+      }
+    }
+    
+    // Admin/Manager can assign to anyone in org
+    if (['admin', 'manager', 'safety_officer'].includes(req.user.role)) {
+      const allUsers = await User.find({ organization: req.organization._id, isActive: true })
+        .select('firstName lastName email jobTitle department');
+      return res.json({ users: allUsers });
+    }
+    
+    const users = await User.find({ _id: { $in: assignableIds }, isActive: true })
+      .select('firstName lastName email jobTitle department');
+    
+    res.json({ users });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to get assignable users' });
+  }
+});
+
+// -----------------------------------------------------------------------------
+// I-CARE NOTES ROUTES
+// -----------------------------------------------------------------------------
+
+app.get('/api/icare', authenticate, async (req, res) => {
+  try {
+    const { page = 1, limit = 15, type, status, observer, search } = req.query;
+    const query = { organization: req.organization._id };
+    
+    if (type) query.type = type;
+    if (status) query.status = status;
+    if (observer) query.observer = observer;
+    if (search) {
+      query.$or = [
+        { observation: { $regex: search, $options: 'i' } },
+        { noteNumber: { $regex: search, $options: 'i' } }
+      ];
+    }
+    
+    const notes = await ICareNote.find(query)
+      .populate('observer', 'firstName lastName')
+      .populate('observedPerson', 'firstName lastName')
+      .populate('followUpAssignedTo', 'firstName lastName')
+      .sort({ createdAt: -1 })
+      .skip((page - 1) * limit)
+      .limit(parseInt(limit));
+    
+    const total = await ICareNote.countDocuments(query);
+    
+    // Summary stats
+    const stats = await ICareNote.aggregate([
+      { $match: { organization: req.organization._id } },
+      { $group: {
+        _id: '$type',
+        count: { $sum: 1 }
+      }}
+    ]);
+    
+    res.json({ 
+      notes, 
+      stats,
+      pagination: { page: parseInt(page), pages: Math.ceil(total / limit), total } 
+    });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to get I-CARE notes' });
+  }
+});
+
+app.post('/api/icare', authenticate, async (req, res) => {
+  try {
+    const noteNumber = await generateNumber(ICareNote, 'ICARE', req.organization._id);
+    const note = await ICareNote.create({
+      ...req.body,
+      organization: req.organization._id,
+      noteNumber,
+      observer: req.user._id,
+      observerName: req.user.firstName + ' ' + req.user.lastName
+    });
+    
+    // Notify follow-up assignee if applicable
+    if (note.followUpRequired && note.followUpAssignedTo) {
+      await createNotification({
+        organization: req.organization._id,
+        recipient: note.followUpAssignedTo,
+        sender: req.user._id,
+        type: 'icare_received',
+        title: 'I-CARE Follow-up Assigned',
+        message: `You have been assigned follow-up for I-CARE note ${noteNumber}`,
+        entityType: 'icare',
+        entityId: note._id,
+        entityNumber: noteNumber,
+        actionUrl: '/icare/' + note._id
+      });
+    }
+    
+    res.status(201).json({ note });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to create I-CARE note' });
+  }
+});
+
+app.put('/api/icare/:id', authenticate, async (req, res) => {
+  try {
+    const note = await ICareNote.findOneAndUpdate(
+      { _id: req.params.id, organization: req.organization._id },
+      { ...req.body, updatedAt: new Date() },
+      { new: true }
+    );
+    if (!note) return res.status(404).json({ error: 'I-CARE note not found' });
+    res.json({ note });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to update I-CARE note' });
+  }
+});
+
+app.delete('/api/icare/:id', authenticate, requireRole(['admin', 'manager', 'safety_officer']), async (req, res) => {
+  try {
+    await ICareNote.findOneAndDelete({ _id: req.params.id, organization: req.organization._id });
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to delete I-CARE note' });
+  }
+});
+
+// -----------------------------------------------------------------------------
+// SCHEDULED AUDIT ROUTES
+// -----------------------------------------------------------------------------
+
+app.get('/api/scheduled-audits', authenticate, async (req, res) => {
+  try {
+    const { page = 1, limit = 15, status, type } = req.query;
+    const query = { organization: req.organization._id };
+    if (status) query.status = status;
+    if (type) query.auditType = type;
+    
+    const audits = await ScheduledAudit.find(query)
+      .populate('leadAuditor', 'firstName lastName')
+      .populate('auditTeam', 'firstName lastName')
+      .sort({ scheduledDate: 1 })
+      .skip((page - 1) * limit)
+      .limit(parseInt(limit));
+    
+    const total = await ScheduledAudit.countDocuments(query);
+    res.json({ audits, pagination: { page: parseInt(page), pages: Math.ceil(total / limit), total } });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to get audits' });
+  }
+});
+
+app.post('/api/scheduled-audits', authenticate, requireRole(['admin', 'manager', 'safety_officer']), async (req, res) => {
+  try {
+    const auditNumber = await generateNumber(ScheduledAudit, 'AUD', req.organization._id);
+    const audit = await ScheduledAudit.create({
+      ...req.body,
+      organization: req.organization._id,
+      auditNumber,
+      createdBy: req.user._id
+    });
+    
+    // Notify lead auditor
+    if (audit.leadAuditor && !audit.leadAuditor.equals(req.user._id)) {
+      await createNotification({
+        organization: req.organization._id,
+        recipient: audit.leadAuditor,
+        sender: req.user._id,
+        type: 'audit_assigned',
+        title: 'Audit Assigned',
+        message: `You have been assigned as lead auditor for: ${audit.title}`,
+        entityType: 'audit',
+        entityId: audit._id,
+        entityNumber: auditNumber
+      });
+    }
+    
+    // Notify team members
+    for (const member of (audit.auditTeam || [])) {
+      if (!member.equals(req.user._id) && !member.equals(audit.leadAuditor)) {
+        await createNotification({
+          organization: req.organization._id,
+          recipient: member,
+          sender: req.user._id,
+          type: 'audit_assigned',
+          title: 'Added to Audit Team',
+          message: `You have been added to the audit team for: ${audit.title}`,
+          entityType: 'audit',
+          entityId: audit._id,
+          entityNumber: auditNumber
+        });
+      }
+    }
+    
+    res.status(201).json({ audit });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to create audit' });
+  }
+});
+
+app.put('/api/scheduled-audits/:id', authenticate, async (req, res) => {
+  try {
+    const audit = await ScheduledAudit.findOneAndUpdate(
+      { _id: req.params.id, organization: req.organization._id },
+      { ...req.body, updatedAt: new Date() },
+      { new: true }
+    );
+    if (!audit) return res.status(404).json({ error: 'Audit not found' });
+    res.json({ audit });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to update audit' });
+  }
+});
+
+app.delete('/api/scheduled-audits/:id', authenticate, requireRole(['admin']), async (req, res) => {
+  try {
+    await ScheduledAudit.findOneAndDelete({ _id: req.params.id, organization: req.organization._id });
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to delete audit' });
+  }
+});
+
+// -----------------------------------------------------------------------------
+// CUSTOM DASHBOARD & WIDGET ROUTES
+// -----------------------------------------------------------------------------
+
+app.get('/api/dashboards', authenticate, async (req, res) => {
+  try {
+    const dashboards = await CustomDashboard.find({
+      $or: [
+        { organization: req.organization._id, createdBy: req.user._id },
+        { organization: req.organization._id, isPublic: true },
+        { organization: req.organization._id, sharedWith: req.user._id },
+        { organization: req.organization._id, sharedWithRoles: req.user.role },
+        { organization: req.organization._id, isOrgDefault: true }
+      ],
+      isActive: true
+    }).populate('createdBy', 'firstName lastName');
+    
+    res.json({ dashboards });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to get dashboards' });
+  }
+});
+
+app.post('/api/dashboards', authenticate, async (req, res) => {
+  try {
+    const dashboard = await CustomDashboard.create({
+      ...req.body,
+      organization: req.organization._id,
+      createdBy: req.user._id
+    });
+    res.status(201).json({ dashboard });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to create dashboard' });
+  }
+});
+
+app.put('/api/dashboards/:id', authenticate, async (req, res) => {
+  try {
+    const dashboard = await CustomDashboard.findOneAndUpdate(
+      { _id: req.params.id, organization: req.organization._id, createdBy: req.user._id },
+      { ...req.body, updatedAt: new Date() },
+      { new: true }
+    );
+    if (!dashboard) return res.status(404).json({ error: 'Dashboard not found' });
+    res.json({ dashboard });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to update dashboard' });
+  }
+});
+
+app.delete('/api/dashboards/:id', authenticate, async (req, res) => {
+  try {
+    await CustomDashboard.findOneAndDelete({ _id: req.params.id, organization: req.organization._id, createdBy: req.user._id });
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to delete dashboard' });
+  }
+});
+
+// Widgets
+app.get('/api/widgets', authenticate, async (req, res) => {
+  try {
+    const widgets = await DashboardWidget.find({
+      $or: [
+        { organization: req.organization._id, createdBy: req.user._id },
+        { organization: req.organization._id, isPublic: true },
+        { organization: req.organization._id, sharedWith: req.user._id }
+      ],
+      isActive: true
+    }).populate('createdBy', 'firstName lastName');
+    
+    res.json({ widgets });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to get widgets' });
+  }
+});
+
+app.post('/api/widgets', authenticate, async (req, res) => {
+  try {
+    const widget = await DashboardWidget.create({
+      ...req.body,
+      organization: req.organization._id,
+      createdBy: req.user._id
+    });
+    res.status(201).json({ widget });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to create widget' });
+  }
+});
+
+app.put('/api/widgets/:id', authenticate, async (req, res) => {
+  try {
+    const widget = await DashboardWidget.findOneAndUpdate(
+      { _id: req.params.id, organization: req.organization._id, createdBy: req.user._id },
+      { ...req.body, updatedAt: new Date() },
+      { new: true }
+    );
+    if (!widget) return res.status(404).json({ error: 'Widget not found' });
+    res.json({ widget });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to update widget' });
+  }
+});
+
+app.delete('/api/widgets/:id', authenticate, async (req, res) => {
+  try {
+    await DashboardWidget.findOneAndDelete({ _id: req.params.id, organization: req.organization._id, createdBy: req.user._id });
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to delete widget' });
+  }
+});
+
+// Widget data endpoint
+app.get('/api/widgets/:id/data', authenticate, async (req, res) => {
+  try {
+    const widget = await DashboardWidget.findOne({ _id: req.params.id, organization: req.organization._id });
+    if (!widget) return res.status(404).json({ error: 'Widget not found' });
+    
+    // Calculate date range
+    let startDate, endDate = new Date();
+    const now = new Date();
+    
+    switch (widget.filters?.dateRange) {
+      case 'today': startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate()); break;
+      case 'this_week': startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000); break;
+      case 'this_month': startDate = new Date(now.getFullYear(), now.getMonth(), 1); break;
+      case 'this_quarter': startDate = new Date(now.getFullYear(), Math.floor(now.getMonth() / 3) * 3, 1); break;
+      case 'this_year': startDate = new Date(now.getFullYear(), 0, 1); break;
+      case 'custom': startDate = widget.filters.startDate; endDate = widget.filters.endDate; break;
+      default: startDate = new Date(now.getFullYear(), 0, 1);
+    }
+    
+    // Build query based on data source
+    let data;
+    const baseQuery = { organization: req.organization._id };
+    if (startDate) baseQuery.createdAt = { $gte: startDate, $lte: endDate };
+    
+    switch (widget.dataSource) {
+      case 'incidents':
+        if (widget.widgetType === 'stat_card') {
+          data = await Incident.countDocuments(baseQuery);
+        } else {
+          data = await Incident.aggregate([
+            { $match: baseQuery },
+            { $group: { _id: '$' + (widget.aggregation?.groupBy || 'type'), count: { $sum: 1 } } }
+          ]);
+        }
+        break;
+      case 'actions':
+        if (widget.widgetType === 'stat_card') {
+          data = await ActionItem.countDocuments(baseQuery);
+        } else {
+          data = await ActionItem.aggregate([
+            { $match: baseQuery },
+            { $group: { _id: '$' + (widget.aggregation?.groupBy || 'status'), count: { $sum: 1 } } }
+          ]);
+        }
+        break;
+      case 'inspections':
+        data = await Inspection.countDocuments(baseQuery);
+        break;
+      case 'training':
+        data = await TrainingRecord.countDocuments(baseQuery);
+        break;
+      case 'icare':
+        if (widget.widgetType === 'stat_card') {
+          data = await ICareNote.countDocuments(baseQuery);
+        } else {
+          data = await ICareNote.aggregate([
+            { $match: baseQuery },
+            { $group: { _id: '$type', count: { $sum: 1 } } }
+          ]);
+        }
+        break;
+      default:
+        data = 0;
+    }
+    
+    res.json({ data, lastUpdated: new Date() });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to get widget data' });
+  }
+});
+
+// -----------------------------------------------------------------------------
+// CUSTOM REPORT ROUTES
+// -----------------------------------------------------------------------------
+
+app.get('/api/custom-reports', authenticate, async (req, res) => {
+  try {
+    const reports = await CustomReport.find({
+      $or: [
+        { organization: req.organization._id, createdBy: req.user._id },
+        { organization: req.organization._id, isPublic: true },
+        { organization: req.organization._id, sharedWith: req.user._id }
+      ],
+      isActive: true
+    }).populate('createdBy', 'firstName lastName');
+    
+    res.json({ reports });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to get reports' });
+  }
+});
+
+app.post('/api/custom-reports', authenticate, async (req, res) => {
+  try {
+    const report = await CustomReport.create({
+      ...req.body,
+      organization: req.organization._id,
+      createdBy: req.user._id
+    });
+    res.status(201).json({ report });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to create report' });
+  }
+});
+
+app.put('/api/custom-reports/:id', authenticate, async (req, res) => {
+  try {
+    const report = await CustomReport.findOneAndUpdate(
+      { _id: req.params.id, organization: req.organization._id, createdBy: req.user._id },
+      { ...req.body, updatedAt: new Date() },
+      { new: true }
+    );
+    if (!report) return res.status(404).json({ error: 'Report not found' });
+    res.json({ report });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to update report' });
+  }
+});
+
+app.delete('/api/custom-reports/:id', authenticate, async (req, res) => {
+  try {
+    await CustomReport.findOneAndDelete({ _id: req.params.id, organization: req.organization._id, createdBy: req.user._id });
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to delete report' });
+  }
+});
+
+// Run report
+app.post('/api/custom-reports/:id/run', authenticate, async (req, res) => {
+  try {
+    const report = await CustomReport.findOne({ _id: req.params.id, organization: req.organization._id });
+    if (!report) return res.status(404).json({ error: 'Report not found' });
+    
+    const { userFilters } = req.body;
+    const startTime = Date.now();
+    
+    // Build query based on report config
+    const query = { organization: req.organization._id };
+    
+    // Apply fixed filters
+    report.filters.forEach(f => {
+      if (f.operator === 'equals') query[f.field] = f.value;
+      else if (f.operator === 'in') query[f.field] = { $in: f.value };
+      else if (f.operator === 'greater_than') query[f.field] = { $gt: f.value };
+      else if (f.operator === 'less_than') query[f.field] = { $lt: f.value };
+    });
+    
+    // Apply user filters from request
+    if (userFilters) {
+      Object.entries(userFilters).forEach(([field, value]) => {
+        if (value !== null && value !== undefined && value !== '') {
+          query[field] = value;
+        }
+      });
+    }
+    
+    // Get model based on primary source
+    const models = {
+      incidents: Incident, actions: ActionItem, inspections: Inspection,
+      training: TrainingRecord, audits: ScheduledAudit, observations: SafetyObservation,
+      icare: ICareNote, users: User
+    };
+    
+    const Model = models[report.primarySource];
+    if (!Model) return res.status(400).json({ error: 'Invalid data source' });
+    
+    // Build projection
+    const projection = {};
+    report.columns.filter(c => c.visible).forEach(c => {
+      projection[c.field] = 1;
+    });
+    
+    // Execute query
+    let dataQuery = Model.find(query, projection);
+    
+    // Apply sorting
+    if (report.sortBy?.length > 0) {
+      const sort = {};
+      report.sortBy.forEach(s => { sort[s.field] = s.direction === 'desc' ? -1 : 1; });
+      dataQuery = dataQuery.sort(sort);
+    }
+    
+    const data = await dataQuery.limit(1000);
+    
+    // Calculate summaries
+    let summaries = {};
+    if (report.showSummary && report.summaryFields?.length > 0) {
+      const aggregation = [{ $match: query }];
+      const groupFields = { _id: null };
+      
+      report.summaryFields.forEach(sf => {
+        if (sf.aggregation === 'count') groupFields[sf.field] = { $sum: 1 };
+        else if (sf.aggregation === 'sum') groupFields[sf.field] = { $sum: '$' + sf.field };
+        else if (sf.aggregation === 'avg') groupFields[sf.field] = { $avg: '$' + sf.field };
+      });
+      
+      aggregation.push({ $group: groupFields });
+      const summaryResult = await Model.aggregate(aggregation);
+      if (summaryResult.length > 0) summaries = summaryResult[0];
+    }
+    
+    // Update report stats
+    await CustomReport.findByIdAndUpdate(report._id, {
+      lastRunAt: new Date(),
+      lastRunBy: req.user._id,
+      lastRunDuration: Date.now() - startTime,
+      $inc: { runCount: 1 }
+    });
+    
+    res.json({ 
+      data, 
+      summaries,
+      rowCount: data.length,
+      executionTime: Date.now() - startTime
+    });
+  } catch (error) {
+    console.error('Report execution error:', error);
+    res.status(500).json({ error: 'Failed to run report' });
+  }
+});
+
+// -----------------------------------------------------------------------------
+// INCIDENT LIFECYCLE ROUTES
+// -----------------------------------------------------------------------------
+
+app.post('/api/incidents/:id/transition', authenticate, async (req, res) => {
+  try {
+    const { action, comments, returnReason } = req.body;
+    const incident = await Incident.findOne({ _id: req.params.id, organization: req.organization._id });
+    
+    if (!incident) return res.status(404).json({ error: 'Incident not found' });
+    
+    const oldStatus = incident.status;
+    let newStatus = oldStatus;
+    
+    // Define allowed transitions
+    const transitions = {
+      draft: { submit: 'submitted' },
+      submitted: { acknowledge: 'acknowledged', return: 'draft' },
+      acknowledged: { start_investigation: 'investigating', return: 'submitted' },
+      investigating: { complete_investigation: 'pending_review', return: 'acknowledged' },
+      pending_review: { approve_review: 'pending_approval', return: 'investigating', reject: 'investigating' },
+      pending_approval: { approve: 'approved', reject: 'pending_review', return: 'pending_review' },
+      approved: { complete: 'closed', reopen: 'reopened' },
+      closed: { reopen: 'reopened', archive: 'archived' },
+      reopened: { close: 'closed', investigate: 'investigating' }
+    };
+    
+    if (!transitions[oldStatus] || !transitions[oldStatus][action]) {
+      return res.status(400).json({ error: 'Invalid transition' });
+    }
+    
+    newStatus = transitions[oldStatus][action];
+    
+    // Update incident status
+    incident.status = newStatus;
+    
+    // Update dates based on transition
+    if (action === 'start_investigation') {
+      incident.dateInvestigationStarted = new Date();
+    } else if (action === 'complete_investigation') {
+      incident.dateInvestigationCompleted = new Date();
+    } else if (action === 'approve') {
+      incident.approvedBy = req.user._id;
+      incident.approvedAt = new Date();
+    } else if (action === 'complete') {
+      incident.closedBy = req.user._id;
+      incident.closedAt = new Date();
+    }
+    
+    incident.updatedAt = new Date();
+    await incident.save();
+    
+    // Create lifecycle record
+    const lifecycle = await IncidentLifecycle.create({
+      organization: req.organization._id,
+      incident: incident._id,
+      fromStatus: oldStatus,
+      toStatus: newStatus,
+      performedBy: req.user._id,
+      action,
+      comments,
+      returnReason
+    });
+    
+    // Send notifications
+    await notifyIncidentStatusChange(incident, oldStatus, newStatus, req.user._id);
+    
+    res.json({ incident, lifecycle });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to transition incident' });
+  }
+});
+
+app.get('/api/incidents/:id/lifecycle', authenticate, async (req, res) => {
+  try {
+    const lifecycle = await IncidentLifecycle.find({ incident: req.params.id })
+      .populate('performedBy', 'firstName lastName')
+      .sort({ performedAt: -1 });
+    
+    res.json({ lifecycle });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to get lifecycle' });
+  }
+});
+
+// -----------------------------------------------------------------------------
+// INCIDENT ARCHIVE ROUTES
+// -----------------------------------------------------------------------------
+
+app.post('/api/incidents/:id/archive', authenticate, requireRole(['admin', 'manager', 'moderator']), async (req, res) => {
+  try {
+    const { reason } = req.body;
+    const incident = await Incident.findOne({ _id: req.params.id, organization: req.organization._id });
+    
+    if (!incident) return res.status(404).json({ error: 'Incident not found' });
+    if (incident.status !== 'closed') return res.status(400).json({ error: 'Only closed incidents can be archived' });
+    
+    // Create archive record
+    const archived = await ArchivedIncident.create({
+      organization: req.organization._id,
+      originalIncidentId: incident._id,
+      incidentNumber: incident.incidentNumber,
+      incidentData: incident.toObject(),
+      archivedBy: req.user._id,
+      archiveReason: reason,
+      retentionPeriod: 365 * 7, // 7 years for OSHA
+      deleteAfter: new Date(Date.now() + 365 * 7 * 24 * 60 * 60 * 1000)
+    });
+    
+    // Create lifecycle record
+    await IncidentLifecycle.create({
+      organization: req.organization._id,
+      incident: incident._id,
+      fromStatus: 'closed',
+      toStatus: 'archived',
+      performedBy: req.user._id,
+      action: 'archived',
+      comments: reason
+    });
+    
+    // Delete original (or mark as archived)
+    await Incident.findByIdAndDelete(incident._id);
+    
+    res.json({ archived, message: 'Incident archived successfully' });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to archive incident' });
+  }
+});
+
+app.get('/api/archived-incidents', authenticate, requireRole(['admin', 'manager']), async (req, res) => {
+  try {
+    const { page = 1, limit = 15 } = req.query;
+    const archived = await ArchivedIncident.find({ organization: req.organization._id })
+      .populate('archivedBy', 'firstName lastName')
+      .sort({ archivedAt: -1 })
+      .skip((page - 1) * limit)
+      .limit(parseInt(limit));
+    
+    const total = await ArchivedIncident.countDocuments({ organization: req.organization._id });
+    res.json({ archived, pagination: { page: parseInt(page), pages: Math.ceil(total / limit), total } });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to get archived incidents' });
+  }
+});
+
+app.post('/api/archived-incidents/:id/restore', authenticate, requireRole(['admin']), async (req, res) => {
+  try {
+    const archived = await ArchivedIncident.findOne({ _id: req.params.id, organization: req.organization._id });
+    if (!archived) return res.status(404).json({ error: 'Archived incident not found' });
+    if (!archived.canRestore) return res.status(400).json({ error: 'This incident cannot be restored' });
+    
+    // Restore incident
+    const incidentData = archived.incidentData;
+    delete incidentData._id;
+    incidentData.status = 'closed';
+    
+    const incident = await Incident.create(incidentData);
+    
+    // Update archive record
+    archived.restoredAt = new Date();
+    archived.restoredBy = req.user._id;
+    archived.canRestore = false;
+    await archived.save();
+    
+    res.json({ incident, message: 'Incident restored successfully' });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to restore incident' });
+  }
+});
+
+// -----------------------------------------------------------------------------
+// DOCUMENT UPLOAD ROUTES
+// -----------------------------------------------------------------------------
+
+app.post('/api/documents/upload', authenticate, upload.single('file'), async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+    
+    const doc = await DocumentUpload.create({
+      organization: req.organization._id,
+      filename: req.file.filename,
+      originalName: req.file.originalname,
+      mimeType: req.file.mimetype,
+      size: req.file.size,
+      documentType: req.body.documentType || 'other',
+      category: req.body.category,
+      entityType: req.body.entityType,
+      entityId: req.body.entityId,
+      title: req.body.title || req.file.originalname,
+      description: req.body.description,
+      tags: req.body.tags ? req.body.tags.split(',') : [],
+      isConfidential: req.body.isConfidential === 'true',
+      uploadedBy: req.user._id,
+      storagePath: req.file.path
+    });
+    
+    res.status(201).json({ document: doc });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to upload document' });
+  }
+});
+
+app.get('/api/documents', authenticate, async (req, res) => {
+  try {
+    const { entityType, entityId, documentType, page = 1, limit = 20 } = req.query;
+    const query = { organization: req.organization._id, isActive: true };
+    
+    if (entityType) query.entityType = entityType;
+    if (entityId) query.entityId = entityId;
+    if (documentType) query.documentType = documentType;
+    
+    const documents = await DocumentUpload.find(query)
+      .populate('uploadedBy', 'firstName lastName')
+      .sort({ uploadedAt: -1 })
+      .skip((page - 1) * limit)
+      .limit(parseInt(limit));
+    
+    const total = await DocumentUpload.countDocuments(query);
+    res.json({ documents, pagination: { page: parseInt(page), pages: Math.ceil(total / limit), total } });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to get documents' });
+  }
+});
+
+app.get('/api/documents/:id/download', authenticate, async (req, res) => {
+  try {
+    const doc = await DocumentUpload.findOne({ _id: req.params.id, organization: req.organization._id });
+    if (!doc) return res.status(404).json({ error: 'Document not found' });
+    
+    // Check access
+    if (doc.isConfidential && doc.accessLevel === 'restricted') {
+      if (!doc.allowedUsers.includes(req.user._id) && !doc.allowedRoles.includes(req.user.role)) {
+        return res.status(403).json({ error: 'Access denied' });
+      }
+    }
+    
+    const filePath = path.join(__dirname, doc.storagePath || 'uploads', doc.filename);
+    if (!fs.existsSync(filePath)) return res.status(404).json({ error: 'File not found' });
+    
+    res.download(filePath, doc.originalName);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to download document' });
+  }
+});
+
+app.delete('/api/documents/:id', authenticate, async (req, res) => {
+  try {
+    const doc = await DocumentUpload.findOne({ _id: req.params.id, organization: req.organization._id });
+    if (!doc) return res.status(404).json({ error: 'Document not found' });
+    
+    // Only uploader or admin can delete
+    if (!doc.uploadedBy.equals(req.user._id) && !['admin', 'superadmin'].includes(req.user.role)) {
+      return res.status(403).json({ error: 'Not authorized' });
+    }
+    
+    // Soft delete
+    doc.isActive = false;
+    doc.isArchived = true;
+    doc.archivedAt = new Date();
+    doc.archivedBy = req.user._id;
+    await doc.save();
+    
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to delete document' });
+  }
+});
+
+// Get documents for LTI/RI incidents
+app.get('/api/incidents/:id/documents', authenticate, async (req, res) => {
+  try {
+    const documents = await DocumentUpload.find({
+      organization: req.organization._id,
+      entityType: 'incident',
+      entityId: req.params.id,
+      isActive: true
+    }).populate('uploadedBy', 'firstName lastName').sort({ uploadedAt: -1 });
+    
+    res.json({ documents });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to get incident documents' });
+  }
+});
+
+// -----------------------------------------------------------------------------
+// USER PREFERENCES ROUTES
+// -----------------------------------------------------------------------------
+
+app.get('/api/preferences', authenticate, async (req, res) => {
+  try {
+    let prefs = await UserPreferences.findOne({ user: req.user._id });
+    if (!prefs) {
+      prefs = await UserPreferences.create({ user: req.user._id });
+    }
+    res.json({ preferences: prefs });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to get preferences' });
+  }
+});
+
+app.put('/api/preferences', authenticate, async (req, res) => {
+  try {
+    const prefs = await UserPreferences.findOneAndUpdate(
+      { user: req.user._id },
+      { ...req.body, updatedAt: new Date() },
+      { new: true, upsert: true }
+    );
+    res.json({ preferences: prefs });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to update preferences' });
+  }
+});
 
 // =============================================================================
 // DATABASE CONNECTION & SERVER START
