@@ -1616,26 +1616,62 @@ const auditLogSchema = new mongoose.Schema({
 // Notification Schema
 const notificationSchema = new mongoose.Schema({
   organization: { type: mongoose.Schema.Types.ObjectId, ref: 'Organization', required: true },
-  user: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+  recipient: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+  sender: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  
   type: {
     type: String,
-    enum: ['incident', 'action_item', 'inspection', 'training', 'document', 'system', 'reminder'],
+    enum: [
+      'incident', 'action_item', 'inspection', 'training', 'document', 'system', 'reminder',
+      'action_assigned', 'action_due_soon', 'action_overdue', 'action_completed', 'action_rejected',
+      'incident_assigned', 'incident_status_change', 'incident_comment', 'incident_needs_review',
+      'audit_assigned', 'audit_due_soon', 'audit_overdue', 'audit_completed',
+      'training_assigned', 'training_due_soon', 'training_overdue', 'training_completed',
+      'inspection_assigned', 'inspection_due_soon', 'inspection_completed',
+      'approval_needed', 'approval_granted', 'approval_rejected',
+      'mention', 'comment', 'document_shared', 'system_alert',
+      'icare_received', 'icare_followup_due',
+      'report_ready', 'export_ready'
+    ],
     required: true
   },
-  title: String,
+  
+  priority: { type: String, enum: ['low', 'normal', 'medium', 'high', 'urgent'], default: 'normal' },
+  
+  title: { type: String, required: true },
   message: String,
+  
+  // Related entity
+  entityType: { type: String, enum: ['incident', 'action', 'inspection', 'training', 'audit', 'document', 'icare', 'report', 'user'] },
+  entityId: { type: mongoose.Schema.Types.ObjectId },
+  entityNumber: String,
+  
+  // Links
   link: String,
-  priority: {
-    type: String,
-    enum: ['low', 'medium', 'high', 'urgent'],
-    default: 'medium'
-  },
+  actionUrl: String,
+  actionLabel: String,
+  
+  // Status
+  isRead: { type: Boolean, default: false },
   read: { type: Boolean, default: false },
   readAt: Date,
+  isDismissed: { type: Boolean, default: false },
+  dismissedAt: Date,
+  
+  // Email/Push notification status
   emailSent: { type: Boolean, default: false },
   emailSentAt: Date,
+  pushSent: { type: Boolean, default: false },
+  pushSentAt: Date,
+  
+  // Expiry
+  expiresAt: Date,
+  
   createdAt: { type: Date, default: Date.now }
 });
+
+notificationSchema.index({ recipient: 1, isRead: 1, createdAt: -1 });
+notificationSchema.index({ organization: 1, createdAt: -1 });
 
 // Custom Form Schema
 const customFormSchema = new mongoose.Schema({
@@ -3001,6 +3037,17 @@ const authenticate = async (req, res, next) => {
 const authorize = (...roles) => {
   return (req, res, next) => {
     if (!roles.includes(req.user.role)) {
+      return res.status(403).json({ error: 'Insufficient permissions' });
+    }
+    next();
+  };
+};
+
+// Role-based access control middleware (alternative syntax)
+const requireRole = (roles) => {
+  const roleArray = Array.isArray(roles) ? roles : [roles];
+  return (req, res, next) => {
+    if (!roleArray.includes(req.user.role)) {
       return res.status(403).json({ error: 'Insufficient permissions' });
     }
     next();
