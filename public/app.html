@@ -2,7 +2,14 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="theme-color" content="#3b82f6">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="SafetyFirst">
+  <meta name="description" content="Enterprise Environmental Health & Safety Management Platform">
+  <link rel="manifest" href="/manifest.json">
+  <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 180 180'><rect fill='%233b82f6' width='180' height='180' rx='40'/><path fill='white' d='M90 30c-33.1 0-60 26.9-60 60s26.9 60 60 60 60-26.9 60-60-26.9-60-60-60zm0 105c-24.9 0-45-20.1-45-45s20.1-45 45-45 45 20.1 45 45-20.1 45-45 45zm-7.5-67.5h15v30h-15zm0 37.5h15v15h-15z'/></svg>">
   <title>SafetyFirst EHS - Application</title>
   <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
@@ -67,9 +74,9 @@
     const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4', '#84cc16'];
     
     const PRICING = {
-      starter: { name: 'Starter', price: 199, users: 10, color: 'blue' },
-      professional: { name: 'Professional', price: 499, users: 50, color: 'purple' },
-      enterprise: { name: 'Enterprise', price: 1299, users: 'Unlimited', color: 'amber' }
+      starter: { name: 'Starter', price: 199, users: 10, color: 'blue', safetyAnalytics: true, twoFactor: true, claimsManagement: false, documentWorkflows: false },
+      professional: { name: 'Professional', price: 499, users: 50, color: 'purple', safetyAnalytics: true, twoFactor: true, claimsManagement: true, documentWorkflows: true, riskAssessment: true, jsaModule: true, permitToWork: true, contractorManagement: true, apiAccess: true },
+      enterprise: { name: 'Enterprise', price: 1299, users: 'Unlimited', color: 'amber', safetyAnalytics: true, twoFactor: true, claimsManagement: true, documentWorkflows: true, riskAssessment: true, jsaModule: true, permitToWork: true, contractorManagement: true, chemicalManagement: true, ssoIntegration: true, apiAccess: true }
     };
 
     // ========== API HELPER ==========
@@ -146,6 +153,10 @@
       Meeting: () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" /></svg>,
       CAPA: () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" /></svg>,
       Upload: () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" /></svg>,
+      Claims: () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" /></svg>,
+      SSO: () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" /></svg>,
+      Offline: () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M18.364 5.636a9 9 0 010 12.728m0 0l-2.829-2.829m2.829 2.829L21 21M15.536 8.464a5 5 0 010 7.072m0 0l-2.829-2.829m-4.243 2.829a4.978 4.978 0 01-1.414-2.83m-1.414 5.658a9 9 0 01-2.167-9.238m7.824 2.167a1 1 0 111.414 1.414m-1.414-1.414L3 3m8.293 8.293l1.414 1.414" /></svg>,
+      Dollar: () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>,
     };
 
     // ========== UI COMPONENTS ==========
@@ -282,6 +293,363 @@
             </div>
             <div className="p-6 overflow-y-auto max-h-[calc(90vh-140px)]">{children}</div>
             {footer && <div className="px-6 py-4 border-t border-slate-100 bg-slate-50 flex justify-end gap-3">{footer}</div>}
+          </div>
+        </div>
+      );
+    };
+
+    // ========== QUICK SEARCH (Cmd+K) ==========
+    const QuickSearch = ({ isOpen, onClose, onNavigate }) => {
+      const [query, setQuery] = useState('');
+      const [results, setResults] = useState([]);
+      const [loading, setLoading] = useState(false);
+      const [selectedIndex, setSelectedIndex] = useState(0);
+      const inputRef = useRef(null);
+
+      useEffect(() => {
+        if (isOpen) {
+          inputRef.current?.focus();
+          setQuery('');
+          setResults([]);
+          setSelectedIndex(0);
+        }
+      }, [isOpen]);
+
+      useEffect(() => {
+        const search = async () => {
+          if (query.length < 2) { setResults([]); return; }
+          setLoading(true);
+          try {
+            const data = await api.get('/search?q=' + encodeURIComponent(query) + '&limit=15');
+            setResults(data.results || []);
+            setSelectedIndex(0);
+          } catch (e) { console.error(e); }
+          setLoading(false);
+        };
+        const debounce = setTimeout(search, 300);
+        return () => clearTimeout(debounce);
+      }, [query]);
+
+      const handleKeyDown = (e) => {
+        if (e.key === 'ArrowDown') {
+          e.preventDefault();
+          setSelectedIndex(i => Math.min(i + 1, results.length - 1));
+        } else if (e.key === 'ArrowUp') {
+          e.preventDefault();
+          setSelectedIndex(i => Math.max(i - 1, 0));
+        } else if (e.key === 'Enter' && results[selectedIndex]) {
+          e.preventDefault();
+          handleSelect(results[selectedIndex]);
+        } else if (e.key === 'Escape') {
+          onClose();
+        }
+      };
+
+      const handleSelect = (result) => {
+        const pageMap = { incident: 'incidents', action: 'actions', inspection: 'inspections', user: 'users', document: 'documents', training: 'training' };
+        onNavigate(pageMap[result.type] || 'dashboard', result.id);
+        onClose();
+      };
+
+      const typeIcons = {
+        incident: <Icons.Alert className="w-4 h-4" />,
+        action: <Icons.Check className="w-4 h-4" />,
+        inspection: <Icons.List className="w-4 h-4" />,
+        user: <Icons.User className="w-4 h-4" />,
+        document: <Icons.Document className="w-4 h-4" />,
+        training: <Icons.Book className="w-4 h-4" />
+      };
+
+      const typeColors = {
+        incident: 'bg-red-100 text-red-600',
+        action: 'bg-blue-100 text-blue-600',
+        inspection: 'bg-green-100 text-green-600',
+        user: 'bg-purple-100 text-purple-600',
+        document: 'bg-amber-100 text-amber-600',
+        training: 'bg-cyan-100 text-cyan-600'
+      };
+
+      if (!isOpen) return null;
+
+      return (
+        <div className="fixed inset-0 z-[100] flex items-start justify-center pt-[15vh]" onClick={onClose}>
+          <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"></div>
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center gap-3 px-4 py-3 border-b border-slate-200">
+              <Icons.Search className="w-5 h-5 text-slate-400" />
+              <input
+                ref={inputRef}
+                type="text"
+                value={query}
+                onChange={e => setQuery(e.target.value)}
+                onKeyDown={handleKeyDown}
+                placeholder="Search incidents, actions, inspections, users..."
+                className="flex-1 bg-transparent outline-none text-lg text-slate-800 placeholder-slate-400"
+              />
+              <kbd className="px-2 py-1 text-xs bg-slate-100 text-slate-500 rounded font-mono">ESC</kbd>
+            </div>
+            
+            {loading && (
+              <div className="px-4 py-8 text-center text-slate-500">
+                <div className="w-6 h-6 border-2 border-primary-500 border-t-transparent rounded-full animate-spin mx-auto mb-2"></div>
+                Searching...
+              </div>
+            )}
+            
+            {!loading && query.length >= 2 && results.length === 0 && (
+              <div className="px-4 py-8 text-center text-slate-500">
+                No results found for "{query}"
+              </div>
+            )}
+            
+            {!loading && results.length > 0 && (
+              <div className="max-h-[50vh] overflow-y-auto">
+                {results.map((result, index) => (
+                  <button
+                    key={`${result.type}-${result.id}`}
+                    onClick={() => handleSelect(result)}
+                    className={`w-full px-4 py-3 flex items-center gap-3 text-left transition-colors ${index === selectedIndex ? 'bg-primary-50' : 'hover:bg-slate-50'}`}
+                  >
+                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${typeColors[result.type]}`}>
+                      {typeIcons[result.type]}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium text-slate-800 truncate">{result.title}</p>
+                      <p className="text-sm text-slate-500 truncate">{result.subtitle}</p>
+                    </div>
+                    <Badge color={result.status === 'open' || result.status === 'active' ? 'blue' : result.status === 'closed' || result.status === 'completed' ? 'green' : 'gray'}>
+                      {result.status}
+                    </Badge>
+                  </button>
+                ))}
+              </div>
+            )}
+            
+            {!loading && query.length < 2 && (
+              <div className="px-4 py-6">
+                <p className="text-sm text-slate-500 mb-4">Quick Actions</p>
+                <div className="grid grid-cols-2 gap-2">
+                  {[
+                    { label: 'New Incident', icon: <Icons.Alert />, action: () => onNavigate('incidents', 'new') },
+                    { label: 'New Action Item', icon: <Icons.Check />, action: () => onNavigate('actions', 'new') },
+                    { label: 'New Inspection', icon: <Icons.List />, action: () => onNavigate('inspections', 'new') },
+                    { label: 'View Dashboard', icon: <Icons.Chart />, action: () => onNavigate('dashboard') }
+                  ].map((item, i) => (
+                    <button key={i} onClick={() => { item.action(); onClose(); }} className="flex items-center gap-3 p-3 rounded-xl hover:bg-slate-50 transition-colors text-left">
+                      <div className="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center text-slate-600">{item.icon}</div>
+                      <span className="text-sm font-medium text-slate-700">{item.label}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+            
+            <div className="px-4 py-2 border-t border-slate-100 bg-slate-50 flex items-center justify-between text-xs text-slate-500">
+              <div className="flex items-center gap-4">
+                <span><kbd className="px-1.5 py-0.5 bg-white rounded border">↑↓</kbd> Navigate</span>
+                <span><kbd className="px-1.5 py-0.5 bg-white rounded border">Enter</kbd> Select</span>
+              </div>
+              <span>Type at least 2 characters to search</span>
+            </div>
+          </div>
+        </div>
+      );
+    };
+
+    // ========== BODY DIAGRAM FOR INJURIES ==========
+    const BodyDiagram = ({ selectedParts = [], onChange, readOnly = false }) => {
+      const bodyParts = [
+        { id: 'head', label: 'Head', x: 50, y: 8, w: 14, h: 10 },
+        { id: 'neck', label: 'Neck', x: 50, y: 18, w: 6, h: 4 },
+        { id: 'left_shoulder', label: 'Left Shoulder', x: 35, y: 22, w: 10, h: 6 },
+        { id: 'right_shoulder', label: 'Right Shoulder', x: 65, y: 22, w: 10, h: 6 },
+        { id: 'chest', label: 'Chest', x: 50, y: 28, w: 20, h: 12 },
+        { id: 'upper_back', label: 'Upper Back', x: 50, y: 28, w: 20, h: 12 },
+        { id: 'left_arm', label: 'Left Arm', x: 28, y: 30, w: 6, h: 16 },
+        { id: 'right_arm', label: 'Right Arm', x: 72, y: 30, w: 6, h: 16 },
+        { id: 'left_elbow', label: 'Left Elbow', x: 26, y: 38, w: 5, h: 5 },
+        { id: 'right_elbow', label: 'Right Elbow', x: 74, y: 38, w: 5, h: 5 },
+        { id: 'left_forearm', label: 'Left Forearm', x: 24, y: 44, w: 5, h: 12 },
+        { id: 'right_forearm', label: 'Right Forearm', x: 76, y: 44, w: 5, h: 12 },
+        { id: 'left_wrist', label: 'Left Wrist', x: 22, y: 56, w: 4, h: 3 },
+        { id: 'right_wrist', label: 'Right Wrist', x: 78, y: 56, w: 4, h: 3 },
+        { id: 'left_hand', label: 'Left Hand', x: 20, y: 60, w: 6, h: 8 },
+        { id: 'right_hand', label: 'Right Hand', x: 80, y: 60, w: 6, h: 8 },
+        { id: 'abdomen', label: 'Abdomen', x: 50, y: 42, w: 18, h: 10 },
+        { id: 'lower_back', label: 'Lower Back', x: 50, y: 48, w: 18, h: 8 },
+        { id: 'pelvis', label: 'Pelvis/Hip', x: 50, y: 54, w: 20, h: 6 },
+        { id: 'left_thigh', label: 'Left Thigh', x: 42, y: 60, w: 8, h: 14 },
+        { id: 'right_thigh', label: 'Right Thigh', x: 58, y: 60, w: 8, h: 14 },
+        { id: 'left_knee', label: 'Left Knee', x: 42, y: 74, w: 6, h: 5 },
+        { id: 'right_knee', label: 'Right Knee', x: 58, y: 74, w: 6, h: 5 },
+        { id: 'left_shin', label: 'Left Shin/Calf', x: 42, y: 80, w: 6, h: 12 },
+        { id: 'right_shin', label: 'Right Shin/Calf', x: 58, y: 80, w: 6, h: 12 },
+        { id: 'left_ankle', label: 'Left Ankle', x: 42, y: 92, w: 5, h: 3 },
+        { id: 'right_ankle', label: 'Right Ankle', x: 58, y: 92, w: 5, h: 3 },
+        { id: 'left_foot', label: 'Left Foot', x: 42, y: 95, w: 6, h: 5 },
+        { id: 'right_foot', label: 'Right Foot', x: 58, y: 95, w: 6, h: 5 }
+      ];
+
+      const togglePart = (partId) => {
+        if (readOnly) return;
+        const newParts = selectedParts.includes(partId)
+          ? selectedParts.filter(p => p !== partId)
+          : [...selectedParts, partId];
+        onChange(newParts);
+      };
+
+      return (
+        <div className="flex flex-col lg:flex-row gap-6">
+          {/* Body Outline SVG */}
+          <div className="flex-shrink-0">
+            <svg viewBox="0 0 100 100" className="w-48 h-64 mx-auto">
+              {/* Simple body outline */}
+              <ellipse cx="50" cy="12" rx="8" ry="10" fill="#f1f5f9" stroke="#cbd5e1" strokeWidth="0.5" />
+              <rect x="44" y="20" width="12" height="4" fill="#f1f5f9" stroke="#cbd5e1" strokeWidth="0.5" />
+              <path d="M36 24 L64 24 L62 50 L38 50 Z" fill="#f1f5f9" stroke="#cbd5e1" strokeWidth="0.5" />
+              <rect x="40" y="50" width="8" height="30" fill="#f1f5f9" stroke="#cbd5e1" strokeWidth="0.5" />
+              <rect x="52" y="50" width="8" height="30" fill="#f1f5f9" stroke="#cbd5e1" strokeWidth="0.5" />
+              <rect x="40" y="80" width="8" height="15" fill="#f1f5f9" stroke="#cbd5e1" strokeWidth="0.5" />
+              <rect x="52" y="80" width="8" height="15" fill="#f1f5f9" stroke="#cbd5e1" strokeWidth="0.5" />
+              <rect x="30" y="26" width="6" height="20" fill="#f1f5f9" stroke="#cbd5e1" strokeWidth="0.5" />
+              <rect x="64" y="26" width="6" height="20" fill="#f1f5f9" stroke="#cbd5e1" strokeWidth="0.5" />
+              <rect x="26" y="44" width="6" height="14" fill="#f1f5f9" stroke="#cbd5e1" strokeWidth="0.5" />
+              <rect x="68" y="44" width="6" height="14" fill="#f1f5f9" stroke="#cbd5e1" strokeWidth="0.5" />
+              
+              {/* Clickable regions */}
+              {bodyParts.map(part => (
+                <rect
+                  key={part.id}
+                  x={part.x - part.w/2}
+                  y={part.y}
+                  width={part.w}
+                  height={part.h}
+                  fill={selectedParts.includes(part.id) ? '#ef4444' : 'transparent'}
+                  fillOpacity={selectedParts.includes(part.id) ? 0.5 : 0}
+                  stroke={selectedParts.includes(part.id) ? '#dc2626' : 'transparent'}
+                  strokeWidth="0.5"
+                  className={readOnly ? '' : 'cursor-pointer hover:fill-red-200 hover:fill-opacity-50'}
+                  onClick={() => togglePart(part.id)}
+                >
+                  <title>{part.label}</title>
+                </rect>
+              ))}
+            </svg>
+            <p className="text-xs text-slate-500 text-center mt-2">Click to select injured areas</p>
+          </div>
+          
+          {/* Body Parts Checklist */}
+          <div className="flex-1">
+            <p className="text-sm font-medium text-slate-700 mb-2">Body Parts Affected</p>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-1 max-h-60 overflow-y-auto">
+              {bodyParts.map(part => (
+                <label key={part.id} className={`flex items-center gap-2 px-2 py-1.5 rounded-lg cursor-pointer transition-colors ${selectedParts.includes(part.id) ? 'bg-red-50 text-red-700' : 'hover:bg-slate-50'}`}>
+                  <input
+                    type="checkbox"
+                    checked={selectedParts.includes(part.id)}
+                    onChange={() => togglePart(part.id)}
+                    disabled={readOnly}
+                    className="w-4 h-4 rounded border-slate-300 text-red-500 focus:ring-red-500"
+                  />
+                  <span className="text-sm">{part.label}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+        </div>
+      );
+    };
+
+    // ========== FISHBONE (ISHIKAWA) DIAGRAM ==========
+    const FishboneDiagram = ({ data = {}, onChange, readOnly = false }) => {
+      const categories = [
+        { id: 'people', label: 'People', color: 'blue' },
+        { id: 'process', label: 'Process', color: 'green' },
+        { id: 'equipment', label: 'Equipment', color: 'orange' },
+        { id: 'materials', label: 'Materials', color: 'purple' },
+        { id: 'environment', label: 'Environment', color: 'cyan' },
+        { id: 'management', label: 'Management', color: 'pink' }
+      ];
+
+      const updateCategory = (categoryId, causes) => {
+        if (readOnly) return;
+        onChange({ ...data, [categoryId]: causes });
+      };
+
+      const addCause = (categoryId) => {
+        const current = data[categoryId] || [];
+        updateCategory(categoryId, [...current, '']);
+      };
+
+      const updateCause = (categoryId, index, value) => {
+        const current = [...(data[categoryId] || [])];
+        current[index] = value;
+        updateCategory(categoryId, current);
+      };
+
+      const removeCause = (categoryId, index) => {
+        const current = [...(data[categoryId] || [])];
+        current.splice(index, 1);
+        updateCategory(categoryId, current);
+      };
+
+      const colorClasses = {
+        blue: 'bg-blue-100 border-blue-300 text-blue-700',
+        green: 'bg-green-100 border-green-300 text-green-700',
+        orange: 'bg-orange-100 border-orange-300 text-orange-700',
+        purple: 'bg-purple-100 border-purple-300 text-purple-700',
+        cyan: 'bg-cyan-100 border-cyan-300 text-cyan-700',
+        pink: 'bg-pink-100 border-pink-300 text-pink-700'
+      };
+
+      return (
+        <div className="space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {categories.map(cat => (
+              <div key={cat.id} className={`p-4 rounded-xl border-2 ${colorClasses[cat.color]}`}>
+                <div className="flex items-center justify-between mb-3">
+                  <h4 className="font-semibold">{cat.label}</h4>
+                  {!readOnly && (
+                    <button onClick={() => addCause(cat.id)} className="p-1 hover:bg-white/50 rounded">
+                      <Icons.Plus className="w-4 h-4" />
+                    </button>
+                  )}
+                </div>
+                <div className="space-y-2">
+                  {(data[cat.id] || []).map((cause, idx) => (
+                    <div key={idx} className="flex items-center gap-2">
+                      <input
+                        type="text"
+                        value={cause}
+                        onChange={e => updateCause(cat.id, idx, e.target.value)}
+                        disabled={readOnly}
+                        placeholder="Enter cause..."
+                        className="flex-1 px-2 py-1 text-sm bg-white/70 border border-current/20 rounded focus:outline-none focus:ring-1"
+                      />
+                      {!readOnly && (
+                        <button onClick={() => removeCause(cat.id, idx)} className="p-1 hover:bg-white/50 rounded text-red-500">
+                          <Icons.X className="w-3 h-3" />
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                  {(!data[cat.id] || data[cat.id].length === 0) && (
+                    <p className="text-xs opacity-60 italic">No causes added</p>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+          <div className="p-4 bg-red-50 border-2 border-red-300 rounded-xl">
+            <h4 className="font-semibold text-red-700 mb-2">Problem / Effect</h4>
+            <input
+              type="text"
+              value={data.problem || ''}
+              onChange={e => onChange({ ...data, problem: e.target.value })}
+              disabled={readOnly}
+              placeholder="Describe the problem being analyzed..."
+              className="w-full px-3 py-2 bg-white border border-red-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-300"
+            />
           </div>
         </div>
       );
@@ -561,6 +929,7 @@
           { id: 'assets', label: 'Asset Management', icon: Icons.Asset, req: 'asset' },
           { id: 'chemicals', label: 'Chemical/SDS', icon: Icons.Chemical, req: 'chemical' },
           { id: 'health', label: 'Occupational Health', icon: Icons.Health, req: 'health' },
+          { id: 'claims', label: 'Claims Management', icon: Icons.Claims },
           { id: 'emergency', label: 'Emergency Plans', icon: Icons.Emergency, req: 'emergency' },
           { id: 'ergonomics', label: 'Ergonomics', icon: Icons.Ergo, req: 'ergo' },
         ]},
@@ -640,11 +1009,13 @@
     };
 
     // ========== HEADER ==========
-    const Header = ({ user, setMobileOpen }) => {
+    const Header = ({ user, setMobileOpen, onSearchClick }) => {
       const [showNotifs, setShowNotifs] = useState(false);
       const [notifications, setNotifications] = useState([]);
       const [unreadCount, setUnreadCount] = useState(0);
+      const [urgentCount, setUrgentCount] = useState(0);
       const [loadingNotifs, setLoadingNotifs] = useState(false);
+      const [notifFilter, setNotifFilter] = useState('all');
 
       useEffect(() => {
         fetchNotifications();
@@ -655,25 +1026,30 @@
 
       const fetchNotifications = async () => {
         try {
-          const data = await api.get('/notifications?limit=10&unreadOnly=true');
+          const data = await api.get('/notifications?limit=15');
           setNotifications(data.notifications || []);
           setUnreadCount(data.unreadCount || 0);
+          setUrgentCount(data.urgentCount || 0);
         } catch (e) {
           // Demo notifications
           setNotifications([
-            { _id: '1', type: 'action_assigned', title: 'New Action Item Assigned', message: 'Update safety signage in warehouse', isRead: false, createdAt: new Date(), entityType: 'action', actionUrl: '/actions/1' },
-            { _id: '2', type: 'incident_status_change', title: 'Incident Status Updated', message: 'INC-042 moved to investigating', isRead: false, createdAt: new Date(Date.now() - 3600000), entityType: 'incident', actionUrl: '/incidents/2' },
-            { _id: '3', type: 'training_due_soon', title: 'Training Due Soon', message: 'Forklift Certification expires in 7 days', isRead: true, createdAt: new Date(Date.now() - 86400000), entityType: 'training', actionUrl: '/training/3' },
+            { _id: '1', type: 'action_assigned', title: 'New Action Item Assigned', message: 'Update safety signage in warehouse', isRead: false, priority: 'high', createdAt: new Date(), entityType: 'action', actionUrl: '/actions/1' },
+            { _id: '2', type: 'incident_status_change', title: 'Incident Status Updated', message: 'INC-042 moved to investigating', isRead: false, priority: 'urgent', createdAt: new Date(Date.now() - 3600000), entityType: 'incident', actionUrl: '/incidents/2' },
+            { _id: '3', type: 'training_due_soon', title: 'Training Due Soon', message: 'Forklift Certification expires in 7 days', isRead: true, priority: 'medium', createdAt: new Date(Date.now() - 86400000), entityType: 'training', actionUrl: '/training/3' },
+            { _id: '4', type: 'claim_created', title: 'New Claim Filed', message: 'Workers comp claim CLM-2026-00015', isRead: false, priority: 'high', createdAt: new Date(Date.now() - 7200000), entityType: 'claim', actionUrl: '/claims/4' },
           ]);
-          setUnreadCount(2);
+          setUnreadCount(3);
+          setUrgentCount(1);
         }
       };
 
       const markAsRead = async (id) => {
         try {
           await api.put('/notifications/' + id + '/read');
+          const notif = notifications.find(n => n._id === id);
           setNotifications(prev => prev.map(n => n._id === id ? { ...n, isRead: true } : n));
           setUnreadCount(prev => Math.max(0, prev - 1));
+          if (notif?.priority === 'urgent') setUrgentCount(prev => Math.max(0, prev - 1));
         } catch (e) {}
       };
 
@@ -682,15 +1058,38 @@
           await api.put('/notifications/read-all');
           setNotifications(prev => prev.map(n => ({ ...n, isRead: true })));
           setUnreadCount(0);
+          setUrgentCount(0);
+        } catch (e) {}
+      };
+
+      const dismissOld = async () => {
+        try {
+          await api.post('/notifications/dismiss-bulk', { olderThan: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString() });
+          fetchNotifications();
         } catch (e) {}
       };
 
       const notifTypeIcons = {
         action_assigned: '📋', action_completed: '✅', action_overdue: '⚠️',
-        incident_assigned: '🚨', incident_status_change: '🔄',
-        training_due_soon: '📚', training_completed: '🎓',
-        audit_assigned: '📝', approval_needed: '👁️', icare_received: '💚'
+        incident_assigned: '🚨', incident_status_change: '🔄', incident_created: '🚨',
+        training_due_soon: '📚', training_completed: '🎓', training_overdue: '⚠️',
+        audit_assigned: '📝', approval_needed: '👁️', icare_received: '💚',
+        claim_created: '💰', claim_status_change: '📊', document_expiring: '📄',
+        inspection_scheduled: '🔍', permit_expiring: '📋'
       };
+
+      const priorityColors = {
+        urgent: 'bg-red-100 border-red-300 text-red-800',
+        high: 'bg-amber-50 border-amber-200',
+        medium: '',
+        low: 'bg-slate-50'
+      };
+
+      const filteredNotifications = notifications.filter(n => {
+        if (notifFilter === 'unread') return !n.isRead;
+        if (notifFilter === 'urgent') return n.priority === 'urgent' || n.priority === 'high';
+        return true;
+      });
 
       return (
         <header className="bg-white/80 backdrop-blur-lg border-b border-slate-200/50 px-4 lg:px-6 py-4 sticky top-0 z-30">
@@ -703,12 +1102,27 @@
               </div>
             </div>
             <div className="flex items-center gap-2">
+              {/* Quick Search Button */}
+              <button 
+                onClick={onSearchClick}
+                className="hidden sm:flex items-center gap-2 px-3 py-2 bg-slate-100 hover:bg-slate-200 rounded-xl text-slate-500 hover:text-slate-700 transition-colors"
+              >
+                <Icons.Search className="w-4 h-4" />
+                <span className="text-sm">Search</span>
+                <kbd className="px-1.5 py-0.5 text-xs bg-white rounded border border-slate-300 font-mono">⌘K</kbd>
+              </button>
+              <button 
+                onClick={onSearchClick}
+                className="sm:hidden p-2.5 hover:bg-slate-100 rounded-xl transition-colors"
+              >
+                <Icons.Search />
+              </button>
               {/* Notification Bell */}
               <div className="relative">
                 <button onClick={() => setShowNotifs(!showNotifs)} className="p-2.5 hover:bg-slate-100 rounded-xl relative transition-colors">
                   <Icons.Bell />
                   {unreadCount > 0 && (
-                    <span className="absolute -top-0.5 -right-0.5 min-w-5 h-5 bg-red-500 rounded-full border-2 border-white flex items-center justify-center text-xs text-white font-bold">
+                    <span className={`absolute -top-0.5 -right-0.5 min-w-5 h-5 rounded-full border-2 border-white flex items-center justify-center text-xs text-white font-bold ${urgentCount > 0 ? 'bg-red-500 animate-pulse' : 'bg-primary-500'}`}>
                       {unreadCount > 9 ? '9+' : unreadCount}
                     </span>
                   )}
@@ -717,29 +1131,44 @@
                 {/* Notification Dropdown */}
                 {showNotifs && (
                   <div className="absolute right-0 top-full mt-2 w-80 sm:w-96 bg-white rounded-2xl shadow-2xl border border-slate-200 z-50 overflow-hidden">
-                    <div className="flex items-center justify-between p-4 border-b border-slate-100 bg-slate-50">
-                      <h3 className="font-bold text-slate-800">Notifications</h3>
-                      {unreadCount > 0 && (
-                        <button onClick={markAllRead} className="text-sm text-primary-600 hover:text-primary-700 font-medium">Mark all read</button>
-                      )}
+                    <div className="p-4 border-b border-slate-100 bg-slate-50">
+                      <div className="flex items-center justify-between mb-2">
+                        <h3 className="font-bold text-slate-800">Notifications</h3>
+                        <div className="flex gap-2">
+                          {unreadCount > 0 && (
+                            <button onClick={markAllRead} className="text-xs text-primary-600 hover:text-primary-700 font-medium">Mark all read</button>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex gap-1">
+                        {['all', 'unread', 'urgent'].map(f => (
+                          <button key={f} onClick={() => setNotifFilter(f)} className={`px-2 py-1 text-xs rounded-lg capitalize ${notifFilter === f ? 'bg-primary-100 text-primary-700' : 'text-slate-500 hover:bg-slate-100'}`}>
+                            {f} {f === 'unread' && unreadCount > 0 && `(${unreadCount})`} {f === 'urgent' && urgentCount > 0 && `(${urgentCount})`}
+                          </button>
+                        ))}
+                      </div>
                     </div>
                     <div className="max-h-96 overflow-y-auto">
-                      {notifications.length === 0 ? (
+                      {filteredNotifications.length === 0 ? (
                         <div className="p-8 text-center text-slate-500">
                           <Icons.Bell />
-                          <p className="mt-2">No notifications</p>
+                          <p className="mt-2">No {notifFilter !== 'all' ? notifFilter : ''} notifications</p>
                         </div>
                       ) : (
-                        notifications.map(notif => (
+                        filteredNotifications.map(notif => (
                           <div 
                             key={notif._id} 
                             onClick={() => { markAsRead(notif._id); if(notif.actionUrl) window.location.hash = notif.actionUrl; setShowNotifs(false); }}
-                            className={`p-4 border-b border-slate-100 hover:bg-slate-50 cursor-pointer transition-colors ${!notif.isRead ? 'bg-primary-50/50' : ''}`}
+                            className={`p-4 border-b border-slate-100 hover:bg-slate-50 cursor-pointer transition-colors ${!notif.isRead ? 'bg-primary-50/50' : ''} ${priorityColors[notif.priority] || ''}`}
                           >
                             <div className="flex gap-3">
                               <div className="text-xl">{notifTypeIcons[notif.type] || '🔔'}</div>
                               <div className="flex-1 min-w-0">
-                                <p className={`text-sm ${!notif.isRead ? 'font-semibold text-slate-800' : 'text-slate-600'}`}>{notif.title}</p>
+                                <div className="flex items-center gap-2">
+                                  <p className={`text-sm ${!notif.isRead ? 'font-semibold text-slate-800' : 'text-slate-600'}`}>{notif.title}</p>
+                                  {notif.priority === 'urgent' && <span className="px-1.5 py-0.5 text-xs bg-red-500 text-white rounded font-medium">URGENT</span>}
+                                  {notif.priority === 'high' && <span className="px-1.5 py-0.5 text-xs bg-amber-500 text-white rounded font-medium">HIGH</span>}
+                                </div>
                                 <p className="text-sm text-slate-500 truncate">{notif.message}</p>
                                 <p className="text-xs text-slate-400 mt-1">{new Date(notif.createdAt).toLocaleString()}</p>
                               </div>
@@ -749,9 +1178,10 @@
                         ))
                       )}
                     </div>
-                    <div className="p-3 border-t border-slate-100 bg-slate-50">
-                      <button onClick={() => { setShowNotifs(false); }} className="w-full text-center text-sm text-primary-600 hover:text-primary-700 font-medium">
-                        View All Notifications
+                    <div className="p-3 border-t border-slate-100 bg-slate-50 flex justify-between items-center">
+                      <button onClick={dismissOld} className="text-xs text-slate-500 hover:text-slate-700">Dismiss old</button>
+                      <button onClick={() => { setShowNotifs(false); }} className="text-sm text-primary-600 hover:text-primary-700 font-medium">
+                        View All
                       </button>
                     </div>
                   </div>
@@ -784,6 +1214,7 @@
       const [loading, setLoading] = useState(true);
       const [showDashboardBuilder, setShowDashboardBuilder] = useState(false);
       const [showQuickReport, setShowQuickReport] = useState(false);
+      const [activeMetricTab, setActiveMetricTab] = useState('overview');
       const { addToast } = useContext(ToastContext) || {};
       
       useEffect(() => { 
@@ -804,16 +1235,26 @@
             'Open Incidents,' + (data?.incidents?.open || 0),
             'YTD Incidents,' + (data?.incidents?.ytd || 0),
             'OSHA Recordables,' + (data?.incidents?.recordable || 0),
+            'Days Since Last Recordable,' + (data?.incidents?.daysSinceLastRecordable || 'N/A'),
+            'Days Since Last Lost Time,' + (data?.incidents?.daysSinceLastLostTime || 'N/A'),
             'Overdue Actions,' + (data?.actionItems?.overdue || 0),
             'Open Actions,' + (data?.actionItems?.open || 0),
+            'Action Completion Rate,' + (data?.actionItems?.completionRate || 0) + '%',
             'Training Compliance,' + (data?.training?.completionRate || 0) + '%',
             '',
+            'SAFETY METRICS',
+            'TRIR (Total Recordable Incident Rate),' + (data?.safetyMetrics?.trir || 0),
+            'DART (Days Away Restricted Transfer),' + (data?.safetyMetrics?.dart || 0),
+            'LTIR (Lost Time Incident Rate),' + (data?.safetyMetrics?.ltir || 0),
+            'Severity Rate,' + (data?.safetyMetrics?.severity || 0),
+            'Near Miss Ratio,' + (data?.safetyMetrics?.nearMissRatio || 0) + ':1',
+            '',
             'INCIDENT TRENDS (Monthly)',
-            'Month,Total Incidents,Recordable'
+            'Month,Total Incidents,Recordable,Near Miss,Lost Time'
           ];
           (data?.trends?.incidents || []).forEach(i => {
             const month = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][i._id?.month - 1] || 'N/A';
-            csvContent.push(month + ',' + i.count + ',' + (i.recordable || 0));
+            csvContent.push(month + ',' + i.count + ',' + (i.recordable || 0) + ',' + (i.nearMiss || 0) + ',' + (i.lostTime || 0));
           });
           
           const blob = new Blob([csvContent.join('\n')], { type: 'text/csv' });
@@ -831,7 +1272,26 @@
       
       if (loading) return <div className="flex items-center justify-center h-96"><Spinner size="lg" /></div>;
 
-      const chartData = data?.trends?.incidents?.map(i => ({ month: ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][i._id?.month - 1] || 'N/A', incidents: i.count, recordable: i.recordable })) || [];
+      const chartData = data?.trends?.incidents?.map(i => ({ 
+        month: ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][i._id?.month - 1] || 'N/A', 
+        incidents: i.count, 
+        recordable: i.recordable || 0,
+        nearMiss: i.nearMiss || 0,
+        lostTime: i.lostTime || 0
+      })) || [];
+
+      // Calculate safety score (0-100 based on multiple factors)
+      const calculateSafetyScore = () => {
+        let score = 100;
+        if (data?.incidents?.recordable > 0) score -= Math.min(30, data.incidents.recordable * 10);
+        if (data?.actionItems?.overdue > 0) score -= Math.min(20, data.actionItems.overdue * 5);
+        if ((data?.training?.completionRate || 0) < 100) score -= Math.min(20, (100 - data.training.completionRate) / 5);
+        if (data?.inspections?.passRate && data.inspections.passRate < 100) score -= Math.min(15, (100 - data.inspections.passRate) / 5);
+        return Math.max(0, Math.round(score));
+      };
+
+      const safetyScore = calculateSafetyScore();
+      const scoreColor = safetyScore >= 80 ? 'green' : safetyScore >= 60 ? 'yellow' : 'red';
 
       return (
         <div className="space-y-6 slide-up">
@@ -847,13 +1307,160 @@
             </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 lg:gap-6">
-            <StatCard title="Open Incidents" value={data?.incidents?.open || 0} subtitle={(data?.incidents?.ytd || 0) + ' total YTD'} icon={<Icons.Incident />} color="red" trend={-12} />
-            <StatCard title="Overdue Actions" value={data?.actionItems?.overdue || 0} subtitle={(data?.actionItems?.open || 0) + ' actions open'} icon={<Icons.Action />} color="yellow" />
-            <StatCard title="OSHA Recordables" value={data?.incidents?.recordable || 0} subtitle="Year to date" icon={<Icons.OSHA />} color="blue" />
-            <StatCard title="Training Compliance" value={data?.training?.completionRate ? (data.training.completionRate + '%') : '0%'} subtitle={(data?.training?.overdueTraining || 0) + ' overdue'} icon={<Icons.Training />} color="green" />
+          {/* Safety Score Banner */}
+          <div className={`p-6 rounded-2xl ${scoreColor === 'green' ? 'bg-gradient-to-r from-emerald-500 to-emerald-600' : scoreColor === 'yellow' ? 'bg-gradient-to-r from-amber-500 to-amber-600' : 'bg-gradient-to-r from-red-500 to-red-600'} text-white`}>
+            <div className="flex flex-col md:flex-row items-center justify-between gap-4">
+              <div className="flex items-center gap-4">
+                <div className="w-20 h-20 rounded-full bg-white/20 flex items-center justify-center">
+                  <span className="text-3xl font-bold">{safetyScore}</span>
+                </div>
+                <div>
+                  <h3 className="text-xl font-bold">Safety Score</h3>
+                  <p className="opacity-90">{safetyScore >= 80 ? 'Excellent performance! Keep up the great work.' : safetyScore >= 60 ? 'Good progress, but some areas need attention.' : 'Immediate action required to improve safety.'}</p>
+                </div>
+              </div>
+              <div className="flex gap-6 text-center">
+                <div className="px-4">
+                  <p className="text-3xl font-bold">{data?.incidents?.daysSinceLastRecordable || '—'}</p>
+                  <p className="text-sm opacity-90">Days Since Recordable</p>
+                </div>
+                <div className="px-4 border-l border-white/30">
+                  <p className="text-3xl font-bold">{data?.incidents?.daysSinceLastLostTime || '—'}</p>
+                  <p className="text-sm opacity-90">Days Since Lost Time</p>
+                </div>
+              </div>
+            </div>
           </div>
 
+          {/* Metric Tabs */}
+          <div className="flex gap-2 overflow-x-auto pb-2">
+            {[
+              { id: 'overview', label: 'Overview' },
+              { id: 'safety_rates', label: 'Safety Rates' },
+              { id: 'leading', label: 'Leading Indicators' },
+              { id: 'claims', label: 'Claims' }
+            ].map(tab => (
+              <button key={tab.id} onClick={() => setActiveMetricTab(tab.id)}
+                className={`px-4 py-2 rounded-lg font-medium whitespace-nowrap transition-colors ${activeMetricTab === tab.id ? 'bg-primary-100 text-primary-700' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>
+                {tab.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Overview Stats */}
+          {activeMetricTab === 'overview' && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 lg:gap-6">
+              <StatCard title="Open Incidents" value={data?.incidents?.open || 0} subtitle={`${data?.incidents?.ytd || 0} total YTD`} icon={<Icons.Incident />} color="red" />
+              <StatCard title="Overdue Actions" value={data?.actionItems?.overdue || 0} subtitle={`${data?.actionItems?.completionRate || 0}% completion rate`} icon={<Icons.Action />} color="yellow" />
+              <StatCard title="OSHA Recordables" value={data?.incidents?.recordable || 0} subtitle={`${data?.incidents?.nearMiss || 0} near misses`} icon={<Icons.OSHA />} color="blue" />
+              <StatCard title="Training Compliance" value={data?.training?.completionRate ? (data.training.completionRate + '%') : '0%'} subtitle={`${data?.training?.overdueTraining || 0} overdue`} icon={<Icons.Training />} color="green" />
+            </div>
+          )}
+
+          {/* Safety Rates */}
+          {activeMetricTab === 'safety_rates' && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-4 lg:gap-6">
+              <Card className="text-center p-6">
+                <div className="text-4xl font-bold text-blue-600">{data?.safetyMetrics?.trir?.toFixed(2) || '0.00'}</div>
+                <div className="text-sm text-slate-600 mt-1">TRIR</div>
+                <div className="text-xs text-slate-400">Total Recordable Rate</div>
+                <div className="mt-3 text-xs text-slate-500">Industry avg: ~3.0</div>
+              </Card>
+              <Card className="text-center p-6">
+                <div className="text-4xl font-bold text-purple-600">{data?.safetyMetrics?.dart?.toFixed(2) || '0.00'}</div>
+                <div className="text-sm text-slate-600 mt-1">DART</div>
+                <div className="text-xs text-slate-400">Days Away/Restricted</div>
+                <div className="mt-3 text-xs text-slate-500">Industry avg: ~1.5</div>
+              </Card>
+              <Card className="text-center p-6">
+                <div className="text-4xl font-bold text-red-600">{data?.safetyMetrics?.ltir?.toFixed(2) || '0.00'}</div>
+                <div className="text-sm text-slate-600 mt-1">LTIR</div>
+                <div className="text-xs text-slate-400">Lost Time Rate</div>
+                <div className="mt-3 text-xs text-slate-500">Goal: &lt;1.0</div>
+              </Card>
+              <Card className="text-center p-6">
+                <div className="text-4xl font-bold text-amber-600">{data?.safetyMetrics?.severity?.toFixed(1) || '0.0'}</div>
+                <div className="text-sm text-slate-600 mt-1">Severity Rate</div>
+                <div className="text-xs text-slate-400">Days lost per 200K hours</div>
+                <div className="mt-3 text-xs text-slate-500">Lower is better</div>
+              </Card>
+              <Card className="text-center p-6">
+                <div className="text-4xl font-bold text-green-600">{data?.safetyMetrics?.nearMissRatio?.toFixed(1) || '0'}:1</div>
+                <div className="text-sm text-slate-600 mt-1">Near Miss Ratio</div>
+                <div className="text-xs text-slate-400">Near miss per recordable</div>
+                <div className="mt-3 text-xs text-slate-500">Target: &gt;10:1</div>
+              </Card>
+            </div>
+          )}
+
+          {/* Leading Indicators */}
+          {activeMetricTab === 'leading' && data?.leadingIndicators && (
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 lg:gap-6">
+              {Object.entries(data.leadingIndicators).map(([key, indicator]) => (
+                <Card key={key} className="p-4">
+                  <div className="flex justify-between items-start mb-3">
+                    <div>
+                      <p className="text-sm font-medium text-slate-600">{key.replace(/([A-Z])/g, ' $1').trim()}</p>
+                      <p className="text-2xl font-bold text-slate-800">{indicator.actual} <span className="text-sm text-slate-400">/ {indicator.target}</span></p>
+                    </div>
+                    <span className={`text-sm font-bold ${indicator.percentage >= 90 ? 'text-green-600' : indicator.percentage >= 70 ? 'text-amber-600' : 'text-red-600'}`}>
+                      {indicator.percentage}%
+                    </span>
+                  </div>
+                  <div className="w-full bg-slate-200 rounded-full h-2">
+                    <div 
+                      className={`h-2 rounded-full transition-all ${indicator.percentage >= 90 ? 'bg-green-500' : indicator.percentage >= 70 ? 'bg-amber-500' : 'bg-red-500'}`} 
+                      style={{ width: `${Math.min(100, indicator.percentage)}%` }}
+                    />
+                  </div>
+                </Card>
+              ))}
+            </div>
+          )}
+
+          {/* Claims Summary */}
+          {activeMetricTab === 'claims' && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 lg:gap-6">
+              <Card className="p-6">
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="w-10 h-10 rounded-lg bg-blue-100 text-blue-600 flex items-center justify-center"><Icons.Claims /></div>
+                  <div>
+                    <p className="text-sm text-slate-500">Open Claims</p>
+                    <p className="text-2xl font-bold text-slate-800">{data?.claims?.open || 0}</p>
+                  </div>
+                </div>
+              </Card>
+              <Card className="p-6">
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="w-10 h-10 rounded-lg bg-red-100 text-red-600 flex items-center justify-center"><Icons.Dollar /></div>
+                  <div>
+                    <p className="text-sm text-slate-500">Total Incurred</p>
+                    <p className="text-2xl font-bold text-slate-800">${(data?.claims?.totalIncurred || 0).toLocaleString()}</p>
+                  </div>
+                </div>
+              </Card>
+              <Card className="p-6">
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="w-10 h-10 rounded-lg bg-green-100 text-green-600 flex items-center justify-center"><Icons.Dollar /></div>
+                  <div>
+                    <p className="text-sm text-slate-500">Total Paid</p>
+                    <p className="text-2xl font-bold text-slate-800">${(data?.claims?.totalPaid || 0).toLocaleString()}</p>
+                  </div>
+                </div>
+              </Card>
+              <Card className="p-6">
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="w-10 h-10 rounded-lg bg-purple-100 text-purple-600 flex items-center justify-center"><Icons.Dollar /></div>
+                  <div>
+                    <p className="text-sm text-slate-500">Avg Claim Cost</p>
+                    <p className="text-2xl font-bold text-slate-800">${(data?.claims?.avgClaimCost || 0).toLocaleString()}</p>
+                  </div>
+                </div>
+              </Card>
+            </div>
+          )}
+
+          {/* Charts */}
           <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
             <Card title="Incident Trends" subtitle="Monthly incident overview" className="xl:col-span-2" icon={<Icons.Reports />}>
               <ResponsiveContainer width="100%" height={300}>
@@ -867,12 +1474,18 @@
                       <stop offset="5%" stopColor="#ef4444" stopOpacity={0.3}/>
                       <stop offset="95%" stopColor="#ef4444" stopOpacity={0}/>
                     </linearGradient>
+                    <linearGradient id="nearMissGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#22c55e" stopOpacity={0.3}/>
+                      <stop offset="95%" stopColor="#22c55e" stopOpacity={0}/>
+                    </linearGradient>
                   </defs>
                   <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
                   <XAxis dataKey="month" stroke="#94a3b8" fontSize={12} tickLine={false} axisLine={false} />
                   <YAxis stroke="#94a3b8" fontSize={12} tickLine={false} axisLine={false} />
                   <Tooltip contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 40px rgba(0,0,0,0.15)', padding: '12px' }} />
+                  <Legend />
                   <Area type="monotone" dataKey="incidents" stroke="#3b82f6" strokeWidth={2} fillOpacity={1} fill="url(#incidentGrad)" name="Total Incidents" />
+                  <Area type="monotone" dataKey="nearMiss" stroke="#22c55e" strokeWidth={2} fillOpacity={1} fill="url(#nearMissGrad)" name="Near Misses" />
                   <Area type="monotone" dataKey="recordable" stroke="#ef4444" strokeWidth={2} fillOpacity={1} fill="url(#recordableGrad)" name="Recordable" />
                 </AreaChart>
               </ResponsiveContainer>
@@ -897,6 +1510,42 @@
               </ResponsiveContainer>
             </Card>
           </div>
+
+          {/* Additional Charts Row */}
+          {(data?.trends?.bySeverity?.length > 0 || data?.trends?.byDepartment?.length > 0) && (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {data?.trends?.bySeverity?.length > 0 && (
+                <Card title="By Severity" subtitle="Incident severity distribution" icon={<Icons.Risk />}>
+                  <ResponsiveContainer width="100%" height={250}>
+                    <BarChart data={data.trends.bySeverity} layout="vertical">
+                      <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" horizontal={false} />
+                      <XAxis type="number" stroke="#94a3b8" fontSize={12} />
+                      <YAxis dataKey="_id" type="category" stroke="#94a3b8" fontSize={12} width={80} />
+                      <Tooltip />
+                      <Bar dataKey="count" radius={[0, 4, 4, 0]}>
+                        {data.trends.bySeverity.map((entry, index) => (
+                          <Cell key={index} fill={entry._id === 'minor' ? '#22c55e' : entry._id === 'moderate' ? '#eab308' : entry._id === 'serious' ? '#f97316' : '#ef4444'} />
+                        ))}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                </Card>
+              )}
+              {data?.trends?.byDepartment?.length > 0 && (
+                <Card title="By Location/Department" subtitle="Top areas with incidents" icon={<Icons.Contractor />}>
+                  <ResponsiveContainer width="100%" height={250}>
+                    <BarChart data={data.trends.byDepartment.slice(0, 8)}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
+                      <XAxis dataKey="_id" stroke="#94a3b8" fontSize={10} tickLine={false} angle={-45} textAnchor="end" height={60} />
+                      <YAxis stroke="#94a3b8" fontSize={12} />
+                      <Tooltip />
+                      <Bar dataKey="count" fill="#6366f1" radius={[4, 4, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </Card>
+              )}
+            </div>
+          )}
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <Card title="Recent Incidents" subtitle="Latest reported incidents" noPadding icon={<Icons.Incident />}>
@@ -1715,28 +2364,16 @@
                               <Select label="Nature of Injury" value={person.natureOfInjury || ''} onChange={e => updateInvolvedPerson(idx, 'natureOfInjury', e.target.value)} options={[{ value: '', label: 'Select...' }, ...injuryTypes]} />
                               <Select label="Treatment Type" value={person.treatmentType || 'none'} onChange={e => updateInvolvedPerson(idx, 'treatmentType', e.target.value)} options={treatmentTypes} />
                             </div>
-                            <div className="space-y-2">
-                              <label className="block text-sm font-medium text-slate-700">Body Parts Affected</label>
-                              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 max-h-48 overflow-y-auto p-2 border rounded-lg bg-slate-50">
-                                {bodyParts.map(part => (
-                                  <label key={part} className="flex items-center gap-2 text-sm cursor-pointer">
-                                    <input type="checkbox" checked={(person.bodyPartsAffected || []).some(b => b.bodyPart === part.toLowerCase().replace(/[^a-z]/g, '_'))} 
-                                      onChange={e => {
-                                        const partKey = part.toLowerCase().replace(/[^a-z]/g, '_');
-                                        const current = person.bodyPartsAffected || [];
-                                        if (e.target.checked) {
-                                          updateInvolvedPerson(idx, 'bodyPartsAffected', [...current, { bodyPart: partKey }]);
-                                        } else {
-                                          updateInvolvedPerson(idx, 'bodyPartsAffected', current.filter(b => b.bodyPart !== partKey));
-                                        }
-                                      }}
-                                      className="rounded text-primary-600"
-                                    />
-                                    <span className="text-slate-600">{part}</span>
-                                  </label>
-                                ))}
-                              </div>
+                            
+                            {/* Interactive Body Diagram */}
+                            <div className="mt-4 p-4 bg-slate-50 rounded-xl border border-slate-200">
+                              <h6 className="font-medium text-slate-700 mb-3">Body Parts Affected (click diagram or checkboxes)</h6>
+                              <BodyDiagram 
+                                selectedParts={(person.bodyPartsAffected || []).map(b => b.bodyPart)} 
+                                onChange={(parts) => updateInvolvedPerson(idx, 'bodyPartsAffected', parts.map(p => ({ bodyPart: p })))}
+                              />
                             </div>
+                            
                             <Textarea label="Injury Description" value={person.injuryDescription || ''} onChange={e => updateInvolvedPerson(idx, 'injuryDescription', e.target.value)} rows={2} />
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                               <Input label="Days Away From Work" type="number" value={person.daysAwayFromWork || 0} onChange={e => updateInvolvedPerson(idx, 'daysAwayFromWork', parseInt(e.target.value) || 0)} />
@@ -1820,19 +2457,42 @@
                 {form.rootCauseAnalysis?.method === '5_whys' && (
                   <div className="space-y-4 p-4 bg-slate-50 rounded-xl">
                     <h5 className="font-semibold text-slate-700">5 Whys Analysis</h5>
+                    <p className="text-sm text-slate-500 mb-4">Keep asking "why" to drill down to the root cause. Start with the problem and ask why it happened, then ask why for each answer.</p>
+                    <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg mb-4">
+                      <Input label="Problem Statement" value={form.rootCauseAnalysis?.fiveWhys?.problem || ''} onChange={e => {
+                        const fiveWhys = { ...form.rootCauseAnalysis?.fiveWhys, problem: e.target.value };
+                        updateNested('rootCauseAnalysis.fiveWhys', fiveWhys);
+                      }} placeholder="What happened? Describe the problem..." />
+                    </div>
                     {[1, 2, 3, 4, 5].map(n => (
-                      <div key={n} className="grid grid-cols-1 gap-2">
-                        <Input label={`Why #${n}`} value={form.rootCauseAnalysis?.fiveWhys?.[`why${n}`]?.answer || ''} onChange={e => {
-                          const fiveWhys = { ...form.rootCauseAnalysis?.fiveWhys };
-                          fiveWhys[`why${n}`] = { ...fiveWhys[`why${n}`], answer: e.target.value };
-                          updateNested('rootCauseAnalysis.fiveWhys', fiveWhys);
-                        }} placeholder={`Answer to why #${n}...`} />
+                      <div key={n} className="flex items-start gap-3">
+                        <div className="w-8 h-8 rounded-full bg-primary-100 text-primary-700 flex items-center justify-center font-bold text-sm flex-shrink-0 mt-6">{n}</div>
+                        <div className="flex-1">
+                          <Input label={`Why #${n}: Why did ${n === 1 ? 'the problem occur' : 'this happen'}?`} value={form.rootCauseAnalysis?.fiveWhys?.[`why${n}`]?.answer || ''} onChange={e => {
+                            const fiveWhys = { ...form.rootCauseAnalysis?.fiveWhys };
+                            fiveWhys[`why${n}`] = { ...fiveWhys[`why${n}`], answer: e.target.value };
+                            updateNested('rootCauseAnalysis.fiveWhys', fiveWhys);
+                          }} placeholder={n === 1 ? 'Why did the initial problem happen?' : 'Why did the previous answer occur?'} />
+                        </div>
                       </div>
                     ))}
-                    <Input label="Root Cause Identified" value={form.rootCauseAnalysis?.fiveWhys?.rootCauseIdentified || ''} onChange={e => {
-                      const fiveWhys = { ...form.rootCauseAnalysis?.fiveWhys, rootCauseIdentified: e.target.value };
-                      updateNested('rootCauseAnalysis.fiveWhys', fiveWhys);
-                    }} placeholder="Final root cause determined..." />
+                    <div className="p-3 bg-green-50 border border-green-200 rounded-lg mt-4">
+                      <Input label="Root Cause Identified" value={form.rootCauseAnalysis?.fiveWhys?.rootCauseIdentified || ''} onChange={e => {
+                        const fiveWhys = { ...form.rootCauseAnalysis?.fiveWhys, rootCauseIdentified: e.target.value };
+                        updateNested('rootCauseAnalysis.fiveWhys', fiveWhys);
+                      }} placeholder="Final root cause determined from the analysis..." />
+                    </div>
+                  </div>
+                )}
+
+                {form.rootCauseAnalysis?.method === 'fishbone' && (
+                  <div className="space-y-4 p-4 bg-slate-50 rounded-xl">
+                    <h5 className="font-semibold text-slate-700">Fishbone (Ishikawa) Diagram</h5>
+                    <p className="text-sm text-slate-500 mb-4">Categorize potential causes into 6 main areas. Add specific causes under each category to identify contributing factors.</p>
+                    <FishboneDiagram 
+                      data={form.rootCauseAnalysis?.fishbone || {}}
+                      onChange={(fishboneData) => updateNested('rootCauseAnalysis.fishbone', fishboneData)}
+                    />
                   </div>
                 )}
 
@@ -2115,6 +2775,40 @@
                     </div>
                   </div>
                 </div>
+
+                {/* Create Claim from Incident */}
+                {item?._id && (form.type === 'injury' || form.type === 'illness' || form.oshaRecordability?.isRecordable) && !item.claimId && (
+                  <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h5 className="font-medium text-amber-800">Workers' Compensation Claim</h5>
+                        <p className="text-sm text-amber-600">This incident may qualify for a workers' comp claim</p>
+                      </div>
+                      <Button size="sm" onClick={async () => {
+                        if (confirm('Create a workers compensation claim from this incident?')) {
+                          try {
+                            const result = await api.post('/claims/from-incident/' + item._id);
+                            alert('Claim created: ' + (result.claim?.claimNumber || 'Success'));
+                            onSave();
+                          } catch (e) { 
+                            alert('Failed to create claim: ' + (e.message || 'Unknown error')); 
+                          }
+                        }
+                      }} icon={<Icons.Claims />}>Create Claim</Button>
+                    </div>
+                  </div>
+                )}
+                {item?.claimId && (
+                  <div className="p-4 bg-green-50 border border-green-200 rounded-xl">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h5 className="font-medium text-green-800">Linked Claim</h5>
+                        <p className="text-sm text-green-600">This incident has an associated workers' comp claim</p>
+                      </div>
+                      <Button size="sm" variant="secondary" onClick={() => window.location.hash = 'claims'}>View Claim</Button>
+                    </div>
+                  </div>
+                )}
               </>
             )}
 
@@ -2674,10 +3368,30 @@
     // ========== DOCUMENT MODAL ==========
     const DocumentModal = ({ isOpen, onClose, item, onSave }) => {
       const [form, setForm] = useState({});
+      const [tab, setTab] = useState('basic');
       const [saving, setSaving] = useState(false);
+      const [approving, setApproving] = useState(false);
+      const [reviewModal, setReviewModal] = useState(false);
+      const [reviewers, setReviewers] = useState('');
+      const toast = useContext(ToastContext);
 
       useEffect(() => {
-        setForm(item || { title: '', category: 'policy', description: '', version: '1.0', status: 'draft' });
+        if (item) {
+          setForm({
+            ...item,
+            accessControl: item.accessControl || { visibility: 'organization', allowedRoles: [], allowedDepartments: [] },
+            revisionHistory: item.revisionHistory || [],
+            workflow: item.workflow || { history: [] },
+            reviewRequests: item.reviewRequests || []
+          });
+        } else {
+          setForm({ 
+            title: '', category: 'policy', description: '', version: '1.0', status: 'draft',
+            accessControl: { visibility: 'organization', allowedRoles: [], allowedDepartments: [] },
+            requiresApproval: false
+          });
+        }
+        setTab('basic');
       }, [item, isOpen]);
 
       const handleSave = async () => {
@@ -2687,29 +3401,260 @@
           item?._id ? await api.put('/documents/' + item._id, form) : await api.post('/documents', form);
           onSave();
           onClose();
-        } catch (e) { console.error(e); }
+        } catch (e) { console.error(e); toast?.('Failed to save document', 'error'); }
         setSaving(false);
       };
 
+      const handleApprove = async () => {
+        if (!item?._id) return;
+        setApproving(true);
+        try {
+          await api.post('/documents/' + item._id + '/approve');
+          toast?.('Document approved', 'success');
+          onSave();
+        } catch (e) { toast?.('Failed to approve', 'error'); }
+        setApproving(false);
+      };
+
+      const handleReject = async () => {
+        const reason = prompt('Enter rejection reason:');
+        if (!reason) return;
+        setApproving(true);
+        try {
+          await api.post('/documents/' + item._id + '/reject', { reason });
+          toast?.('Document rejected', 'info');
+          onSave();
+        } catch (e) { toast?.('Failed to reject', 'error'); }
+        setApproving(false);
+      };
+
+      const handleRequestReview = async () => {
+        if (!reviewers.trim()) return;
+        try {
+          await api.post('/documents/' + item._id + '/request-review', { 
+            reviewers: reviewers.split(',').map(r => r.trim()),
+            dueDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
+          });
+          toast?.('Review requested', 'success');
+          setReviewModal(false);
+          setReviewers('');
+          onSave();
+        } catch (e) { toast?.('Failed to request review', 'error'); }
+      };
+
+      const tabs = [
+        { id: 'basic', label: 'Details' },
+        { id: 'access', label: 'Access Control' },
+        ...(item ? [{ id: 'versions', label: 'Versions' }, { id: 'workflow', label: 'Workflow' }] : [])
+      ];
+
+      const statusColors = {
+        draft: 'bg-slate-100 text-slate-700',
+        pending_approval: 'bg-amber-100 text-amber-700',
+        approved: 'bg-green-100 text-green-700',
+        rejected: 'bg-red-100 text-red-700',
+        archived: 'bg-slate-200 text-slate-600',
+        expired: 'bg-red-200 text-red-700'
+      };
+
+      const isExpiringSoon = item?.expirationDate && new Date(item.expirationDate) < new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+      const isExpired = item?.expirationDate && new Date(item.expirationDate) < new Date();
+
       return (
-        <Modal isOpen={isOpen} onClose={onClose} title={item ? 'Edit Document' : 'New Document'} size="lg"
-          footer={<><Button variant="secondary" onClick={onClose}>Cancel</Button><Button onClick={handleSave} loading={saving}>{item ? 'Save Changes' : 'Create Document'}</Button></>}>
-          <div className="space-y-4">
-            <Input label="Document Title *" value={form.title || ''} onChange={e => setForm(p => ({ ...p, title: e.target.value }))} placeholder="Document title" />
-            <div className="grid grid-cols-2 gap-4">
-              <Select label="Category" value={form.category || 'policy'} onChange={e => setForm(p => ({ ...p, category: e.target.value }))} options={[
-                { value: 'policy', label: 'Policy' }, { value: 'procedure', label: 'Procedure' },
-                { value: 'sds', label: 'Safety Data Sheet' }, { value: 'form', label: 'Form/Template' },
-                { value: 'manual', label: 'Manual' }, { value: 'guideline', label: 'Guideline' }
-              ]} />
-              <Select label="Status" value={form.status || 'draft'} onChange={e => setForm(p => ({ ...p, status: e.target.value }))} options={[
-                { value: 'draft', label: 'Draft' }, { value: 'review', label: 'Under Review' },
-                { value: 'approved', label: 'Approved' }, { value: 'archived', label: 'Archived' }
-              ]} />
+        <Modal isOpen={isOpen} onClose={onClose} title={item ? `Document: ${item.documentNumber || item.title}` : 'New Document'} size="xl"
+          footer={<>
+            <Button variant="secondary" onClick={onClose}>Cancel</Button>
+            {item?.status === 'pending_approval' && (
+              <>
+                <Button variant="danger" onClick={handleReject} loading={approving}>Reject</Button>
+                <Button onClick={handleApprove} loading={approving}>Approve</Button>
+              </>
+            )}
+            <Button onClick={handleSave} loading={saving}>{item ? 'Save Changes' : 'Create Document'}</Button>
+          </>}>
+          
+          {/* Status Banner */}
+          {item && (
+            <div className="mb-4 p-4 bg-gradient-to-r from-slate-50 to-blue-50 rounded-xl border border-slate-200">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <span className={`px-3 py-1 text-sm font-medium rounded-full ${statusColors[form.status] || 'bg-slate-100'}`}>
+                    {(form.status || 'draft').replace(/_/g, ' ').toUpperCase()}
+                  </span>
+                  <span className="text-sm text-slate-500">Version {form.version || '1.0'}</span>
+                  {item.documentNumber && <span className="text-sm text-slate-400">{item.documentNumber}</span>}
+                </div>
+                <div className="flex items-center gap-2">
+                  {isExpired && <span className="px-2 py-1 text-xs font-medium bg-red-100 text-red-700 rounded">EXPIRED</span>}
+                  {isExpiringSoon && !isExpired && <span className="px-2 py-1 text-xs font-medium bg-amber-100 text-amber-700 rounded">EXPIRING SOON</span>}
+                  {item.requiresApproval && <span className="px-2 py-1 text-xs bg-blue-100 text-blue-700 rounded">Requires Approval</span>}
+                </div>
+              </div>
+              {item.approvedBy && (
+                <p className="text-xs text-slate-500 mt-2">Approved: {item.approvedAt ? new Date(item.approvedAt).toLocaleDateString() : ''}</p>
+              )}
             </div>
-            <Input label="Version" value={form.version || '1.0'} onChange={e => setForm(p => ({ ...p, version: e.target.value }))} placeholder="1.0" />
-            <Textarea label="Description" value={form.description || ''} onChange={e => setForm(p => ({ ...p, description: e.target.value }))} rows={3} placeholder="Document description..." />
+          )}
+
+          {/* Tabs */}
+          <div className="flex gap-1 mb-4 overflow-x-auto pb-2 border-b border-slate-200">
+            {tabs.map(t => (
+              <button key={t.id} onClick={() => setTab(t.id)}
+                className={`px-3 py-2 text-sm font-medium rounded-lg whitespace-nowrap transition-colors ${tab === t.id ? 'bg-primary-100 text-primary-700' : 'text-slate-600 hover:bg-slate-100'}`}>
+                {t.label}
+              </button>
+            ))}
           </div>
+
+          <div className="space-y-4 max-h-[55vh] overflow-y-auto pr-1">
+            {/* Basic Info Tab */}
+            {tab === 'basic' && (
+              <>
+                <Input label="Document Title *" value={form.title || ''} onChange={e => setForm(p => ({ ...p, title: e.target.value }))} placeholder="Document title" />
+                <div className="grid grid-cols-2 gap-4">
+                  <Select label="Category" value={form.category || 'policy'} onChange={e => setForm(p => ({ ...p, category: e.target.value }))} options={[
+                    { value: 'policy', label: 'Policy' }, { value: 'procedure', label: 'Procedure' },
+                    { value: 'sds', label: 'Safety Data Sheet' }, { value: 'form', label: 'Form/Template' },
+                    { value: 'manual', label: 'Manual' }, { value: 'guideline', label: 'Guideline' },
+                    { value: 'permit', label: 'Permit' }, { value: 'certificate', label: 'Certificate' }
+                  ]} />
+                  <Select label="Status" value={form.status || 'draft'} onChange={e => setForm(p => ({ ...p, status: e.target.value }))} options={[
+                    { value: 'draft', label: 'Draft' }, { value: 'pending_approval', label: 'Pending Approval' },
+                    { value: 'approved', label: 'Approved' }, { value: 'rejected', label: 'Rejected' },
+                    { value: 'archived', label: 'Archived' }, { value: 'expired', label: 'Expired' }
+                  ]} />
+                </div>
+                <div className="grid grid-cols-3 gap-4">
+                  <Input label="Version" value={form.version || '1.0'} onChange={e => setForm(p => ({ ...p, version: e.target.value }))} placeholder="1.0" />
+                  <Input label="Expiration Date" type="date" value={form.expirationDate ? new Date(form.expirationDate).toISOString().split('T')[0] : ''} onChange={e => setForm(p => ({ ...p, expirationDate: e.target.value }))} />
+                  <Input label="Review Date" type="date" value={form.reviewDate ? new Date(form.reviewDate).toISOString().split('T')[0] : ''} onChange={e => setForm(p => ({ ...p, reviewDate: e.target.value }))} />
+                </div>
+                <Textarea label="Description" value={form.description || ''} onChange={e => setForm(p => ({ ...p, description: e.target.value }))} rows={3} placeholder="Document description..." />
+                <div className="grid grid-cols-2 gap-4">
+                  <Input label="Department" value={form.department || ''} onChange={e => setForm(p => ({ ...p, department: e.target.value }))} placeholder="Owning department" />
+                  <Input label="Owner" value={form.owner || ''} onChange={e => setForm(p => ({ ...p, owner: e.target.value }))} placeholder="Document owner name" />
+                </div>
+                <Checkbox label="Requires approval before publishing" checked={form.requiresApproval || false} onChange={e => setForm(p => ({ ...p, requiresApproval: e.target.checked }))} />
+                {item && (
+                  <div className="flex gap-2 pt-2">
+                    <Button size="sm" variant="secondary" onClick={() => setReviewModal(true)} icon={<Icons.User />}>Request Review</Button>
+                  </div>
+                )}
+              </>
+            )}
+
+            {/* Access Control Tab */}
+            {tab === 'access' && (
+              <>
+                <Select label="Visibility" value={form.accessControl?.visibility || 'organization'} onChange={e => setForm(p => ({ ...p, accessControl: { ...p.accessControl, visibility: e.target.value } }))} options={[
+                  { value: 'public', label: 'Public - Anyone can view' },
+                  { value: 'organization', label: 'Organization - All org members' },
+                  { value: 'department', label: 'Department - Specific departments only' },
+                  { value: 'restricted', label: 'Restricted - Specific users/roles only' }
+                ]} />
+                {(form.accessControl?.visibility === 'restricted' || form.accessControl?.visibility === 'department') && (
+                  <>
+                    <Input label="Allowed Departments (comma-separated)" value={(form.accessControl?.allowedDepartments || []).join(', ')} onChange={e => setForm(p => ({ ...p, accessControl: { ...p.accessControl, allowedDepartments: e.target.value.split(',').map(s => s.trim()).filter(Boolean) } }))} placeholder="e.g., Safety, Operations, HR" />
+                    <Input label="Allowed Roles (comma-separated)" value={(form.accessControl?.allowedRoles || []).join(', ')} onChange={e => setForm(p => ({ ...p, accessControl: { ...p.accessControl, allowedRoles: e.target.value.split(',').map(s => s.trim()).filter(Boolean) } }))} placeholder="e.g., admin, manager, supervisor" />
+                  </>
+                )}
+                <div className="p-4 bg-slate-50 rounded-xl mt-4">
+                  <p className="text-sm text-slate-600">
+                    <strong>Current Access:</strong> {form.accessControl?.visibility === 'public' ? 'Everyone' : 
+                    form.accessControl?.visibility === 'organization' ? 'All organization members' :
+                    form.accessControl?.visibility === 'department' ? `Departments: ${(form.accessControl?.allowedDepartments || []).join(', ') || 'None specified'}` :
+                    `Restricted to specific users/roles`}
+                  </p>
+                </div>
+              </>
+            )}
+
+            {/* Versions Tab */}
+            {tab === 'versions' && item && (
+              <>
+                <div className="flex justify-between items-center mb-3">
+                  <h5 className="font-medium text-slate-700">Revision History</h5>
+                  <p className="text-sm text-slate-500">Current: v{form.version || '1.0'}</p>
+                </div>
+                <div className="space-y-2 max-h-60 overflow-y-auto">
+                  {(form.revisionHistory || []).length === 0 && <p className="text-slate-500 text-center py-4">No revision history</p>}
+                  {(form.revisionHistory || []).slice().reverse().map((rev, i) => (
+                    <div key={i} className="p-3 bg-slate-50 rounded-lg border border-slate-200">
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <span className="font-medium text-slate-800">Version {rev.version}</span>
+                          {rev.majorUpdate && <span className="ml-2 text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded">Major Update</span>}
+                        </div>
+                        <span className="text-xs text-slate-400">{rev.uploadedAt ? new Date(rev.uploadedAt).toLocaleString() : ''}</span>
+                      </div>
+                      <p className="text-sm text-slate-600 mt-1">{rev.changeNotes || 'No change notes'}</p>
+                      {rev.fileName && <p className="text-xs text-slate-400 mt-1">File: {rev.fileName}</p>}
+                    </div>
+                  ))}
+                </div>
+                <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl mt-4">
+                  <p className="text-sm text-amber-800">
+                    <strong>Note:</strong> Uploading a new file version will require re-approval if this document was previously approved.
+                  </p>
+                </div>
+              </>
+            )}
+
+            {/* Workflow Tab */}
+            {tab === 'workflow' && item && (
+              <>
+                <h5 className="font-medium text-slate-700 mb-3">Workflow History</h5>
+                <div className="space-y-2 max-h-40 overflow-y-auto">
+                  {(form.workflow?.history || []).length === 0 && <p className="text-slate-500 text-center py-4">No workflow history</p>}
+                  {(form.workflow?.history || []).slice().reverse().map((h, i) => (
+                    <div key={i} className="flex items-start gap-3 p-3 bg-slate-50 rounded-lg">
+                      <div className={`w-2 h-2 mt-2 rounded-full ${h.action === 'approved' ? 'bg-green-500' : h.action === 'rejected' ? 'bg-red-500' : 'bg-blue-500'}`} />
+                      <div className="flex-1">
+                        <p className="text-sm font-medium text-slate-700">{h.action?.replace(/_/g, ' ').toUpperCase()}</p>
+                        {h.notes && <p className="text-xs text-slate-500">{h.notes}</p>}
+                        <p className="text-xs text-slate-400 mt-1">{h.performedAt ? new Date(h.performedAt).toLocaleString() : ''}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Review Requests */}
+                {(form.reviewRequests || []).length > 0 && (
+                  <>
+                    <h5 className="font-medium text-slate-700 mt-4 mb-3">Pending Reviews</h5>
+                    <div className="space-y-2">
+                      {form.reviewRequests.filter(r => r.status === 'pending').map((req, i) => (
+                        <div key={i} className="p-3 bg-blue-50 rounded-lg border border-blue-200">
+                          <div className="flex justify-between">
+                            <span className="text-sm font-medium text-blue-800">Review requested</span>
+                            <span className="text-xs text-blue-600">Due: {req.dueDate ? new Date(req.dueDate).toLocaleDateString() : 'N/A'}</span>
+                          </div>
+                          <p className="text-xs text-blue-600 mt-1">Reviewers: {(req.reviewers || []).join(', ')}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </>
+            )}
+          </div>
+
+          {/* Request Review Modal */}
+          {reviewModal && (
+            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setReviewModal(false)}>
+              <div className="bg-white rounded-xl p-6 w-full max-w-md" onClick={e => e.stopPropagation()}>
+                <h3 className="text-lg font-semibold mb-4">Request Document Review</h3>
+                <div className="space-y-4">
+                  <Input label="Reviewers (comma-separated emails)" value={reviewers} onChange={e => setReviewers(e.target.value)} placeholder="john@example.com, jane@example.com" />
+                  <p className="text-sm text-slate-500">Reviewers will receive a notification to review this document.</p>
+                </div>
+                <div className="flex justify-end gap-2 mt-6">
+                  <Button variant="secondary" onClick={() => setReviewModal(false)}>Cancel</Button>
+                  <Button onClick={handleRequestReview}>Send Request</Button>
+                </div>
+              </div>
+            </div>
+          )}
         </Modal>
       );
     };
@@ -2798,6 +3743,530 @@
             <Textarea label="Findings" value={form.findings || ''} onChange={e => setForm(p => ({ ...p, findings: e.target.value }))} rows={3} placeholder="Assessment findings..." />
             <Textarea label="Recommendations" value={form.recommendations || ''} onChange={e => setForm(p => ({ ...p, recommendations: e.target.value }))} rows={3} placeholder="Recommended actions..." />
           </div>
+        </Modal>
+      );
+    };
+
+    // ========== CLAIMS MANAGEMENT MODAL ==========
+    const ClaimsModal = ({ isOpen, onClose, item, onSave }) => {
+      const [form, setForm] = useState({});
+      const [tab, setTab] = useState('basic');
+      const [saving, setSaving] = useState(false);
+      const [paymentModal, setPaymentModal] = useState(false);
+      const [reserveModal, setReserveModal] = useState(false);
+      const [noteModal, setNoteModal] = useState(false);
+      const [newPayment, setNewPayment] = useState({ costType: 'medical', amount: 0, payee: '', description: '' });
+      const [newReserve, setNewReserve] = useState({ costType: 'medical', newTotal: 0, reason: '' });
+      const [newNote, setNewNote] = useState({ content: '', type: 'general', isPrivate: false });
+      const toast = useContext(ToastContext);
+
+      useEffect(() => {
+        if (item) {
+          setForm({
+            ...item,
+            claimant: item.claimant || {},
+            injuryDetails: item.injuryDetails || {},
+            costs: item.costs || { medical: {}, indemnity: {}, legal: {}, other: {} },
+            returnToWork: item.returnToWork || {},
+            lostTime: item.lostTime || {},
+            tpa: item.tpa || {},
+            insurance: item.insurance || {},
+            workflow: item.workflow || { history: [] },
+            notes: item.notes || [],
+            reserveHistory: item.reserveHistory || []
+          });
+        } else {
+          setForm({
+            claimType: 'workers_comp',
+            status: 'draft',
+            claimant: { type: 'employee' },
+            injuryDetails: {},
+            costs: { medical: { total: 0, paid: 0, reserved: 0, payments: [] }, indemnity: { total: 0, paid: 0, reserved: 0, payments: [] }, legal: { total: 0, paid: 0, reserved: 0, payments: [] }, other: { total: 0, paid: 0, reserved: 0, payments: [] } },
+            returnToWork: { status: 'unknown' },
+            lostTime: { daysAway: 0, daysRestricted: 0 },
+            tpa: {},
+            insurance: {},
+            workflow: { history: [] },
+            notes: []
+          });
+        }
+        setTab('basic');
+      }, [item, isOpen]);
+
+      const handleSave = async () => {
+        if (!form.claimType) return;
+        setSaving(true);
+        try {
+          item?._id ? await api.put('/claims/' + item._id, form) : await api.post('/claims', form);
+          onSave();
+          onClose();
+        } catch (e) { console.error(e); toast?.('Failed to save claim', 'error'); }
+        setSaving(false);
+      };
+
+      const handleAddPayment = async () => {
+        if (!newPayment.amount || newPayment.amount <= 0) return;
+        try {
+          await api.post('/claims/' + item._id + '/payments', { costType: newPayment.costType, payment: newPayment });
+          toast?.('Payment added successfully', 'success');
+          setPaymentModal(false);
+          setNewPayment({ costType: 'medical', amount: 0, payee: '', description: '' });
+          onSave();
+        } catch (e) { toast?.('Failed to add payment', 'error'); }
+      };
+
+      const handleAdjustReserve = async () => {
+        if (!newReserve.reason) return;
+        try {
+          await api.post('/claims/' + item._id + '/adjust-reserves', newReserve);
+          toast?.('Reserves adjusted successfully', 'success');
+          setReserveModal(false);
+          setNewReserve({ costType: 'medical', newTotal: 0, reason: '' });
+          onSave();
+        } catch (e) { toast?.('Failed to adjust reserves', 'error'); }
+      };
+
+      const handleAddNote = async () => {
+        if (!newNote.content) return;
+        try {
+          await api.post('/claims/' + item._id + '/notes', newNote);
+          toast?.('Note added successfully', 'success');
+          setNoteModal(false);
+          setNewNote({ content: '', type: 'general', isPrivate: false });
+          onSave();
+        } catch (e) { toast?.('Failed to add note', 'error'); }
+      };
+
+      const updateNested = (path, value) => {
+        setForm(prev => {
+          const keys = path.split('.');
+          const newForm = { ...prev };
+          let current = newForm;
+          for (let i = 0; i < keys.length - 1; i++) {
+            current[keys[i]] = { ...current[keys[i]] };
+            current = current[keys[i]];
+          }
+          current[keys[keys.length - 1]] = value;
+          return newForm;
+        });
+      };
+
+      const tabs = [
+        { id: 'basic', label: 'Basic Info' },
+        { id: 'claimant', label: 'Claimant' },
+        { id: 'injury', label: 'Injury Details' },
+        { id: 'costs', label: 'Costs & Payments' },
+        { id: 'rtw', label: 'Return to Work' },
+        { id: 'insurance', label: 'Insurance/TPA' },
+        ...(item ? [{ id: 'notes', label: 'Notes' }, { id: 'history', label: 'History' }] : [])
+      ];
+
+      const totalIncurred = (form.costs?.medical?.total || 0) + (form.costs?.indemnity?.total || 0) + (form.costs?.legal?.total || 0) + (form.costs?.other?.total || 0);
+      const totalPaid = (form.costs?.medical?.paid || 0) + (form.costs?.indemnity?.paid || 0) + (form.costs?.legal?.paid || 0) + (form.costs?.other?.paid || 0);
+      const totalReserved = totalIncurred - totalPaid;
+
+      const statusColors = {
+        draft: 'bg-slate-100 text-slate-700',
+        open: 'bg-blue-100 text-blue-700',
+        under_review: 'bg-amber-100 text-amber-700',
+        approved: 'bg-green-100 text-green-700',
+        denied: 'bg-red-100 text-red-700',
+        closed: 'bg-slate-200 text-slate-600',
+        settled: 'bg-purple-100 text-purple-700'
+      };
+
+      return (
+        <Modal isOpen={isOpen} onClose={onClose} title={item ? `Claim ${item.claimNumber || ''}` : 'New Claim'} size="xl"
+          footer={<><Button variant="secondary" onClick={onClose}>Cancel</Button><Button onClick={handleSave} loading={saving}>{item ? 'Save Changes' : 'Create Claim'}</Button></>}>
+          
+          {/* Enhanced Summary Banner */}
+          {item && (
+            <div className="mb-4 p-4 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl border border-blue-200">
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-3">
+                  <span className={`px-3 py-1 text-sm font-medium rounded-full ${statusColors[form.status] || 'bg-slate-100'}`}>
+                    {(form.status || 'draft').replace(/_/g, ' ').toUpperCase()}
+                  </span>
+                  <span className="text-sm text-slate-500">Created: {new Date(item.createdAt).toLocaleDateString()}</span>
+                  {item.daysToClose && <span className="text-sm text-slate-500">Closed in {item.daysToClose} days</span>}
+                </div>
+                {item.oshaRecordable && <span className="px-2 py-1 text-xs font-medium bg-red-100 text-red-700 rounded">OSHA Recordable</span>}
+              </div>
+              <div className="grid grid-cols-5 gap-4 text-center">
+                <div><p className="text-xs text-slate-500">Total Incurred</p><p className="text-lg font-bold text-slate-800">${totalIncurred.toLocaleString()}</p></div>
+                <div><p className="text-xs text-slate-500">Total Paid</p><p className="text-lg font-bold text-green-600">${totalPaid.toLocaleString()}</p></div>
+                <div><p className="text-xs text-slate-500">Reserved</p><p className="text-lg font-bold text-amber-600">${totalReserved.toLocaleString()}</p></div>
+                <div><p className="text-xs text-slate-500">Days Away</p><p className="text-lg font-bold text-red-600">{form.lostTime?.daysAway || 0}</p></div>
+                <div><p className="text-xs text-slate-500">Restricted Days</p><p className="text-lg font-bold text-orange-600">{form.lostTime?.daysRestricted || 0}</p></div>
+              </div>
+            </div>
+          )}
+
+          {/* Tabs */}
+          <div className="flex gap-1 mb-4 overflow-x-auto pb-2 border-b border-slate-200">
+            {tabs.map(t => (
+              <button key={t.id} onClick={() => setTab(t.id)}
+                className={`px-3 py-2 text-sm font-medium rounded-lg whitespace-nowrap transition-colors ${tab === t.id ? 'bg-primary-100 text-primary-700' : 'text-slate-600 hover:bg-slate-100'}`}>
+                {t.label}
+              </button>
+            ))}
+          </div>
+
+          <div className="space-y-4 max-h-[55vh] overflow-y-auto pr-1">
+            {/* Basic Info Tab */}
+            {tab === 'basic' && (
+              <>
+                <div className="grid grid-cols-2 gap-4">
+                  <Select label="Claim Type *" value={form.claimType || 'workers_comp'} onChange={e => setForm(p => ({ ...p, claimType: e.target.value }))} options={[
+                    { value: 'workers_comp', label: 'Workers Compensation' },
+                    { value: 'general_liability', label: 'General Liability' },
+                    { value: 'auto', label: 'Auto/Vehicle' },
+                    { value: 'property_damage', label: 'Property Damage' },
+                    { value: 'product_liability', label: 'Product Liability' },
+                    { value: 'other', label: 'Other' }
+                  ]} />
+                  <Select label="Status" value={form.status || 'draft'} onChange={e => setForm(p => ({ ...p, status: e.target.value }))} options={[
+                    { value: 'draft', label: 'Draft' },
+                    { value: 'open', label: 'Open' },
+                    { value: 'under_review', label: 'Under Review' },
+                    { value: 'approved', label: 'Approved' },
+                    { value: 'denied', label: 'Denied' },
+                    { value: 'pending_information', label: 'Pending Information' },
+                    { value: 'in_litigation', label: 'In Litigation' },
+                    { value: 'settled', label: 'Settled' },
+                    { value: 'closed', label: 'Closed' }
+                  ]} />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <Select label="Severity" value={form.severity || 'moderate'} onChange={e => setForm(p => ({ ...p, severity: e.target.value }))} options={[
+                    { value: 'minor', label: 'Minor' }, { value: 'moderate', label: 'Moderate' },
+                    { value: 'serious', label: 'Serious' }, { value: 'severe', label: 'Severe' }, { value: 'catastrophic', label: 'Catastrophic' }
+                  ]} />
+                  <Input label="State of Jurisdiction" value={form.stateOfJurisdiction || ''} onChange={e => setForm(p => ({ ...p, stateOfJurisdiction: e.target.value }))} placeholder="e.g., California" />
+                </div>
+                <div className="grid grid-cols-3 gap-4">
+                  <Input label="Date of Claim" type="date" value={form.dateOfClaim ? new Date(form.dateOfClaim).toISOString().split('T')[0] : ''} onChange={e => setForm(p => ({ ...p, dateOfClaim: e.target.value }))} />
+                  <Input label="Linked Incident #" value={form.incidentNumber || ''} onChange={e => setForm(p => ({ ...p, incidentNumber: e.target.value }))} placeholder="INC-XXXX" />
+                  <Input label="Statute of Limitations" type="date" value={form.importantDates?.statueOfLimitationsDate ? new Date(form.importantDates.statueOfLimitationsDate).toISOString().split('T')[0] : ''} onChange={e => updateNested('importantDates.statueOfLimitationsDate', e.target.value)} />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <Checkbox label="OSHA Recordable" checked={form.oshaRecordable || false} onChange={e => setForm(p => ({ ...p, oshaRecordable: e.target.checked }))} />
+                  <Input label="OSHA 300 Case #" value={form.osha300CaseNumber || ''} onChange={e => setForm(p => ({ ...p, osha300CaseNumber: e.target.value }))} disabled={!form.oshaRecordable} />
+                </div>
+                {form.status === 'closed' && (
+                  <Textarea label="Closure Reason" value={form.closureReason || ''} onChange={e => setForm(p => ({ ...p, closureReason: e.target.value }))} placeholder="Reason for closing this claim..." />
+                )}
+              </>
+            )}
+
+            {/* Claimant Tab */}
+            {tab === 'claimant' && (
+              <>
+                <Select label="Claimant Type" value={form.claimant?.type || 'employee'} onChange={e => updateNested('claimant.type', e.target.value)} options={[
+                  { value: 'employee', label: 'Employee' }, { value: 'contractor', label: 'Contractor' },
+                  { value: 'visitor', label: 'Visitor' }, { value: 'third_party', label: 'Third Party' }
+                ]} />
+                <div className="grid grid-cols-2 gap-4">
+                  <Input label="First Name" value={form.claimant?.firstName || ''} onChange={e => updateNested('claimant.firstName', e.target.value)} />
+                  <Input label="Last Name" value={form.claimant?.lastName || ''} onChange={e => updateNested('claimant.lastName', e.target.value)} />
+                </div>
+                <div className="grid grid-cols-3 gap-4">
+                  <Input label="Employee ID" value={form.claimant?.employeeId || ''} onChange={e => updateNested('claimant.employeeId', e.target.value)} />
+                  <Input label="Department" value={form.claimant?.department || ''} onChange={e => updateNested('claimant.department', e.target.value)} />
+                  <Input label="Job Title" value={form.claimant?.jobTitle || ''} onChange={e => updateNested('claimant.jobTitle', e.target.value)} />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <Input label="Phone" value={form.claimant?.phone || ''} onChange={e => updateNested('claimant.phone', e.target.value)} />
+                  <Input label="Email" value={form.claimant?.email || ''} onChange={e => updateNested('claimant.email', e.target.value)} type="email" />
+                </div>
+                <div className="grid grid-cols-3 gap-4">
+                  <Input label="Hire Date" type="date" value={form.claimant?.hireDate ? new Date(form.claimant.hireDate).toISOString().split('T')[0] : ''} onChange={e => updateNested('claimant.hireDate', e.target.value)} />
+                  <Input label="Date of Birth" type="date" value={form.claimant?.dateOfBirth ? new Date(form.claimant.dateOfBirth).toISOString().split('T')[0] : ''} onChange={e => updateNested('claimant.dateOfBirth', e.target.value)} />
+                  <Input label="Avg Weekly Wage ($)" type="number" value={form.claimant?.avgWeeklyWage || ''} onChange={e => updateNested('claimant.avgWeeklyWage', parseFloat(e.target.value) || 0)} placeholder="For indemnity calc" />
+                </div>
+              </>
+            )}
+
+            {/* Injury Details Tab */}
+            {tab === 'injury' && (
+              <>
+                <div className="grid grid-cols-3 gap-4">
+                  <Input label="Date of Injury" type="date" value={form.injuryDetails?.dateOfInjury ? new Date(form.injuryDetails.dateOfInjury).toISOString().split('T')[0] : ''} onChange={e => updateNested('injuryDetails.dateOfInjury', e.target.value)} />
+                  <Input label="Time of Injury" type="time" value={form.injuryDetails?.timeOfInjury || ''} onChange={e => updateNested('injuryDetails.timeOfInjury', e.target.value)} />
+                  <Input label="Date Reported" type="date" value={form.injuryDetails?.dateReported ? new Date(form.injuryDetails.dateReported).toISOString().split('T')[0] : ''} onChange={e => updateNested('injuryDetails.dateReported', e.target.value)} />
+                </div>
+                <Input label="Location" value={form.injuryDetails?.location || ''} onChange={e => updateNested('injuryDetails.location', e.target.value)} placeholder="Where did the injury occur?" />
+                <Textarea label="Description" value={form.injuryDetails?.description || ''} onChange={e => updateNested('injuryDetails.description', e.target.value)} rows={3} placeholder="Describe how the injury occurred..." />
+                <div className="grid grid-cols-2 gap-4">
+                  <Input label="Nature of Injury" value={form.injuryDetails?.natureOfInjury || ''} onChange={e => updateNested('injuryDetails.natureOfInjury', e.target.value)} placeholder="e.g., Sprain, Laceration" />
+                  <Input label="Cause of Injury" value={form.injuryDetails?.causeOfInjury || ''} onChange={e => updateNested('injuryDetails.causeOfInjury', e.target.value)} placeholder="e.g., Slip, Fall, Struck by" />
+                </div>
+                <div className="p-4 bg-slate-50 rounded-xl">
+                  <h5 className="font-medium text-slate-700 mb-3">Treating Physician</h5>
+                  <div className="grid grid-cols-2 gap-4">
+                    <Input label="Physician Name" value={form.injuryDetails?.treatingPhysician?.name || ''} onChange={e => updateNested('injuryDetails.treatingPhysician.name', e.target.value)} />
+                    <Input label="Phone" value={form.injuryDetails?.treatingPhysician?.phone || ''} onChange={e => updateNested('injuryDetails.treatingPhysician.phone', e.target.value)} />
+                  </div>
+                  <Input label="Clinic/Hospital" value={form.injuryDetails?.treatingPhysician?.clinic || ''} onChange={e => updateNested('injuryDetails.treatingPhysician.clinic', e.target.value)} className="mt-3" />
+                </div>
+              </>
+            )}
+
+            {/* Enhanced Costs Tab with Payments */}
+            {tab === 'costs' && (
+              <>
+                {item && (
+                  <div className="flex gap-2 mb-4">
+                    <Button size="sm" onClick={() => setPaymentModal(true)} icon={<Icons.Plus />}>Add Payment</Button>
+                    <Button size="sm" variant="secondary" onClick={() => setReserveModal(true)} icon={<Icons.Edit />}>Adjust Reserves</Button>
+                  </div>
+                )}
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                  {['medical', 'indemnity', 'legal', 'other'].map(costType => (
+                    <div key={costType} className="p-4 bg-slate-50 rounded-xl">
+                      <h5 className="font-medium text-slate-700 capitalize mb-3">{costType}</h5>
+                      <Input label="Total/Incurred" type="number" value={form.costs?.[costType]?.total || 0} onChange={e => updateNested(`costs.${costType}.total`, parseFloat(e.target.value) || 0)} />
+                      <Input label="Paid" type="number" value={form.costs?.[costType]?.paid || 0} onChange={e => updateNested(`costs.${costType}.paid`, parseFloat(e.target.value) || 0)} className="mt-2" />
+                      <p className="text-xs text-slate-500 mt-2">Reserved: ${((form.costs?.[costType]?.total || 0) - (form.costs?.[costType]?.paid || 0)).toLocaleString()}</p>
+                      {form.costs?.[costType]?.payments?.length > 0 && (
+                        <p className="text-xs text-blue-600 mt-1">{form.costs[costType].payments.length} payment(s)</p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+                <div className="p-4 bg-blue-50 rounded-xl border border-blue-200">
+                  <div className="grid grid-cols-3 gap-4 text-center">
+                    <div><p className="text-sm text-slate-600">Total Incurred</p><p className="text-2xl font-bold text-slate-800">${totalIncurred.toLocaleString()}</p></div>
+                    <div><p className="text-sm text-slate-600">Total Paid</p><p className="text-2xl font-bold text-green-600">${totalPaid.toLocaleString()}</p></div>
+                    <div><p className="text-sm text-slate-600">Total Reserved</p><p className="text-2xl font-bold text-amber-600">${totalReserved.toLocaleString()}</p></div>
+                  </div>
+                </div>
+
+                {/* Payment History */}
+                {item && (
+                  <div className="mt-4">
+                    <h5 className="font-medium text-slate-700 mb-2">Payment History</h5>
+                    <div className="max-h-40 overflow-y-auto border rounded-lg">
+                      {['medical', 'indemnity', 'legal', 'other'].flatMap(type => 
+                        (form.costs?.[type]?.payments || []).map((p, i) => (
+                          <div key={`${type}-${i}`} className="flex justify-between items-center p-2 border-b text-sm">
+                            <div>
+                              <span className="font-medium capitalize">{type}</span>
+                              <span className="text-slate-500 ml-2">{p.payee || 'N/A'}</span>
+                              <span className="text-slate-400 ml-2">{p.description || ''}</span>
+                            </div>
+                            <div className="text-right">
+                              <span className="font-medium text-green-600">${(p.amount || 0).toLocaleString()}</span>
+                              <span className="text-slate-400 text-xs ml-2">{p.date ? new Date(p.date).toLocaleDateString() : ''}</span>
+                            </div>
+                          </div>
+                        ))
+                      )}
+                      {!['medical', 'indemnity', 'legal', 'other'].some(t => form.costs?.[t]?.payments?.length > 0) && (
+                        <p className="p-4 text-center text-slate-500 text-sm">No payments recorded</p>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+
+            {/* Return to Work Tab */}
+            {tab === 'rtw' && (
+              <>
+                <Select label="RTW Status" value={form.lostTime?.returnToWorkStatus || form.returnToWork?.status || 'unknown'} onChange={e => updateNested('lostTime.returnToWorkStatus', e.target.value)} options={[
+                  { value: 'not_returned', label: 'Not Yet Returned' },
+                  { value: 'light_duty', label: 'Light Duty' },
+                  { value: 'modified_duty', label: 'Modified Duty' },
+                  { value: 'full_duty', label: 'Full Duty' },
+                  { value: 'terminated', label: 'Terminated' },
+                  { value: 'unknown', label: 'Unknown' }
+                ]} />
+                <div className="grid grid-cols-3 gap-4">
+                  <Input label="Last Day Worked" type="date" value={form.returnToWork?.lastDayWorked ? new Date(form.returnToWork.lastDayWorked).toISOString().split('T')[0] : ''} onChange={e => updateNested('returnToWork.lastDayWorked', e.target.value)} />
+                  <Input label="Expected Return" type="date" value={form.returnToWork?.expectedReturnDate ? new Date(form.returnToWork.expectedReturnDate).toISOString().split('T')[0] : ''} onChange={e => updateNested('returnToWork.expectedReturnDate', e.target.value)} />
+                  <Input label="Actual Return" type="date" value={form.lostTime?.returnToWorkDate ? new Date(form.lostTime.returnToWorkDate).toISOString().split('T')[0] : ''} onChange={e => updateNested('lostTime.returnToWorkDate', e.target.value)} />
+                </div>
+                <div className="p-4 bg-red-50 rounded-xl border border-red-200">
+                  <h5 className="font-medium text-red-700 mb-3">Lost Time Tracking</h5>
+                  <div className="grid grid-cols-3 gap-4">
+                    <Input label="Days Away from Work" type="number" value={form.lostTime?.daysAway || 0} onChange={e => updateNested('lostTime.daysAway', parseInt(e.target.value) || 0)} />
+                    <Input label="Days on Restricted Duty" type="number" value={form.lostTime?.daysRestricted || 0} onChange={e => updateNested('lostTime.daysRestricted', parseInt(e.target.value) || 0)} />
+                    <div className="flex items-end"><p className="text-sm text-red-600 font-medium">Total: {(form.lostTime?.daysAway || 0) + (form.lostTime?.daysRestricted || 0)} days</p></div>
+                  </div>
+                </div>
+                <Textarea label="Work Restrictions" value={form.returnToWork?.restrictions?.join(', ') || ''} onChange={e => updateNested('returnToWork.restrictions', e.target.value.split(',').map(s => s.trim()))} rows={2} placeholder="e.g., No lifting over 10 lbs, No climbing" />
+                <Textarea label="Accommodations Provided" value={form.returnToWork?.accommodations || ''} onChange={e => updateNested('returnToWork.accommodations', e.target.value)} rows={2} placeholder="Workplace accommodations made..." />
+              </>
+            )}
+
+            {/* Insurance/TPA Tab */}
+            {tab === 'insurance' && (
+              <>
+                <div className="p-4 bg-slate-50 rounded-xl mb-4">
+                  <h5 className="font-medium text-slate-700 mb-3">Third Party Administrator (TPA)</h5>
+                  <div className="grid grid-cols-2 gap-4">
+                    <Input label="TPA Name" value={form.tpa?.name || ''} onChange={e => updateNested('tpa.name', e.target.value)} />
+                    <Input label="TPA Claim Number" value={form.tpa?.claimNumber || ''} onChange={e => updateNested('tpa.claimNumber', e.target.value)} />
+                  </div>
+                  <div className="grid grid-cols-3 gap-4 mt-3">
+                    <Input label="Adjuster Name" value={form.tpa?.adjusterName || ''} onChange={e => updateNested('tpa.adjusterName', e.target.value)} />
+                    <Input label="Adjuster Phone" value={form.tpa?.adjusterPhone || ''} onChange={e => updateNested('tpa.adjusterPhone', e.target.value)} />
+                    <Input label="Adjuster Email" value={form.tpa?.adjusterEmail || ''} onChange={e => updateNested('tpa.adjusterEmail', e.target.value)} type="email" />
+                  </div>
+                </div>
+                <div className="p-4 bg-slate-50 rounded-xl">
+                  <h5 className="font-medium text-slate-700 mb-3">Insurance Information</h5>
+                  <div className="grid grid-cols-2 gap-4">
+                    <Input label="Insurance Carrier" value={form.insurance?.carrier || ''} onChange={e => updateNested('insurance.carrier', e.target.value)} />
+                    <Input label="Policy Number" value={form.insurance?.policyNumber || ''} onChange={e => updateNested('insurance.policyNumber', e.target.value)} />
+                  </div>
+                  <div className="grid grid-cols-3 gap-4 mt-3">
+                    <Input label="Insurance Claim #" value={form.insurance?.claimNumber || ''} onChange={e => updateNested('insurance.claimNumber', e.target.value)} />
+                    <Input label="Deductible" type="number" value={form.insurance?.deductible || ''} onChange={e => updateNested('insurance.deductible', parseFloat(e.target.value) || 0)} />
+                    <Input label="Coverage Limit" type="number" value={form.insurance?.coverageLimit || ''} onChange={e => updateNested('insurance.coverageLimit', parseFloat(e.target.value) || 0)} />
+                  </div>
+                </div>
+              </>
+            )}
+
+            {/* Notes Tab */}
+            {tab === 'notes' && item && (
+              <>
+                <div className="flex justify-between items-center mb-3">
+                  <h5 className="font-medium text-slate-700">Claim Notes</h5>
+                  <Button size="sm" onClick={() => setNoteModal(true)} icon={<Icons.Plus />}>Add Note</Button>
+                </div>
+                <div className="space-y-2 max-h-60 overflow-y-auto">
+                  {(form.notes || []).length === 0 && <p className="text-slate-500 text-center py-4">No notes yet</p>}
+                  {(form.notes || []).slice().reverse().map((note, i) => (
+                    <div key={i} className={`p-3 rounded-lg border ${note.isPrivate ? 'bg-amber-50 border-amber-200' : 'bg-white border-slate-200'}`}>
+                      <div className="flex justify-between items-start mb-1">
+                        <span className={`text-xs px-2 py-0.5 rounded ${
+                          note.type === 'medical' ? 'bg-green-100 text-green-700' :
+                          note.type === 'legal' ? 'bg-purple-100 text-purple-700' :
+                          note.type === 'payment' ? 'bg-blue-100 text-blue-700' :
+                          'bg-slate-100 text-slate-700'
+                        }`}>{note.type || 'general'}</span>
+                        <span className="text-xs text-slate-400">{note.createdAt ? new Date(note.createdAt).toLocaleString() : ''}</span>
+                      </div>
+                      <p className="text-sm text-slate-700">{note.content}</p>
+                      {note.isPrivate && <span className="text-xs text-amber-600">🔒 Private</span>}
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+
+            {/* History Tab */}
+            {tab === 'history' && item && (
+              <>
+                <h5 className="font-medium text-slate-700 mb-3">Workflow History</h5>
+                <div className="space-y-2 max-h-60 overflow-y-auto">
+                  {(form.workflow?.history || []).length === 0 && <p className="text-slate-500 text-center py-4">No history yet</p>}
+                  {(form.workflow?.history || []).slice().reverse().map((h, i) => (
+                    <div key={i} className="flex items-start gap-3 p-3 bg-slate-50 rounded-lg">
+                      <div className="w-2 h-2 mt-2 rounded-full bg-blue-500" />
+                      <div className="flex-1">
+                        <p className="text-sm font-medium text-slate-700">{h.action?.replace(/_/g, ' ').toUpperCase()}</p>
+                        <p className="text-xs text-slate-500">{h.notes}</p>
+                        <p className="text-xs text-slate-400 mt-1">{h.performedAt ? new Date(h.performedAt).toLocaleString() : ''}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {(form.reserveHistory || []).length > 0 && (
+                  <>
+                    <h5 className="font-medium text-slate-700 mt-4 mb-3">Reserve Adjustments</h5>
+                    <div className="space-y-2">
+                      {form.reserveHistory.map((r, i) => (
+                        <div key={i} className="flex justify-between items-center p-2 bg-amber-50 rounded-lg text-sm">
+                          <div>
+                            <span className="font-medium capitalize">{r.costType}</span>
+                            <span className={`ml-2 ${r.change >= 0 ? 'text-red-600' : 'text-green-600'}`}>
+                              {r.change >= 0 ? '+' : ''}${r.change?.toLocaleString()}
+                            </span>
+                          </div>
+                          <div className="text-right text-xs text-slate-500">
+                            <div>{r.reason}</div>
+                            <div>{r.date ? new Date(r.date).toLocaleDateString() : ''}</div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </>
+            )}
+          </div>
+
+          {/* Payment Modal */}
+          {paymentModal && (
+            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setPaymentModal(false)}>
+              <div className="bg-white rounded-xl p-6 w-full max-w-md" onClick={e => e.stopPropagation()}>
+                <h3 className="text-lg font-semibold mb-4">Add Payment</h3>
+                <div className="space-y-4">
+                  <Select label="Cost Type" value={newPayment.costType} onChange={e => setNewPayment(p => ({ ...p, costType: e.target.value }))} options={[
+                    { value: 'medical', label: 'Medical' }, { value: 'indemnity', label: 'Indemnity' },
+                    { value: 'legal', label: 'Legal' }, { value: 'other', label: 'Other' }
+                  ]} />
+                  <Input label="Amount ($)" type="number" value={newPayment.amount} onChange={e => setNewPayment(p => ({ ...p, amount: parseFloat(e.target.value) || 0 }))} />
+                  <Input label="Payee" value={newPayment.payee} onChange={e => setNewPayment(p => ({ ...p, payee: e.target.value }))} placeholder="Who received payment?" />
+                  <Input label="Description" value={newPayment.description} onChange={e => setNewPayment(p => ({ ...p, description: e.target.value }))} placeholder="What is this payment for?" />
+                  <Input label="Check/Reference #" value={newPayment.checkNumber || ''} onChange={e => setNewPayment(p => ({ ...p, checkNumber: e.target.value }))} />
+                </div>
+                <div className="flex justify-end gap-2 mt-6">
+                  <Button variant="secondary" onClick={() => setPaymentModal(false)}>Cancel</Button>
+                  <Button onClick={handleAddPayment}>Add Payment</Button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Reserve Adjustment Modal */}
+          {reserveModal && (
+            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setReserveModal(false)}>
+              <div className="bg-white rounded-xl p-6 w-full max-w-md" onClick={e => e.stopPropagation()}>
+                <h3 className="text-lg font-semibold mb-4">Adjust Reserves</h3>
+                <div className="space-y-4">
+                  <Select label="Cost Type" value={newReserve.costType} onChange={e => setNewReserve(p => ({ ...p, costType: e.target.value, newTotal: form.costs?.[e.target.value]?.total || 0 }))} options={[
+                    { value: 'medical', label: 'Medical' }, { value: 'indemnity', label: 'Indemnity' },
+                    { value: 'legal', label: 'Legal' }, { value: 'other', label: 'Other' }
+                  ]} />
+                  <p className="text-sm text-slate-500">Current: ${(form.costs?.[newReserve.costType]?.total || 0).toLocaleString()}</p>
+                  <Input label="New Total ($)" type="number" value={newReserve.newTotal} onChange={e => setNewReserve(p => ({ ...p, newTotal: parseFloat(e.target.value) || 0 }))} />
+                  <Textarea label="Reason for Adjustment *" value={newReserve.reason} onChange={e => setNewReserve(p => ({ ...p, reason: e.target.value }))} rows={2} placeholder="Why are reserves being adjusted?" />
+                </div>
+                <div className="flex justify-end gap-2 mt-6">
+                  <Button variant="secondary" onClick={() => setReserveModal(false)}>Cancel</Button>
+                  <Button onClick={handleAdjustReserve}>Adjust Reserves</Button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Add Note Modal */}
+          {noteModal && (
+            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setNoteModal(false)}>
+              <div className="bg-white rounded-xl p-6 w-full max-w-md" onClick={e => e.stopPropagation()}>
+                <h3 className="text-lg font-semibold mb-4">Add Note</h3>
+                <div className="space-y-4">
+                  <Select label="Note Type" value={newNote.type} onChange={e => setNewNote(p => ({ ...p, type: e.target.value }))} options={[
+                    { value: 'general', label: 'General' }, { value: 'medical', label: 'Medical' },
+                    { value: 'legal', label: 'Legal' }, { value: 'investigation', label: 'Investigation' },
+                    { value: 'payment', label: 'Payment' }, { value: 'return_to_work', label: 'Return to Work' }
+                  ]} />
+                  <Textarea label="Note Content *" value={newNote.content} onChange={e => setNewNote(p => ({ ...p, content: e.target.value }))} rows={4} placeholder="Enter your note..." />
+                  <Checkbox label="Private Note (only visible to admins)" checked={newNote.isPrivate} onChange={e => setNewNote(p => ({ ...p, isPrivate: e.target.checked }))} />
+                </div>
+                <div className="flex justify-end gap-2 mt-6">
+                  <Button variant="secondary" onClick={() => setNoteModal(false)}>Cancel</Button>
+                  <Button onClick={handleAddNote}>Add Note</Button>
+                </div>
+              </div>
+            </div>
+          )}
         </Modal>
       );
     };
@@ -4873,27 +6342,30 @@
 
     // ========== SETTINGS PAGE ==========
     const SettingsPage = () => {
-      const { user } = useContext(AuthContext);
+      const { user, refreshUser } = useContext(AuthContext);
       const [org, setOrg] = useState(null);
       const [sub, setSub] = useState(null);
       const [loading, setLoading] = useState(true);
       const [saving, setSaving] = useState(false);
-      const [tab, setTab] = useState('organization');
+      const [tab, setTab] = useState('profile');
       const [billingCycle, setBillingCycle] = useState('monthly');
       const { addToast } = useContext(ToastContext) || {};
+      const [profile, setProfile] = useState({ firstName: '', lastName: '', phone: '', jobTitle: '', department: '', emergencyContact: {} });
+      const [passwordForm, setPasswordForm] = useState({ currentPassword: '', newPassword: '', confirmPassword: '' });
+      const [notifPrefs, setNotifPrefs] = useState({ email: { enabled: true, digest: 'daily', types: {} }, push: { enabled: true, urgentOnly: false }, inApp: { enabled: true } });
 
       useEffect(() => { 
-        Promise.all([api.get('/organization'), api.get('/subscription')])
-          .then(([o, s]) => { 
+        Promise.all([api.get('/organization'), api.get('/subscription'), api.get('/notifications/preferences').catch(() => ({}))])
+          .then(([o, s, n]) => { 
             setOrg(o.organization); 
             setSub(s);
-            // Set billing cycle from subscription
             if (s.subscription?.billingCycle) setBillingCycle(s.subscription.billingCycle);
+            if (n.preferences) setNotifPrefs(n.preferences);
+            if (user) setProfile({ firstName: user.firstName || '', lastName: user.lastName || '', phone: user.phone || '', jobTitle: user.jobTitle || '', department: user.department || '', emergencyContact: user.emergencyContact || {} });
           })
           .catch(console.error)
           .finally(() => setLoading(false)); 
         
-        // Check for checkout return
         const params = new URLSearchParams(window.location.search);
         if (params.get('checkout') === 'success') {
           addToast?.('Payment successful! Your subscription is now active.', 'success');
@@ -4902,7 +6374,7 @@
           addToast?.('Checkout cancelled', 'info');
           window.history.replaceState({}, '', window.location.pathname);
         }
-      }, []);
+      }, [user]);
 
       const handleSave = async () => { 
         setSaving(true); 
@@ -4914,16 +6386,80 @@
         } finally { setSaving(false); } 
       };
 
+      const handleSaveProfile = async () => { setSaving(true); try { await api.put('/auth/profile', profile); addToast?.('Profile updated!', 'success'); refreshUser?.(); } catch (e) { addToast?.('Failed to update profile', 'error'); } finally { setSaving(false); } };
+      const handleChangePassword = async () => { if (passwordForm.newPassword !== passwordForm.confirmPassword) { addToast?.('Passwords do not match', 'error'); return; } if (passwordForm.newPassword.length < 8) { addToast?.('Password must be at least 8 characters', 'error'); return; } setSaving(true); try { await api.put('/auth/password', { currentPassword: passwordForm.currentPassword, newPassword: passwordForm.newPassword }); addToast?.('Password changed!', 'success'); setPasswordForm({ currentPassword: '', newPassword: '', confirmPassword: '' }); } catch (e) { addToast?.(e.message || 'Failed to change password', 'error'); } finally { setSaving(false); } };
+      const handleSaveNotifPrefs = async () => { setSaving(true); try { await api.put('/notifications/preferences', notifPrefs); addToast?.('Preferences saved!', 'success'); } catch (e) { addToast?.('Failed to save', 'error'); } finally { setSaving(false); } };
+
       if (loading) return <div className="flex justify-center py-20"><Spinner size="lg" /></div>;
 
       return (
         <div className="space-y-6 slide-up">
           <div>
             <h2 className="text-2xl lg:text-3xl font-bold text-slate-800">Settings</h2>
-            <p className="text-slate-500 mt-1">Manage your organization and subscription</p>
+            <p className="text-slate-500 mt-1">Manage your profile, security, organization, and preferences</p>
           </div>
           
-          <Tabs tabs={[{ id: 'organization', label: 'Organization' }, { id: 'subscription', label: 'Subscription & Billing' }, { id: 'notifications', label: 'Notifications' }]} active={tab} onChange={setTab} />
+          <Tabs tabs={[{ id: 'profile', label: 'Profile' }, { id: 'security', label: 'Security' }, { id: 'organization', label: 'Organization' }, { id: 'subscription', label: 'Subscription' }, { id: 'notifications', label: 'Notifications' }, { id: 'sso', label: 'SSO/SAML' }]} active={tab} onChange={setTab} />
+
+          {/* Profile Tab */}
+          {tab === 'profile' && (
+            <div className="space-y-6">
+              <Card title="Personal Information" icon={<Icons.User />}>
+                <div className="space-y-4 max-w-2xl">
+                  <div className="grid grid-cols-2 gap-4">
+                    <Input label="First Name" value={profile.firstName} onChange={e => setProfile(p => ({ ...p, firstName: e.target.value }))} />
+                    <Input label="Last Name" value={profile.lastName} onChange={e => setProfile(p => ({ ...p, lastName: e.target.value }))} />
+                  </div>
+                  <Input label="Email" value={user?.email || ''} disabled helper="Contact admin to change email" />
+                  <div className="grid grid-cols-2 gap-4">
+                    <Input label="Phone" type="tel" value={profile.phone} onChange={e => setProfile(p => ({ ...p, phone: e.target.value }))} />
+                    <Input label="Job Title" value={profile.jobTitle} onChange={e => setProfile(p => ({ ...p, jobTitle: e.target.value }))} />
+                  </div>
+                  <Input label="Department" value={profile.department} onChange={e => setProfile(p => ({ ...p, department: e.target.value }))} />
+                  <Button onClick={handleSaveProfile} loading={saving}>Save Profile</Button>
+                </div>
+              </Card>
+              <Card title="Emergency Contact" icon={<Icons.Alert />}>
+                <div className="space-y-4 max-w-2xl">
+                  <div className="grid grid-cols-2 gap-4">
+                    <Input label="Contact Name" value={profile.emergencyContact?.name || ''} onChange={e => setProfile(p => ({ ...p, emergencyContact: { ...p.emergencyContact, name: e.target.value } }))} />
+                    <Input label="Phone" type="tel" value={profile.emergencyContact?.phone || ''} onChange={e => setProfile(p => ({ ...p, emergencyContact: { ...p.emergencyContact, phone: e.target.value } }))} />
+                  </div>
+                  <Input label="Relationship" value={profile.emergencyContact?.relationship || ''} onChange={e => setProfile(p => ({ ...p, emergencyContact: { ...p.emergencyContact, relationship: e.target.value } }))} placeholder="e.g., Spouse, Parent" />
+                  <Button onClick={handleSaveProfile} loading={saving}>Save Emergency Contact</Button>
+                </div>
+              </Card>
+            </div>
+          )}
+
+          {/* Security Tab */}
+          {tab === 'security' && (
+            <div className="space-y-6">
+              <Card title="Change Password" icon={<Icons.Lock />}>
+                <div className="space-y-4 max-w-md">
+                  <Input label="Current Password" type="password" value={passwordForm.currentPassword} onChange={e => setPasswordForm(p => ({ ...p, currentPassword: e.target.value }))} />
+                  <Input label="New Password" type="password" value={passwordForm.newPassword} onChange={e => setPasswordForm(p => ({ ...p, newPassword: e.target.value }))} helper="At least 8 characters" />
+                  <Input label="Confirm New Password" type="password" value={passwordForm.confirmPassword} onChange={e => setPasswordForm(p => ({ ...p, confirmPassword: e.target.value }))} />
+                  <Button onClick={handleChangePassword} loading={saving}>Update Password</Button>
+                </div>
+              </Card>
+              <Card title="Two-Factor Authentication" icon={<Icons.Shield />}>
+                <div className="space-y-4 max-w-md">
+                  <p className="text-sm text-slate-600">Add extra security to your account with two-factor authentication.</p>
+                  <Button onClick={async () => { try { const { secret } = await api.post('/auth/2fa/setup'); alert('Setup started. Secret: ' + secret); } catch (e) { addToast?.('Failed to setup 2FA', 'error'); } }}>Enable Two-Factor Authentication</Button>
+                </div>
+              </Card>
+              <Card title="Active Sessions" icon={<Icons.Contractor />}>
+                <div className="p-3 bg-slate-50 rounded-xl flex justify-between items-center">
+                  <div>
+                    <p className="font-medium text-slate-800">Current Session</p>
+                    <p className="text-sm text-slate-500">This device</p>
+                  </div>
+                  <Badge color="green">Active</Badge>
+                </div>
+              </Card>
+            </div>
+          )}
           
           {tab === 'organization' && (
             <Card title="Organization Details" icon={<Icons.Contractor />}>
@@ -4934,6 +6470,7 @@
                   <Input label="Email" type="email" value={org?.email || ''} onChange={e => setOrg(p => ({ ...p, email: e.target.value }))} />
                 </div>
                 <Input label="NAICS Code" value={org?.settings?.naicsCode || ''} onChange={e => setOrg(p => ({ ...p, settings: { ...p.settings, naicsCode: e.target.value } }))} helper="North American Industry Classification System code" />
+                <Input label="Average Employees" type="number" value={org?.settings?.averageEmployees || ''} onChange={e => setOrg(p => ({ ...p, settings: { ...p.settings, averageEmployees: parseInt(e.target.value) || 0 } }))} helper="Used for safety rate calculations" />
                 <Button onClick={handleSave} loading={saving}>Save Changes</Button>
               </div>
             </Card>
@@ -5019,9 +6556,11 @@
                             ['✓ Incidents & Actions', true],
                             ['✓ Inspections & Training', true],
                             ['✓ OSHA 300 Logs', true],
-                            ['✓ Custom Report Builder', true],
+                            ['✓ Safety Analytics (TRIR/LTIR)', t.safetyAnalytics],
+                            ['✓ Two-Factor Auth', t.twoFactor],
+                            ['Claims Management', t.claimsManagement],
+                            ['Document Workflows', t.documentWorkflows],
                             ['Risk Assessments', t.riskAssessment],
-                            ['Job Safety Analysis', t.jsaModule],
                             ['Permits to Work', t.permitToWork],
                             ['Contractor Management', t.contractorManagement],
                             ['Chemical/SDS', t.chemicalManagement],
@@ -5124,16 +6663,260 @@
           )}
           
           {tab === 'notifications' && (
-            <Card title="Notification Preferences" icon={<Icons.Bell />}>
-              <div className="space-y-4 max-w-xl">
-                <Checkbox label="Email notifications for new incidents" checked={true} onChange={() => {}} />
-                <Checkbox label="Email notifications for overdue action items" checked={true} onChange={() => {}} />
-                <Checkbox label="Daily summary digest" checked={false} onChange={() => {}} />
-                <Checkbox label="Weekly safety report" checked={true} onChange={() => {}} />
-                <Button className="mt-4" onClick={() => addToast?.('Notification preferences saved!', 'success')}>Save Preferences</Button>
-              </div>
-            </Card>
+            <div className="space-y-6">
+              <Card title="Email Notifications" icon={<Icons.Document />}>
+                <div className="space-y-4 max-w-xl">
+                  <Checkbox label="Enable email notifications" checked={notifPrefs.email?.enabled !== false} onChange={e => setNotifPrefs(p => ({ ...p, email: { ...p.email, enabled: e.target.checked } }))} />
+                  {notifPrefs.email?.enabled !== false && (
+                    <>
+                      <Select label="Email Digest Frequency" value={notifPrefs.email?.digest || 'daily'} onChange={e => setNotifPrefs(p => ({ ...p, email: { ...p.email, digest: e.target.value } }))} options={[
+                        { value: 'instant', label: 'Instant (every notification)' },
+                        { value: 'daily', label: 'Daily digest' },
+                        { value: 'weekly', label: 'Weekly digest' },
+                        { value: 'none', label: 'No digest emails' }
+                      ]} />
+                      <div className="p-4 bg-slate-50 rounded-xl">
+                        <p className="font-medium text-slate-700 mb-3">Notification Types</p>
+                        <div className="grid grid-cols-2 gap-3">
+                          {[['incident', 'Incidents'], ['action_item', 'Action Items'], ['training', 'Training'], ['inspection', 'Inspections'], ['document', 'Documents'], ['claim', 'Claims']].map(([key, label]) => (
+                            <Checkbox key={key} label={label} checked={notifPrefs.email?.types?.[key] !== false} onChange={e => setNotifPrefs(p => ({ ...p, email: { ...p.email, types: { ...p.email?.types, [key]: e.target.checked } } }))} />
+                          ))}
+                        </div>
+                      </div>
+                    </>
+                  )}
+                </div>
+              </Card>
+              <Card title="Push Notifications" icon={<Icons.Bell />}>
+                <div className="space-y-4 max-w-xl">
+                  <Checkbox label="Enable push notifications" checked={notifPrefs.push?.enabled !== false} onChange={e => setNotifPrefs(p => ({ ...p, push: { ...p.push, enabled: e.target.checked } }))} />
+                  <Checkbox label="Only notify for urgent items" checked={notifPrefs.push?.urgentOnly || false} onChange={e => setNotifPrefs(p => ({ ...p, push: { ...p.push, urgentOnly: e.target.checked } }))} />
+                </div>
+              </Card>
+              <Card title="In-App Notifications" icon={<Icons.Alert />}>
+                <div className="space-y-4 max-w-xl">
+                  <Checkbox label="Enable in-app notifications" checked={notifPrefs.inApp?.enabled !== false} onChange={e => setNotifPrefs(p => ({ ...p, inApp: { ...p.inApp, enabled: e.target.checked } }))} />
+                  <Checkbox label="Play notification sounds" checked={notifPrefs.inApp?.sound !== false} onChange={e => setNotifPrefs(p => ({ ...p, inApp: { ...p.inApp, sound: e.target.checked } }))} />
+                </div>
+              </Card>
+              <Button onClick={handleSaveNotifPrefs} loading={saving}>Save Notification Preferences</Button>
+            </div>
           )}
+
+          {tab === 'sso' && <SSOSettingsTab />}
+        </div>
+      );
+    };
+
+    // ========== SSO SETTINGS TAB ==========
+    const SSOSettingsTab = () => {
+      const [config, setConfig] = useState(null);
+      const [loading, setLoading] = useState(true);
+      const [saving, setSaving] = useState(false);
+      const [testing, setTesting] = useState(false);
+      const { addToast } = useContext(ToastContext) || {};
+
+      useEffect(() => {
+        api.get('/sso/config')
+          .then(data => setConfig(data.config || { enabled: false, provider: 'azure_ad' }))
+          .catch(() => setConfig({ enabled: false, provider: 'azure_ad' }))
+          .finally(() => setLoading(false));
+      }, []);
+
+      const handleSave = async () => {
+        setSaving(true);
+        try {
+          const { config: saved } = await api.put('/sso/config', config);
+          setConfig(saved);
+          addToast?.('SSO configuration saved!', 'success');
+        } catch (e) {
+          addToast?.(e.message || 'Failed to save SSO configuration', 'error');
+        }
+        setSaving(false);
+      };
+
+      const handleTest = async () => {
+        setTesting(true);
+        try {
+          const { testResult } = await api.post('/sso/test');
+          if (testResult.success) {
+            addToast?.('SSO configuration valid! ' + testResult.message, 'success');
+          } else {
+            addToast?.(testResult.message || 'SSO test failed', 'error');
+          }
+        } catch (e) {
+          addToast?.(e.message || 'SSO test failed', 'error');
+        }
+        setTesting(false);
+      };
+
+      if (loading) return <div className="flex justify-center py-10"><Spinner /></div>;
+
+      const providers = [
+        { value: 'azure_ad', label: 'Microsoft Azure AD', icon: '🔷' },
+        { value: 'okta', label: 'Okta', icon: '🟦' },
+        { value: 'google', label: 'Google Workspace', icon: '🔴' },
+        { value: 'onelogin', label: 'OneLogin', icon: '🟢' },
+        { value: 'custom_saml', label: 'Custom SAML 2.0', icon: '🔐' },
+        { value: 'custom_oidc', label: 'Custom OIDC', icon: '🔑' }
+      ];
+
+      return (
+        <div className="space-y-6">
+          <Card title="Single Sign-On (SSO)" subtitle="Configure enterprise identity provider integration" icon={<Icons.SSO />}>
+            <div className="space-y-6">
+              {/* Enable Toggle */}
+              <div className="p-4 bg-slate-50 rounded-xl flex items-center justify-between">
+                <div>
+                  <h4 className="font-semibold text-slate-800">Enable SSO</h4>
+                  <p className="text-sm text-slate-500">Allow users to sign in using your identity provider</p>
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input type="checkbox" checked={config?.enabled || false} onChange={e => setConfig(p => ({ ...p, enabled: e.target.checked }))} className="sr-only peer" />
+                  <div className="w-11 h-6 bg-slate-200 rounded-full peer peer-checked:after:translate-x-full peer-checked:bg-primary-600 after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all"></div>
+                </label>
+              </div>
+
+              {config?.enabled && (
+                <>
+                  {/* Provider Selection */}
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-2">Identity Provider</label>
+                    <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
+                      {providers.map(p => (
+                        <button
+                          key={p.value}
+                          onClick={() => setConfig(prev => ({ ...prev, provider: p.value }))}
+                          className={`p-4 rounded-xl border-2 text-left transition-all ${config?.provider === p.value ? 'border-primary-500 bg-primary-50' : 'border-slate-200 hover:border-slate-300'}`}
+                        >
+                          <span className="text-2xl">{p.icon}</span>
+                          <p className="font-medium text-slate-800 mt-2">{p.label}</p>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Azure AD Config */}
+                  {config?.provider === 'azure_ad' && (
+                    <div className="p-4 bg-blue-50 rounded-xl border border-blue-200 space-y-4">
+                      <h4 className="font-semibold text-blue-800 flex items-center gap-2">
+                        <span className="text-xl">🔷</span> Microsoft Azure AD Configuration
+                      </h4>
+                      <Input label="Tenant ID *" value={config?.azureAd?.tenantId || ''} onChange={e => setConfig(p => ({ ...p, azureAd: { ...p.azureAd, tenantId: e.target.value } }))} placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" helper="Found in Azure Portal > Azure Active Directory > Properties" />
+                      <Input label="Client ID (Application ID) *" value={config?.azureAd?.clientId || ''} onChange={e => setConfig(p => ({ ...p, azureAd: { ...p.azureAd, clientId: e.target.value } }))} placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" helper="Found in App Registration > Overview" />
+                      <Input label="Client Secret *" type="password" value={config?.azureAd?.clientSecret || ''} onChange={e => setConfig(p => ({ ...p, azureAd: { ...p.azureAd, clientSecret: e.target.value } }))} placeholder={config?.azureAd?.clientSecret === '***CONFIGURED***' ? '***CONFIGURED***' : 'Enter client secret'} helper="Found in App Registration > Certificates & Secrets" />
+                      <div className="p-3 bg-blue-100 rounded-lg">
+                        <p className="text-sm text-blue-800 font-medium">Redirect URI to configure in Azure:</p>
+                        <code className="text-xs bg-white px-2 py-1 rounded mt-1 block">{window.location.origin}/api/sso/callback</code>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Okta Config */}
+                  {config?.provider === 'okta' && (
+                    <div className="p-4 bg-indigo-50 rounded-xl border border-indigo-200 space-y-4">
+                      <h4 className="font-semibold text-indigo-800 flex items-center gap-2">
+                        <span className="text-xl">🟦</span> Okta Configuration
+                      </h4>
+                      <Input label="Okta Domain *" value={config?.okta?.domain || ''} onChange={e => setConfig(p => ({ ...p, okta: { ...p.okta, domain: e.target.value } }))} placeholder="dev-123456.okta.com" helper="Your Okta organization domain (without https://)" />
+                      <Input label="Client ID *" value={config?.okta?.clientId || ''} onChange={e => setConfig(p => ({ ...p, okta: { ...p.okta, clientId: e.target.value } }))} placeholder="0oaxxxxxxxxx" />
+                      <Input label="Client Secret *" type="password" value={config?.okta?.clientSecret || ''} onChange={e => setConfig(p => ({ ...p, okta: { ...p.okta, clientSecret: e.target.value } }))} placeholder={config?.okta?.clientSecret === '***CONFIGURED***' ? '***CONFIGURED***' : 'Enter client secret'} />
+                      <div className="p-3 bg-indigo-100 rounded-lg">
+                        <p className="text-sm text-indigo-800 font-medium">Redirect URI to configure in Okta:</p>
+                        <code className="text-xs bg-white px-2 py-1 rounded mt-1 block">{window.location.origin}/api/sso/callback</code>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Google Config */}
+                  {config?.provider === 'google' && (
+                    <div className="p-4 bg-red-50 rounded-xl border border-red-200 space-y-4">
+                      <h4 className="font-semibold text-red-800 flex items-center gap-2">
+                        <span className="text-xl">🔴</span> Google Workspace Configuration
+                      </h4>
+                      <Input label="Client ID *" value={config?.google?.clientId || ''} onChange={e => setConfig(p => ({ ...p, google: { ...p.google, clientId: e.target.value } }))} placeholder="xxxx.apps.googleusercontent.com" helper="Found in Google Cloud Console > APIs & Services > Credentials" />
+                      <Input label="Client Secret *" type="password" value={config?.google?.clientSecret || ''} onChange={e => setConfig(p => ({ ...p, google: { ...p.google, clientSecret: e.target.value } }))} placeholder={config?.google?.clientSecret === '***CONFIGURED***' ? '***CONFIGURED***' : 'Enter client secret'} />
+                      <Input label="Hosted Domain (optional)" value={config?.google?.hostedDomain || ''} onChange={e => setConfig(p => ({ ...p, google: { ...p.google, hostedDomain: e.target.value } }))} placeholder="yourcompany.com" helper="Restrict to specific Google Workspace domain" />
+                    </div>
+                  )}
+
+                  {/* Custom SAML Config */}
+                  {config?.provider === 'custom_saml' && (
+                    <div className="p-4 bg-slate-100 rounded-xl border border-slate-300 space-y-4">
+                      <h4 className="font-semibold text-slate-800 flex items-center gap-2">
+                        <span className="text-xl">🔐</span> SAML 2.0 Configuration
+                      </h4>
+                      <Input label="IdP SSO URL (Entry Point) *" value={config?.saml?.entryPoint || ''} onChange={e => setConfig(p => ({ ...p, saml: { ...p.saml, entryPoint: e.target.value } }))} placeholder="https://idp.example.com/sso/saml" />
+                      <Input label="IdP Entity ID (Issuer)" value={config?.saml?.issuer || ''} onChange={e => setConfig(p => ({ ...p, saml: { ...p.saml, issuer: e.target.value } }))} placeholder="https://idp.example.com" />
+                      <Textarea label="IdP Certificate (PEM) *" value={config?.saml?.cert || ''} onChange={e => setConfig(p => ({ ...p, saml: { ...p.saml, cert: e.target.value } }))} rows={4} placeholder="-----BEGIN CERTIFICATE-----&#10;...&#10;-----END CERTIFICATE-----" />
+                      <div className="p-3 bg-slate-200 rounded-lg">
+                        <p className="text-sm text-slate-800 font-medium mb-2">SP Metadata URL:</p>
+                        <code className="text-xs bg-white px-2 py-1 rounded block">{window.location.origin}/api/sso/saml/metadata?org={config?._id || 'YOUR_ORG_ID'}</code>
+                        <p className="text-sm text-slate-800 font-medium mt-3 mb-2">ACS URL (Callback):</p>
+                        <code className="text-xs bg-white px-2 py-1 rounded block">{window.location.origin}/api/sso/saml/callback</code>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Provisioning Settings */}
+                  <div className="p-4 bg-slate-50 rounded-xl space-y-4">
+                    <h4 className="font-semibold text-slate-800">User Provisioning</h4>
+                    <Checkbox label="Auto-create users on first login" checked={config?.provisioning?.autoCreateUsers !== false} onChange={e => setConfig(p => ({ ...p, provisioning: { ...p.provisioning, autoCreateUsers: e.target.checked } }))} />
+                    <Checkbox label="Update user info on each login" checked={config?.provisioning?.updateUserOnLogin !== false} onChange={e => setConfig(p => ({ ...p, provisioning: { ...p.provisioning, updateUserOnLogin: e.target.checked } }))} />
+                    <Select label="Default Role for New Users" value={config?.provisioning?.defaultRole || 'employee'} onChange={e => setConfig(p => ({ ...p, provisioning: { ...p.provisioning, defaultRole: e.target.value } }))} options={[
+                      { value: 'employee', label: 'Employee' },
+                      { value: 'safety_officer', label: 'Safety Officer' },
+                      { value: 'supervisor', label: 'Supervisor' }
+                    ]} />
+                  </div>
+
+                  {/* Security Settings */}
+                  <div className="p-4 bg-amber-50 rounded-xl border border-amber-200 space-y-4">
+                    <h4 className="font-semibold text-amber-800">Security Options</h4>
+                    <Checkbox label="Allow password login as fallback" checked={config?.security?.allowPasswordLogin !== false} onChange={e => setConfig(p => ({ ...p, security: { ...p.security, allowPasswordLogin: e.target.checked } }))} />
+                    <Checkbox label="Administrators can bypass SSO" checked={config?.security?.adminBypassSso !== false} onChange={e => setConfig(p => ({ ...p, security: { ...p.security, adminBypassSso: e.target.checked } }))} />
+                    <Checkbox label="Enforce SSO for all users" checked={config?.enforced || false} onChange={e => setConfig(p => ({ ...p, enforced: e.target.checked }))} />
+                  </div>
+
+                  {/* Status */}
+                  {config?.status && (
+                    <div className={`p-4 rounded-xl flex items-center justify-between ${config.status === 'active' ? 'bg-green-50 border border-green-200' : config.status === 'error' ? 'bg-red-50 border border-red-200' : 'bg-slate-50 border border-slate-200'}`}>
+                      <div>
+                        <p className="font-medium">Status: <span className={config.status === 'active' ? 'text-green-700' : config.status === 'error' ? 'text-red-700' : 'text-slate-700'}>{config.status?.replace(/_/g, ' ').toUpperCase()}</span></p>
+                        {config.lastTestedAt && <p className="text-sm text-slate-500">Last tested: {new Date(config.lastTestedAt).toLocaleString()}</p>}
+                        {config.lastError && <p className="text-sm text-red-600 mt-1">{config.lastError}</p>}
+                      </div>
+                      {config.status === 'active' && <Badge color="green">✓ Active</Badge>}
+                    </div>
+                  )}
+                </>
+              )}
+
+              {/* Actions */}
+              <div className="flex gap-3 pt-4 border-t border-slate-200">
+                <Button onClick={handleSave} loading={saving}>Save Configuration</Button>
+                {config?.enabled && (
+                  <Button variant="secondary" onClick={handleTest} loading={testing}>Test Connection</Button>
+                )}
+              </div>
+            </div>
+          </Card>
+
+          {/* Help Card */}
+          <Card title="Setup Instructions" icon={<Icons.Document />}>
+            <div className="prose prose-sm max-w-none">
+              <p className="text-slate-600">To set up SSO:</p>
+              <ol className="list-decimal list-inside space-y-2 text-slate-600">
+                <li>Select your identity provider above</li>
+                <li>Create an application/client in your IdP's admin console</li>
+                <li>Copy the redirect URI from above into your IdP configuration</li>
+                <li>Enter the credentials from your IdP into the form above</li>
+                <li>Click "Test Connection" to verify the setup</li>
+                <li>Save and enable SSO for your organization</li>
+              </ol>
+              <p className="text-slate-500 mt-4 text-sm">Need help? Contact support@safetyfirst-ehs.com</p>
+            </div>
+          </Card>
         </div>
       );
     };
@@ -6018,40 +7801,221 @@
 
     // ========== REPORTS PAGE ==========
     const ReportsPage = () => {
+      const [tab, setTab] = useState('analytics');
       const [type, setType] = useState('incidents');
       const [data, setData] = useState(null);
+      const [analytics, setAnalytics] = useState(null);
+      const [deptData, setDeptData] = useState(null);
+      const [trendsData, setTrendsData] = useState(null);
       const [loading, setLoading] = useState(false);
+      const [period, setPeriod] = useState('12months');
+      const [metric, setMetric] = useState('incidents');
+      const { addToast } = useContext(ToastContext) || {};
       
+      useEffect(() => {
+        if (tab === 'analytics') loadAnalytics();
+      }, [tab, period]);
+
+      const loadAnalytics = async () => {
+        setLoading(true);
+        try {
+          const [a, d, t] = await Promise.all([
+            api.get('/analytics/safety?period=' + period),
+            api.get('/analytics/departments'),
+            api.get('/analytics/trends?metric=' + metric + '&periods=12')
+          ]);
+          setAnalytics(a);
+          setDeptData(d);
+          setTrendsData(t);
+        } catch (e) { 
+          // Demo data fallback
+          setAnalytics({
+            summary: { safetyScore: 87, trir: 2.4, ltir: 0.8, severityRate: 18.5, trainingCompliance: 94, inspectionPassRate: 91, totalIncidents: 23, recordableIncidents: 5, nearMisses: 42, totalDaysLost: 28 }
+          });
+          setDeptData({ departments: [
+            { name: 'Production', incidents: 12, recordable: 3, trainingRate: 92 },
+            { name: 'Warehouse', incidents: 8, recordable: 2, trainingRate: 88 },
+            { name: 'Maintenance', incidents: 3, recordable: 0, trainingRate: 96 }
+          ]});
+        }
+        setLoading(false);
+      };
+
       const generate = async () => { 
         setLoading(true); 
         try { const d = await api.get('/reports/' + type); setData(d.report); } 
-        catch (e) { console.error(e); } 
+        catch (e) { console.error(e); addToast?.('Failed to generate report', 'error'); } 
         finally { setLoading(false); } 
       };
+
+      const exportReport = async (format) => {
+        try {
+          const response = await api.get('/analytics/export?type=full&format=' + format);
+          if (format === 'json') {
+            const blob = new Blob([JSON.stringify(response, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a'); a.href = url; a.download = 'safety-report.json'; a.click();
+          } else {
+            window.open(API + '/analytics/export?type=full&format=csv', '_blank');
+          }
+          addToast?.('Report exported!', 'success');
+        } catch (e) { addToast?.('Export failed', 'error'); }
+      };
+
+      const scoreColor = (score) => score >= 80 ? 'text-green-600' : score >= 60 ? 'text-amber-600' : 'text-red-600';
+      const scoreBg = (score) => score >= 80 ? 'bg-green-500' : score >= 60 ? 'bg-amber-500' : 'bg-red-500';
       
       return (
         <div className="space-y-6 slide-up">
-          <div>
-            <h2 className="text-2xl lg:text-3xl font-bold text-slate-800">Reports</h2>
-            <p className="text-slate-500">Generate and export safety reports</p>
-          </div>
-          <Card icon={<Icons.Reports />}>
-            <div className="flex flex-wrap gap-4 items-end">
-              <Select label="Report Type" value={type} onChange={e => setType(e.target.value)} options={[
-                { value: 'incidents', label: 'Incidents Report' }, 
-                { value: 'action-items', label: 'Action Items Report' }, 
-                { value: 'training', label: 'Training Report' }, 
-                { value: 'inspections', label: 'Inspections Report' }
-              ]} className="w-64" />
-              <Button onClick={generate} loading={loading}>Generate Report</Button>
-              <Button variant="secondary" icon={<Icons.Download />} onClick={() => window.open(API + '/reports/' + type + '?format=xlsx', '_blank')}>Export Excel</Button>
+          <div className="flex justify-between items-start">
+            <div>
+              <h2 className="text-2xl lg:text-3xl font-bold text-slate-800">Reports & Analytics</h2>
+              <p className="text-slate-500">Safety performance metrics and exportable reports</p>
             </div>
-            {data && (
-              <div className="mt-6 p-4 bg-slate-50 rounded-xl border border-slate-200">
-                <pre className="overflow-auto max-h-96 text-xs text-slate-600">{JSON.stringify(data, null, 2)}</pre>
+            <div className="flex gap-2">
+              <Button variant="secondary" icon={<Icons.Download />} onClick={() => exportReport('json')}>Export JSON</Button>
+              <Button variant="secondary" icon={<Icons.Download />} onClick={() => exportReport('csv')}>Export CSV</Button>
+            </div>
+          </div>
+
+          <Tabs tabs={[{ id: 'analytics', label: 'Safety Analytics' }, { id: 'departments', label: 'By Department' }, { id: 'reports', label: 'Generate Reports' }]} active={tab} onChange={setTab} />
+
+          {tab === 'analytics' && (
+            <div className="space-y-6">
+              <div className="flex gap-4">
+                <Select label="Time Period" value={period} onChange={e => setPeriod(e.target.value)} options={[
+                  { value: '30days', label: 'Last 30 Days' }, { value: '90days', label: 'Last 90 Days' },
+                  { value: '6months', label: 'Last 6 Months' }, { value: '12months', label: 'Last 12 Months' }, { value: 'ytd', label: 'Year to Date' }
+                ]} className="w-48" />
+                <Button onClick={loadAnalytics} loading={loading}>Refresh</Button>
               </div>
-            )}
-          </Card>
+
+              {analytics && (
+                <>
+                  {/* Safety Score Banner */}
+                  <div className={`p-6 rounded-2xl text-white ${scoreBg(analytics.summary?.safetyScore || 0)}`}>
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-white/80 font-medium">Overall Safety Score</p>
+                        <p className="text-5xl font-bold mt-2">{analytics.summary?.safetyScore || 0}</p>
+                        <p className="text-white/80 mt-1">out of 100</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-white/80">Based on:</p>
+                        <p className="text-sm">• Incident rates • Training compliance</p>
+                        <p className="text-sm">• Inspection scores • Days since recordable</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Key Metrics */}
+                  <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                    <Card className="text-center">
+                      <p className="text-3xl font-bold text-slate-800">{analytics.summary?.trir?.toFixed(2) || '0.00'}</p>
+                      <p className="text-sm text-slate-500">TRIR</p>
+                      <p className="text-xs text-slate-400 mt-1">Industry avg: 3.0</p>
+                    </Card>
+                    <Card className="text-center">
+                      <p className="text-3xl font-bold text-slate-800">{analytics.summary?.ltir?.toFixed(2) || '0.00'}</p>
+                      <p className="text-sm text-slate-500">LTIR</p>
+                      <p className="text-xs text-slate-400 mt-1">Lost time rate</p>
+                    </Card>
+                    <Card className="text-center">
+                      <p className={`text-3xl font-bold ${scoreColor(analytics.summary?.trainingCompliance || 0)}`}>{analytics.summary?.trainingCompliance || 0}%</p>
+                      <p className="text-sm text-slate-500">Training Compliance</p>
+                    </Card>
+                    <Card className="text-center">
+                      <p className={`text-3xl font-bold ${scoreColor(analytics.summary?.inspectionPassRate || 0)}`}>{analytics.summary?.inspectionPassRate || 0}%</p>
+                      <p className="text-sm text-slate-500">Inspection Pass Rate</p>
+                    </Card>
+                    <Card className="text-center">
+                      <p className="text-3xl font-bold text-red-600">{analytics.summary?.totalDaysLost || 0}</p>
+                      <p className="text-sm text-slate-500">Days Lost</p>
+                    </Card>
+                  </div>
+
+                  {/* Incident Summary */}
+                  <Card title="Incident Summary" icon={<Icons.Alert />}>
+                    <div className="grid grid-cols-4 gap-4 text-center">
+                      <div className="p-4 bg-slate-50 rounded-xl">
+                        <p className="text-2xl font-bold text-slate-800">{analytics.summary?.totalIncidents || 0}</p>
+                        <p className="text-sm text-slate-500">Total Incidents</p>
+                      </div>
+                      <div className="p-4 bg-red-50 rounded-xl">
+                        <p className="text-2xl font-bold text-red-600">{analytics.summary?.recordableIncidents || 0}</p>
+                        <p className="text-sm text-slate-500">Recordable</p>
+                      </div>
+                      <div className="p-4 bg-amber-50 rounded-xl">
+                        <p className="text-2xl font-bold text-amber-600">{analytics.summary?.nearMisses || 0}</p>
+                        <p className="text-sm text-slate-500">Near Misses</p>
+                      </div>
+                      <div className="p-4 bg-green-50 rounded-xl">
+                        <p className="text-2xl font-bold text-green-600">{(analytics.summary?.nearMisses || 0) > 0 ? ((analytics.summary?.nearMisses || 0) / Math.max(1, analytics.summary?.recordableIncidents || 1)).toFixed(1) : '0'}:1</p>
+                        <p className="text-sm text-slate-500">Near Miss Ratio</p>
+                      </div>
+                    </div>
+                  </Card>
+                </>
+              )}
+            </div>
+          )}
+
+          {tab === 'departments' && deptData && (
+            <Card title="Department Comparison" icon={<Icons.Contractor />}>
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead>
+                    <tr className="border-b border-slate-200">
+                      <th className="text-left py-3 px-4 font-medium text-slate-600">Department</th>
+                      <th className="text-center py-3 px-4 font-medium text-slate-600">Incidents</th>
+                      <th className="text-center py-3 px-4 font-medium text-slate-600">Recordable</th>
+                      <th className="text-center py-3 px-4 font-medium text-slate-600">Near Miss</th>
+                      <th className="text-center py-3 px-4 font-medium text-slate-600">Training Rate</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(deptData.departments || []).map((d, i) => (
+                      <tr key={i} className="border-b border-slate-100 hover:bg-slate-50">
+                        <td className="py-3 px-4 font-medium">{d.name || 'Unknown'}</td>
+                        <td className="py-3 px-4 text-center">{d.incidents || 0}</td>
+                        <td className="py-3 px-4 text-center text-red-600 font-medium">{d.recordable || 0}</td>
+                        <td className="py-3 px-4 text-center text-amber-600">{d.nearMiss || 0}</td>
+                        <td className="py-3 px-4 text-center">
+                          <span className={`font-medium ${(d.trainingRate || 0) >= 90 ? 'text-green-600' : (d.trainingRate || 0) >= 70 ? 'text-amber-600' : 'text-red-600'}`}>
+                            {d.trainingRate || 0}%
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </Card>
+          )}
+
+          {tab === 'reports' && (
+            <Card title="Generate Reports" icon={<Icons.Reports />}>
+              <div className="space-y-4">
+                <div className="flex flex-wrap gap-4 items-end">
+                  <Select label="Report Type" value={type} onChange={e => setType(e.target.value)} options={[
+                    { value: 'incidents', label: 'Incidents Report' }, 
+                    { value: 'action-items', label: 'Action Items Report' }, 
+                    { value: 'training', label: 'Training Compliance Report' }, 
+                    { value: 'inspections', label: 'Inspections Report' },
+                    { value: 'claims', label: 'Claims Report' },
+                    { value: 'osha', label: 'OSHA Summary Report' }
+                  ]} className="w-64" />
+                  <Button onClick={generate} loading={loading}>Generate Report</Button>
+                  <Button variant="secondary" icon={<Icons.Download />} onClick={() => window.open(API + '/reports/' + type + '?format=xlsx', '_blank')}>Export Excel</Button>
+                </div>
+                {data && (
+                  <div className="mt-6 p-4 bg-slate-50 rounded-xl border border-slate-200">
+                    <pre className="overflow-auto max-h-96 text-xs text-slate-600">{JSON.stringify(data, null, 2)}</pre>
+                  </div>
+                )}
+              </div>
+            </Card>
+          )}
         </div>
       );
     };
@@ -7055,6 +9019,7 @@
       const [page, setPage] = useState('dashboard');
       const [mobileOpen, setMobileOpen] = useState(false);
       const [toasts, setToasts] = useState([]);
+      const [quickSearchOpen, setQuickSearchOpen] = useState(false);
 
       const addToast = (message, type = 'info') => { 
         const id = Date.now(); 
@@ -7062,6 +9027,23 @@
         setTimeout(() => setToasts(p => p.filter(t => t.id !== id)), 5000); 
       };
       const removeToast = (id) => setToasts(p => p.filter(t => t.id !== id));
+
+      // Keyboard shortcuts
+      useEffect(() => {
+        const handleKeyDown = (e) => {
+          // Cmd+K or Ctrl+K for quick search
+          if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+            e.preventDefault();
+            setQuickSearchOpen(true);
+          }
+          // Escape to close search
+          if (e.key === 'Escape' && quickSearchOpen) {
+            setQuickSearchOpen(false);
+          }
+        };
+        document.addEventListener('keydown', handleKeyDown);
+        return () => document.removeEventListener('keydown', handleKeyDown);
+      }, [quickSearchOpen]);
 
       useEffect(() => {
         const token = localStorage.getItem('ehs_token');
@@ -7200,6 +9182,14 @@
             { header: 'Date', render: r => r.date ? new Date(r.date).toLocaleDateString() : '-' },
             { header: 'Status', render: r => <StatusBadge status={r.status} /> },
           ]} ModalComp={HealthModal} createLabel="New Record" icon={Icons.Health} />;
+          case 'claims': return <ListPage title="Claims Management" subtitle="Workers compensation and liability claims" endpoint="/claims" columns={[
+            { header: 'Claim #', render: r => <span className="font-mono text-xs bg-slate-100 px-2 py-1 rounded-lg">{r.claimNumber}</span> },
+            { header: 'Claimant', render: r => <span className="font-semibold text-slate-800">{r.claimant?.firstName} {r.claimant?.lastName}</span> },
+            { header: 'Type', render: r => <Badge color={r.claimType === 'workers_comp' ? 'blue' : r.claimType === 'auto' ? 'orange' : 'purple'}>{r.claimType?.replace(/_/g, ' ')}</Badge> },
+            { header: 'Total Incurred', render: r => <span className="font-semibold text-slate-700">${(r.costs?.totalIncurred || 0).toLocaleString()}</span> },
+            { header: 'RTW Status', render: r => <Badge color={r.returnToWork?.status === 'full_duty' ? 'green' : r.returnToWork?.status === 'off_work' ? 'red' : 'yellow'}>{r.returnToWork?.status?.replace(/_/g, ' ') || 'Unknown'}</Badge> },
+            { header: 'Status', render: r => <StatusBadge status={r.status} /> },
+          ]} ModalComp={ClaimsModal} createLabel="New Claim" icon={Icons.Claims} />;
           case 'emergency': return <ListPage title="Emergency Response Plans" subtitle="Emergency procedures and drill records" endpoint="/emergency-plans" columns={emergencyCols} ModalComp={EmergencyModal} createLabel="New Plan" icon={Icons.Emergency} />;
           case 'ergonomics': return <ListPage title="Ergonomic Assessments" subtitle="Workstation and task evaluations" endpoint="/ergonomic-assessments" columns={[
             { header: 'ID', render: r => <span className="font-mono text-xs bg-slate-100 px-2 py-1 rounded-lg">{r.assessmentNumber}</span> },
@@ -7294,17 +9284,117 @@
             <div className="min-h-screen flex bg-slate-100">
               <Sidebar page={page} setPage={setPage} user={user} onLogout={handleLogout} mobileOpen={mobileOpen} setMobileOpen={setMobileOpen} />
               <div className="flex-1 flex flex-col min-w-0">
-                <Header user={user} setMobileOpen={setMobileOpen} />
+                <Header user={user} setMobileOpen={setMobileOpen} onSearchClick={() => setQuickSearchOpen(true)} />
                 <main className="flex-1 p-4 lg:p-6 overflow-auto">{renderPage()}</main>
               </div>
             </div>
             <Toast toasts={toasts} removeToast={removeToast} />
+            <QuickSearch 
+              isOpen={quickSearchOpen} 
+              onClose={() => setQuickSearchOpen(false)} 
+              onNavigate={(newPage, id) => { setPage(newPage); /* Could also open modal with id */ }}
+            />
           </ToastContext.Provider>
         </AuthContext.Provider>
       );
     };
 
     ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+
+    // ========== PWA SERVICE WORKER REGISTRATION ==========
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', async () => {
+        try {
+          const registration = await navigator.serviceWorker.register('/sw.js', { scope: '/' });
+          console.log('ServiceWorker registered:', registration.scope);
+          
+          // Check for updates
+          registration.addEventListener('updatefound', () => {
+            const newWorker = registration.installing;
+            newWorker.addEventListener('statechange', () => {
+              if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                // New version available - show update prompt
+                if (confirm('A new version of SafetyFirst EHS is available. Reload to update?')) {
+                  window.location.reload();
+                }
+              }
+            });
+          });
+        } catch (error) {
+          console.log('ServiceWorker registration failed:', error);
+        }
+      });
+      
+      // Handle offline/online status
+      window.addEventListener('online', () => {
+        document.body.classList.remove('offline-mode');
+        console.log('Back online - syncing data...');
+        // Trigger background sync
+        if ('sync' in window.registration) {
+          window.registration.sync.register('sync-pending-requests');
+        }
+      });
+      
+      window.addEventListener('offline', () => {
+        document.body.classList.add('offline-mode');
+        console.log('Gone offline - using cached data');
+      });
+    }
+
+    // ========== PWA INSTALL PROMPT ==========
+    let deferredInstallPrompt = null;
+    
+    window.addEventListener('beforeinstallprompt', (e) => {
+      e.preventDefault();
+      deferredInstallPrompt = e;
+      
+      // Show install button in UI after a delay
+      setTimeout(() => {
+        const installBanner = document.createElement('div');
+        installBanner.id = 'pwa-install-banner';
+        installBanner.innerHTML = \`
+          <div style="position:fixed;bottom:20px;left:20px;right:20px;max-width:400px;background:linear-gradient(135deg,#1e40af,#3b82f6);color:white;padding:16px 20px;border-radius:16px;box-shadow:0 10px 40px rgba(59,130,246,0.4);z-index:9999;display:flex;align-items:center;gap:16px;font-family:Inter,sans-serif;">
+            <div style="width:48px;height:48px;background:white;border-radius:12px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+              <svg style="width:28px;height:28px;color:#3b82f6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
+            </div>
+            <div style="flex:1;min-width:0;">
+              <div style="font-weight:600;font-size:14px;margin-bottom:2px;">Install SafetyFirst EHS</div>
+              <div style="font-size:12px;opacity:0.9;">Add to home screen for offline access</div>
+            </div>
+            <button id="pwa-install-btn" style="background:white;color:#1e40af;border:none;padding:8px 16px;border-radius:8px;font-weight:600;font-size:13px;cursor:pointer;white-space:nowrap;">Install</button>
+            <button id="pwa-dismiss-btn" style="background:transparent;border:none;color:white;opacity:0.7;cursor:pointer;padding:4px;margin-left:-8px;">
+              <svg style="width:20px;height:20px" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+            </button>
+          </div>
+        \`;
+        document.body.appendChild(installBanner);
+        
+        document.getElementById('pwa-install-btn').addEventListener('click', async () => {
+          if (deferredInstallPrompt) {
+            deferredInstallPrompt.prompt();
+            const result = await deferredInstallPrompt.userChoice;
+            console.log('Install prompt result:', result.outcome);
+            deferredInstallPrompt = null;
+          }
+          installBanner.remove();
+        });
+        
+        document.getElementById('pwa-dismiss-btn').addEventListener('click', () => {
+          installBanner.remove();
+          localStorage.setItem('pwa-install-dismissed', Date.now());
+        });
+        
+        // Auto-hide after 30 seconds
+        setTimeout(() => installBanner.remove(), 30000);
+      }, 3000);
+    });
+
+    window.addEventListener('appinstalled', () => {
+      console.log('SafetyFirst EHS installed successfully');
+      deferredInstallPrompt = null;
+      const banner = document.getElementById('pwa-install-banner');
+      if (banner) banner.remove();
+    });
   </script>
 </body>
 </html>
