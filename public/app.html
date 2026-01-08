@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <meta name="theme-color" content="#3b82f6">
+  <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="SafetyFirst">
@@ -9352,7 +9353,7 @@
       setTimeout(() => {
         const installBanner = document.createElement('div');
         installBanner.id = 'pwa-install-banner';
-        installBanner.innerHTML = \`
+        installBanner.innerHTML = `
           <div style="position:fixed;bottom:20px;left:20px;right:20px;max-width:400px;background:linear-gradient(135deg,#1e40af,#3b82f6);color:white;padding:16px 20px;border-radius:16px;box-shadow:0 10px 40px rgba(59,130,246,0.4);z-index:9999;display:flex;align-items:center;gap:16px;font-family:Inter,sans-serif;">
             <div style="width:48px;height:48px;background:white;border-radius:12px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
               <svg style="width:28px;height:28px;color:#3b82f6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
@@ -9366,7 +9367,7 @@
               <svg style="width:20px;height:20px" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
             </button>
           </div>
-        \`;
+        `;
         document.body.appendChild(installBanner);
         
         document.getElementById('pwa-install-btn').addEventListener('click', async () => {
