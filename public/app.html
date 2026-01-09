@@ -2057,6 +2057,39 @@
       const [tab, setTab] = useState('basic');
       const [involvedPerson, setInvolvedPerson] = useState(null);
       const [witness, setWitness] = useState(null);
+      const [customForm, setCustomForm] = useState(null);
+      const [availableForms, setAvailableForms] = useState([]);
+      const [loadingForm, setLoadingForm] = useState(false);
+      const toast = useContext(ToastContext);
+
+      // Load available custom forms for the incident type
+      useEffect(() => {
+        const loadCustomForms = async () => {
+          if (!form.type) return;
+          setLoadingForm(true);
+          try {
+            const data = await api.get('/incident-forms/for-type/' + form.type);
+            setAvailableForms(data.forms || []);
+            // Auto-select default form if available and not already set
+            if (!form.customFormId && data.forms?.length > 0) {
+              const defaultForm = data.forms.find(f => f.isDefault) || data.forms[0];
+              if (defaultForm) {
+                setCustomForm(defaultForm);
+                setForm(p => ({ ...p, customFormId: defaultForm._id }));
+              }
+            } else if (form.customFormId) {
+              const selected = data.forms?.find(f => f._id === form.customFormId);
+              if (selected) setCustomForm(selected);
+            }
+          } catch (e) { 
+            // No custom forms available - use default
+            setAvailableForms([]);
+            setCustomForm(null);
+          }
+          setLoadingForm(false);
+        };
+        loadCustomForms();
+      }, [form.type]);
       
       useEffect(() => { 
         if (item) {
@@ -2072,7 +2105,8 @@
             investigation: item.investigation || {},
             oshaRecordability: item.oshaRecordability || {},
             costs: item.costs || { direct: {}, indirect: {} },
-            drugAlcoholTesting: item.drugAlcoholTesting || {}
+            drugAlcoholTesting: item.drugAlcoholTesting || {},
+            customFormData: item.customFormData || {}
           }); 
         } else {
           setForm({ 
@@ -2087,19 +2121,128 @@
             investigation: { required: true, status: 'not_started' },
             oshaRecordability: { isRecordable: false },
             costs: { direct: {}, indirect: {} },
-            drugAlcoholTesting: { testingRequired: false }
+            drugAlcoholTesting: { testingRequired: false },
+            customFormData: {}
           }); 
         }
         setTab('basic');
+        setCustomForm(null);
+        setAvailableForms([]);
       }, [item, isOpen]);
+
+      // Handle form template selection change
+      const handleFormTemplateChange = (formId) => {
+        const selected = availableForms.find(f => f._id === formId);
+        setCustomForm(selected || null);
+        setForm(p => ({ ...p, customFormId: formId || null }));
+      };
+
+      // Update custom form field value
+      const updateCustomField = (fieldId, value) => {
+        setForm(p => ({
+          ...p,
+          customFormData: { ...p.customFormData, [fieldId]: value }
+        }));
+      };
+
+      // Render a custom field based on its type
+      const renderCustomField = (field) => {
+        const value = form.customFormData?.[field.fieldId] || field.defaultValue || '';
+        const commonProps = {
+          label: field.label + (field.required ? ' *' : ''),
+          value,
+          onChange: e => updateCustomField(field.fieldId, e.target.value),
+          placeholder: field.placeholder || ''
+        };
+
+        switch (field.type) {
+          case 'text':
+          case 'email':
+          case 'phone':
+          case 'number':
+            return <Input key={field.fieldId} {...commonProps} type={field.type === 'number' ? 'number' : 'text'} />;
+          case 'textarea':
+            return <Textarea key={field.fieldId} {...commonProps} rows={field.rows || 3} />;
+          case 'select':
+            return <Select key={field.fieldId} {...commonProps} options={[{ value: '', label: 'Select...' }, ...(field.options || []).map(o => ({ value: o.value, label: o.label }))]} />;
+          case 'multiselect':
+            return (
+              <div key={field.fieldId} className="space-y-2">
+                <label className="block text-sm font-medium text-slate-700">{field.label}{field.required && ' *'}</label>
+                <div className="flex flex-wrap gap-2">
+                  {(field.options || []).map(opt => (
+                    <label key={opt.value} className={`px-3 py-1.5 rounded-lg text-sm cursor-pointer border ${(form.customFormData?.[field.fieldId] || []).includes(opt.value) ? 'bg-primary-100 border-primary-500 text-primary-700' : 'bg-white border-slate-200'}`}>
+                      <input type="checkbox" className="hidden" checked={(form.customFormData?.[field.fieldId] || []).includes(opt.value)}
+                        onChange={e => {
+                          const current = form.customFormData?.[field.fieldId] || [];
+                          updateCustomField(field.fieldId, e.target.checked ? [...current, opt.value] : current.filter(v => v !== opt.value));
+                        }} />
+                      {opt.label}
+                    </label>
+                  ))}
+                </div>
+              </div>
+            );
+          case 'checkbox':
+            return <Checkbox key={field.fieldId} label={field.label} checked={!!form.customFormData?.[field.fieldId]} onChange={e => updateCustomField(field.fieldId, e.target.checked)} />;
+          case 'date':
+            return <Input key={field.fieldId} {...commonProps} type="date" />;
+          case 'time':
+            return <Input key={field.fieldId} {...commonProps} type="time" />;
+          case 'datetime':
+            return <Input key={field.fieldId} {...commonProps} type="datetime-local" />;
+          case 'radio':
+            return (
+              <div key={field.fieldId} className="space-y-2">
+                <label className="block text-sm font-medium text-slate-700">{field.label}{field.required && ' *'}</label>
+                <div className="flex flex-wrap gap-4">
+                  {(field.options || []).map(opt => (
+                    <label key={opt.value} className="flex items-center gap-2 cursor-pointer">
+                      <input type="radio" name={field.fieldId} value={opt.value} checked={form.customFormData?.[field.fieldId] === opt.value}
+                        onChange={e => updateCustomField(field.fieldId, e.target.value)}
+                        className="w-4 h-4 text-primary-600" />
+                      <span className="text-sm text-slate-700">{opt.label}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            );
+          case 'heading':
+            return <h4 key={field.fieldId} className="text-lg font-semibold text-slate-800 pt-2">{field.label}</h4>;
+          case 'paragraph':
+            return <p key={field.fieldId} className="text-sm text-slate-600">{field.content || field.label}</p>;
+          case 'divider':
+            return <hr key={field.fieldId} className="border-slate-200" />;
+          default:
+            return <Input key={field.fieldId} {...commonProps} />;
+        }
+      };
       
       const handleSubmit = async () => { 
-        if (!form.title || !form.dateOccurred) return;
+        if (!form.title || !form.dateOccurred) {
+          toast?.('Please fill in required fields', 'error');
+          return;
+        }
+        // Validate custom form required fields
+        if (customForm) {
+          for (const section of customForm.sections || []) {
+            for (const field of section.fields || []) {
+              if (field.required && !form.customFormData?.[field.fieldId]) {
+                toast?.(`Please fill in required field: ${field.label}`, 'error');
+                setTab('custom');
+                return;
+              }
+            }
+          }
+        }
         setLoading(true); 
         try { 
           item?._id ? await api.put('/incidents/' + item._id, form) : await api.post('/incidents', form); 
+          toast?.('Incident saved successfully', 'success');
           onSave(); 
-        } catch (e) { console.error(e); } 
+        } catch (e) { 
+          toast?.(e.message || 'Failed to save incident', 'error');
+        } 
         finally { setLoading(false); } 
       };
 
@@ -2199,6 +2342,7 @@
         { id: 'environment', label: 'Environment' },
         { id: 'persons', label: 'Involved Persons' },
         { id: 'witnesses', label: 'Witnesses' },
+        ...(customForm ? [{ id: 'custom', label: '📋 ' + (customForm.name || 'Custom Fields') }] : []),
         { id: 'investigation', label: 'Investigation' },
         { id: 'rootcause', label: 'Root Cause' },
         { id: 'osha', label: 'OSHA' },
@@ -2252,6 +2396,31 @@
                   <Select label="Severity" value={form.severity || 'minor'} onChange={e => setForm(p => ({ ...p, severity: e.target.value }))} options={severities} />
                   <Select label="Potential Severity" value={form.potentialSeverity || ''} onChange={e => setForm(p => ({ ...p, potentialSeverity: e.target.value }))} options={[{ value: '', label: 'Select...' }, ...severities]} />
                 </div>
+                {/* Form Template Selector */}
+                {availableForms.length > 0 && (
+                  <div className="p-4 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl border border-blue-200">
+                    <div className="flex items-center justify-between gap-4">
+                      <div className="flex-1">
+                        <label className="block text-sm font-medium text-blue-800 mb-1">Report Form Template</label>
+                        <Select 
+                          value={form.customFormId || ''} 
+                          onChange={e => handleFormTemplateChange(e.target.value)}
+                          options={[
+                            { value: '', label: 'Standard Form (Default)' },
+                            ...availableForms.map(f => ({ value: f._id, label: f.name + (f.isDefault ? ' ⭐' : '') }))
+                          ]} 
+                        />
+                      </div>
+                      {customForm && (
+                        <div className="text-right">
+                          <Badge color="blue">{customForm.sections?.length || 0} sections</Badge>
+                          <p className="text-xs text-blue-600 mt-1">{customForm.sections?.reduce((acc, s) => acc + (s.fields?.length || 0), 0) || 0} custom fields</p>
+                        </div>
+                      )}
+                    </div>
+                    {customForm?.description && <p className="text-xs text-blue-600 mt-2">{customForm.description}</p>}
+                  </div>
+                )}
                 <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
                   <Input label="Date Occurred *" type="date" value={form.dateOccurred || ''} onChange={e => setForm(p => ({ ...p, dateOccurred: e.target.value }))} />
                   <Input label="Time Occurred" type="time" value={form.timeOccurred || ''} onChange={e => setForm(p => ({ ...p, timeOccurred: e.target.value }))} />
@@ -2264,6 +2433,40 @@
                 </div>
                 <Textarea label="Description" value={form.description || ''} onChange={e => setForm(p => ({ ...p, description: e.target.value }))} rows={4} placeholder="Describe what happened, who was involved, and any immediate actions taken..." />
               </>
+            )}
+
+            {/* CUSTOM FIELDS TAB */}
+            {tab === 'custom' && customForm && (
+              <div className="space-y-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="text-lg font-semibold text-slate-800">{customForm.name}</h3>
+                    {customForm.description && <p className="text-sm text-slate-500">{customForm.description}</p>}
+                  </div>
+                  <Badge color="blue">v{customForm.version || 1}</Badge>
+                </div>
+                {(customForm.sections || []).map((section, sIdx) => (
+                  <div key={sIdx} className="bg-slate-50 rounded-xl p-5 border border-slate-200">
+                    <h4 className="font-semibold text-slate-700 mb-4 flex items-center gap-2">
+                      <span className="w-6 h-6 bg-primary-100 text-primary-700 rounded-full flex items-center justify-center text-sm">{sIdx + 1}</span>
+                      {section.name}
+                    </h4>
+                    {section.description && <p className="text-sm text-slate-500 mb-4">{section.description}</p>}
+                    <div className="space-y-4">
+                      {(section.fields || []).map(field => (
+                        <div key={field.fieldId} className={field.width === 'half' ? 'w-1/2' : 'w-full'}>
+                          {renderCustomField(field)}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+                {(!customForm.sections || customForm.sections.length === 0) && (
+                  <div className="text-center py-8 text-slate-500">
+                    <p>No custom fields configured for this form template.</p>
+                  </div>
+                )}
+              </div>
             )}
 
             {/* LOCATION TAB */}
