@@ -80,25 +80,161 @@
       enterprise: { name: 'Enterprise', price: 1299, users: 'Unlimited', color: 'amber', safetyAnalytics: true, twoFactor: true, claimsManagement: true, documentWorkflows: true, riskAssessment: true, jsaModule: true, permitToWork: true, contractorManagement: true, chemicalManagement: true, ssoIntegration: true, apiAccess: true }
     };
 
-    // ========== API HELPER ==========
+    // ========== OFFLINE QUEUE SYSTEM ==========
+    const OfflineQueue = {
+      dbName: 'SafetyFirstEHS',
+      storeName: 'pendingRequests',
+      db: null,
+      isOnline: navigator.onLine,
+      pendingCount: 0,
+      listeners: [],
+      
+      async init() {
+        return new Promise((resolve, reject) => {
+          const request = indexedDB.open(this.dbName, 1);
+          request.onerror = () => reject(request.error);
+          request.onsuccess = () => { this.db = request.result; this.updatePendingCount(); resolve(); };
+          request.onupgradeneeded = (e) => {
+            const db = e.target.result;
+            if (!db.objectStoreNames.contains(this.storeName)) {
+              db.createObjectStore(this.storeName, { keyPath: 'id', autoIncrement: true });
+            }
+          };
+        });
+      },
+      
+      async add(endpoint, method, data) {
+        if (!this.db) await this.init();
+        return new Promise((resolve, reject) => {
+          const tx = this.db.transaction(this.storeName, 'readwrite');
+          const store = tx.objectStore(this.storeName);
+          const request = store.add({ 
+            endpoint, method, data, 
+            timestamp: Date.now(),
+            retries: 0
+          });
+          request.onsuccess = () => { this.updatePendingCount(); resolve(request.result); };
+          request.onerror = () => reject(request.error);
+        });
+      },
+      
+      async getAll() {
+        if (!this.db) await this.init();
+        return new Promise((resolve, reject) => {
+          const tx = this.db.transaction(this.storeName, 'readonly');
+          const request = tx.objectStore(this.storeName).getAll();
+          request.onsuccess = () => resolve(request.result);
+          request.onerror = () => reject(request.error);
+        });
+      },
+      
+      async remove(id) {
+        if (!this.db) await this.init();
+        return new Promise((resolve, reject) => {
+          const tx = this.db.transaction(this.storeName, 'readwrite');
+          const request = tx.objectStore(this.storeName).delete(id);
+          request.onsuccess = () => { this.updatePendingCount(); resolve(); };
+          request.onerror = () => reject(request.error);
+        });
+      },
+      
+      async updatePendingCount() {
+        try {
+          const items = await this.getAll();
+          this.pendingCount = items.length;
+          this.notifyListeners();
+        } catch (e) { this.pendingCount = 0; }
+      },
+      
+      subscribe(fn) { this.listeners.push(fn); return () => this.listeners = this.listeners.filter(l => l !== fn); },
+      notifyListeners() { this.listeners.forEach(fn => fn({ pendingCount: this.pendingCount, isOnline: this.isOnline })); },
+      
+      async sync() {
+        if (!this.isOnline) return { synced: 0, failed: 0 };
+        const items = await this.getAll();
+        let synced = 0, failed = 0;
+        
+        for (const item of items.sort((a, b) => a.timestamp - b.timestamp)) {
+          try {
+            await api.req(item.endpoint, { 
+              method: item.method, 
+              body: item.data ? JSON.stringify(item.data) : undefined,
+              skipQueue: true // Prevent re-queuing
+            });
+            await this.remove(item.id);
+            synced++;
+          } catch (e) {
+            failed++;
+            console.log('Sync failed for:', item.endpoint, e.message);
+          }
+        }
+        return { synced, failed };
+      }
+    };
+    
+    // Initialize offline queue and listen for online/offline events
+    OfflineQueue.init().catch(console.error);
+    window.addEventListener('online', () => { 
+      OfflineQueue.isOnline = true; 
+      OfflineQueue.notifyListeners();
+      // Auto-sync when back online
+      OfflineQueue.sync().then(result => {
+        if (result.synced > 0) {
+          console.log(`Synced ${result.synced} pending requests`);
+        }
+      });
+    });
+    window.addEventListener('offline', () => { 
+      OfflineQueue.isOnline = false; 
+      OfflineQueue.notifyListeners();
+    });
+
+    // ========== API HELPER WITH OFFLINE SUPPORT ==========
     const api = {
       token: localStorage.getItem('ehs_token'),
       setToken(t) { this.token = t; t ? localStorage.setItem('ehs_token', t) : localStorage.removeItem('ehs_token'); },
       async req(ep, opt = {}) {
+        const isWriteRequest = ['POST', 'PUT', 'DELETE'].includes(opt.method);
+        const skipQueue = opt.skipQueue;
+        delete opt.skipQueue;
+        
         try {
           const r = await fetch(API + ep, { 
             ...opt, 
             headers: { 'Content-Type': 'application/json', ...(this.token && { Authorization: 'Bearer ' + this.token }), ...opt.headers } 
           });
           const d = await r.json().catch(() => ({ error: 'Invalid server response' }));
+          
           if (r.status === 401 && !ep.includes('/auth/')) { 
             this.setToken(null); 
             window.location.href = '/login'; 
             throw new Error('Session expired'); 
           }
+          
+          // Handle 503 Service Unavailable - queue write requests for retry
+          if (r.status === 503 && isWriteRequest && !skipQueue) {
+            const data = opt.body ? JSON.parse(opt.body) : null;
+            await OfflineQueue.add(ep, opt.method, data);
+            return { 
+              queued: true, 
+              message: 'Request saved. Will sync when connection is restored.',
+              _offlineId: Date.now()
+            };
+          }
+          
           if (!r.ok) throw new Error(d.error || d.message || 'Request failed');
           return d;
         } catch (e) { 
+          // Network error - queue write requests
+          if ((e.message === 'Failed to fetch' || e.name === 'TypeError') && isWriteRequest && !skipQueue) {
+            const data = opt.body ? JSON.parse(opt.body) : null;
+            await OfflineQueue.add(ep, opt.method, data);
+            return { 
+              queued: true, 
+              message: 'You appear to be offline. Request saved and will sync when connection is restored.',
+              _offlineId: Date.now()
+            };
+          }
           if (e.message === 'Failed to fetch') {
             throw new Error('Unable to connect to server. Please check your connection.');
           }
@@ -109,6 +245,16 @@
       post: (ep, data) => api.req(ep, { method: 'POST', body: JSON.stringify(data) }),
       put: (ep, data) => api.req(ep, { method: 'PUT', body: JSON.stringify(data) }),
       del: (ep) => api.req(ep, { method: 'DELETE' })
+    };
+
+    // Helper to show appropriate toast based on save result (queued vs success)
+    const showSaveResult = (result, addToast, successMsg = 'Saved successfully') => {
+      if (result?.queued) {
+        addToast?.('Saved locally - will sync when online', 'info');
+        return true; // Still counts as success for UI purposes
+      }
+      addToast?.(successMsg, 'success');
+      return true;
     };
 
     // ========== ICONS ==========
@@ -1018,13 +1164,36 @@
       const [urgentCount, setUrgentCount] = useState(0);
       const [loadingNotifs, setLoadingNotifs] = useState(false);
       const [notifFilter, setNotifFilter] = useState('all');
+      const [offlineStatus, setOfflineStatus] = useState({ isOnline: navigator.onLine, pendingCount: 0 });
+      const [syncing, setSyncing] = useState(false);
 
       useEffect(() => {
         fetchNotifications();
         // Poll for new notifications every 30 seconds
         const interval = setInterval(fetchNotifications, 30000);
-        return () => clearInterval(interval);
+        
+        // Subscribe to offline queue updates
+        const unsubscribe = OfflineQueue.subscribe(setOfflineStatus);
+        OfflineQueue.updatePendingCount();
+        
+        return () => { clearInterval(interval); unsubscribe(); };
       }, []);
+
+      const handleManualSync = async () => {
+        if (syncing || !offlineStatus.isOnline) return;
+        setSyncing(true);
+        try {
+          const result = await OfflineQueue.sync();
+          if (result.synced > 0) {
+            // Refresh data after sync
+            fetchNotifications();
+          }
+        } catch (e) {
+          console.error('Sync error:', e);
+        } finally {
+          setSyncing(false);
+        }
+      };
 
       const fetchNotifications = async () => {
         try {
@@ -1033,15 +1202,10 @@
           setUnreadCount(data.unreadCount || 0);
           setUrgentCount(data.urgentCount || 0);
         } catch (e) {
-          // Demo notifications
-          setNotifications([
-            { _id: '1', type: 'action_assigned', title: 'New Action Item Assigned', message: 'Update safety signage in warehouse', isRead: false, priority: 'high', createdAt: new Date(), entityType: 'action', actionUrl: '/actions/1' },
-            { _id: '2', type: 'incident_status_change', title: 'Incident Status Updated', message: 'INC-042 moved to investigating', isRead: false, priority: 'urgent', createdAt: new Date(Date.now() - 3600000), entityType: 'incident', actionUrl: '/incidents/2' },
-            { _id: '3', type: 'training_due_soon', title: 'Training Due Soon', message: 'Forklift Certification expires in 7 days', isRead: true, priority: 'medium', createdAt: new Date(Date.now() - 86400000), entityType: 'training', actionUrl: '/training/3' },
-            { _id: '4', type: 'claim_created', title: 'New Claim Filed', message: 'Workers comp claim CLM-2026-00015', isRead: false, priority: 'high', createdAt: new Date(Date.now() - 7200000), entityType: 'claim', actionUrl: '/claims/4' },
-          ]);
-          setUnreadCount(3);
-          setUrgentCount(1);
+          // On error, show empty notifications instead of fake demo data
+          setNotifications([]);
+          setUnreadCount(0);
+          setUrgentCount(0);
         }
       };
 
@@ -1104,6 +1268,40 @@
               </div>
             </div>
             <div className="flex items-center gap-2">
+              {/* Offline/Sync Status Indicator */}
+              {(!offlineStatus.isOnline || offlineStatus.pendingCount > 0) && (
+                <div className={`flex items-center gap-2 px-3 py-1.5 rounded-xl text-sm font-medium ${
+                  !offlineStatus.isOnline 
+                    ? 'bg-red-100 text-red-700 border border-red-200' 
+                    : 'bg-amber-100 text-amber-700 border border-amber-200'
+                }`}>
+                  {!offlineStatus.isOnline ? (
+                    <>
+                      <span className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></span>
+                      <span className="hidden sm:inline">Offline</span>
+                      {offlineStatus.pendingCount > 0 && (
+                        <span className="bg-red-200 px-1.5 py-0.5 rounded text-xs">{offlineStatus.pendingCount} pending</span>
+                      )}
+                    </>
+                  ) : (
+                    <>
+                      <button 
+                        onClick={handleManualSync}
+                        disabled={syncing}
+                        className="flex items-center gap-1 hover:bg-amber-200 px-1 py-0.5 rounded transition-colors"
+                        title="Click to sync pending changes"
+                      >
+                        <svg className={`w-4 h-4 ${syncing ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                        </svg>
+                        <span className="hidden sm:inline">{syncing ? 'Syncing...' : `${offlineStatus.pendingCount} to sync`}</span>
+                        <span className="sm:hidden">{offlineStatus.pendingCount}</span>
+                      </button>
+                    </>
+                  )}
+                </div>
+              )}
+              
               {/* Quick Search Button */}
               <button 
                 onClick={onSearchClick}
@@ -2238,8 +2436,8 @@
         }
         setLoading(true); 
         try { 
-          item?._id ? await api.put('/incidents/' + item._id, form) : await api.post('/incidents', form); 
-          addToast?.('Incident saved successfully', 'success');
+          const result = item?._id ? await api.put('/incidents/' + item._id, form) : await api.post('/incidents', form);
+          showSaveResult(result, addToast, 'Incident saved successfully');
           onSave(); 
         } catch (e) { 
           addToast?.(e.message || 'Failed to save incident', 'error');
@@ -3174,6 +3372,7 @@
     const ActionModal = ({ isOpen, onClose, item, onSave, onDelete }) => {
       const [form, setForm] = useState({});
       const [loading, setLoading] = useState(false);
+      const { addToast } = useContext(ToastContext) || {};
       
       useEffect(() => { 
         if (item) {
@@ -3187,9 +3386,12 @@
         if (!form.title) return;
         setLoading(true); 
         try { 
-          item?._id ? await api.put('/action-items/' + item._id, form) : await api.post('/action-items', form); 
+          const result = item?._id ? await api.put('/action-items/' + item._id, form) : await api.post('/action-items', form);
+          showSaveResult(result, addToast, 'Action item saved');
           onSave(); 
-        } catch (e) { console.error(e); } 
+        } catch (e) { 
+          addToast?.(e.message || 'Failed to save', 'error');
+        } 
         finally { setLoading(false); } 
       };
 
@@ -6560,16 +6762,46 @@
       const [notifPrefs, setNotifPrefs] = useState({ email: { enabled: true, digest: 'daily', types: {} }, push: { enabled: true, urgentOnly: false }, inApp: { enabled: true } });
 
       useEffect(() => { 
-        Promise.all([api.get('/organization'), api.get('/subscription'), api.get('/notifications/preferences').catch(() => ({}))])
-          .then(([o, s, n]) => { 
-            setOrg(o.organization); 
-            setSub(s);
-            if (s.subscription?.billingCycle) setBillingCycle(s.subscription.billingCycle);
-            if (n.preferences) setNotifPrefs(n.preferences);
-            if (user) setProfile({ firstName: user.firstName || '', lastName: user.lastName || '', phone: user.phone || '', jobTitle: user.jobTitle || '', department: user.department || '', emergencyContact: user.emergencyContact || {} });
-          })
-          .catch(console.error)
-          .finally(() => setLoading(false)); 
+        const loadData = async () => {
+          try {
+            const [orgRes, subRes] = await Promise.all([
+              api.get('/organization').catch(() => null),
+              api.get('/subscription').catch(() => null)
+            ]);
+            
+            if (orgRes?.organization) setOrg(orgRes.organization);
+            else setOrg({ name: 'Demo Organization', settings: {} }); // Fallback
+            
+            if (subRes) setSub(subRes);
+            else setSub({ subscription: { tier: 'starter', status: 'active' }, availableTiers: PRICING, usage: {}, hasPaymentMethod: false }); // Fallback
+            
+            if (subRes?.subscription?.billingCycle) setBillingCycle(subRes.subscription.billingCycle);
+            
+            // Load notification preferences separately
+            try {
+              const notifRes = await api.get('/notifications/preferences');
+              if (notifRes?.preferences) setNotifPrefs(notifRes.preferences);
+            } catch (e) { /* use defaults */ }
+            
+            if (user) setProfile({ 
+              firstName: user.firstName || '', 
+              lastName: user.lastName || '', 
+              phone: user.phone || '', 
+              jobTitle: user.jobTitle || '', 
+              department: user.department || '', 
+              emergencyContact: user.emergencyContact || {} 
+            });
+          } catch (e) {
+            console.error('Settings load error:', e);
+            // Set fallback data so UI still renders
+            setOrg({ name: 'Organization', settings: {} });
+            setSub({ subscription: { tier: 'starter', status: 'active' }, availableTiers: PRICING, usage: {}, hasPaymentMethod: false });
+          } finally {
+            setLoading(false);
+          }
+        };
+        
+        loadData();
         
         const params = new URLSearchParams(window.location.search);
         if (params.get('checkout') === 'success') {
