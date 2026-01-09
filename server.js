@@ -13865,6 +13865,17 @@ const notifyIncidentStatusChange = async (incident, oldStatus, newStatus, change
 
 app.get('/api/notifications', authenticate, async (req, res) => {
   try {
+    // Handle demo mode
+    if (isDemoMode()) {
+      return res.json({
+        notifications: [],
+        unreadCount: 0,
+        urgentCount: 0,
+        byType: {},
+        pagination: { page: 1, pages: 1, total: 0 }
+      });
+    }
+
     const { page = 1, limit = 20, unreadOnly = 'false', type, priority } = req.query;
     const query = { recipient: req.user._id, isDismissed: { $ne: true } };
     if (unreadOnly === 'true') query.isRead = false;
@@ -13967,6 +13978,37 @@ app.get('/api/notifications/digest', authenticate, async (req, res) => {
 // Get notification preferences
 app.get('/api/notifications/preferences', authenticate, async (req, res) => {
   try {
+    // Handle demo mode - return default preferences
+    if (isDemoMode()) {
+      return res.json({
+        preferences: {
+          email: {
+            enabled: true,
+            digest: 'daily',
+            types: {
+              incident: true,
+              action_item: true,
+              training: true,
+              inspection: true,
+              audit: true,
+              document: true,
+              claim: true,
+              system: true
+            }
+          },
+          push: {
+            enabled: true,
+            urgentOnly: false,
+            quietHours: { enabled: false, start: '22:00', end: '07:00' }
+          },
+          inApp: {
+            enabled: true,
+            sound: true
+          }
+        }
+      });
+    }
+
     let preferences = await NotificationPreference?.findOne({ user: req.user._id });
     
     if (!preferences) {
@@ -14007,6 +14049,11 @@ app.get('/api/notifications/preferences', authenticate, async (req, res) => {
 // Update notification preferences
 app.put('/api/notifications/preferences', authenticate, async (req, res) => {
   try {
+    // Handle demo mode
+    if (isDemoMode()) {
+      return res.json({ preferences: req.body, message: 'Preferences updated (demo mode)' });
+    }
+
     const preferences = await NotificationPreference?.findOneAndUpdate(
       { user: req.user._id },
       { 
@@ -14026,6 +14073,11 @@ app.put('/api/notifications/preferences', authenticate, async (req, res) => {
 
 app.put('/api/notifications/:id/read', authenticate, async (req, res) => {
   try {
+    // Handle demo mode
+    if (isDemoMode()) {
+      return res.json({ notification: { _id: req.params.id, isRead: true, readAt: new Date() } });
+    }
+
     const notification = await Notification.findOneAndUpdate(
       { _id: req.params.id, recipient: req.user._id },
       { isRead: true, readAt: new Date() },
@@ -14040,6 +14092,11 @@ app.put('/api/notifications/:id/read', authenticate, async (req, res) => {
 
 app.put('/api/notifications/read-all', authenticate, async (req, res) => {
   try {
+    // Handle demo mode
+    if (isDemoMode()) {
+      return res.json({ success: true, modifiedCount: 0 });
+    }
+
     const { type } = req.body;
     const query = { recipient: req.user._id, isRead: false };
     if (type) query.type = type;
@@ -14736,6 +14793,11 @@ app.delete('/api/scheduled-audits/:id', authenticate, requireRole(['admin']), as
 
 app.get('/api/dashboards', authenticate, async (req, res) => {
   try {
+    // Handle demo mode
+    if (isDemoMode()) {
+      return res.json({ dashboards: [] });
+    }
+
     const dashboards = await CustomDashboard.find({
       $or: [
         { organization: req.organization._id, createdBy: req.user._id },
@@ -14792,6 +14854,11 @@ app.delete('/api/dashboards/:id', authenticate, async (req, res) => {
 // Widgets
 app.get('/api/widgets', authenticate, async (req, res) => {
   try {
+    // Handle demo mode
+    if (isDemoMode()) {
+      return res.json({ widgets: [] });
+    }
+
     const widgets = await DashboardWidget.find({
       $or: [
         { organization: req.organization._id, createdBy: req.user._id },
