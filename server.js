@@ -354,8 +354,7 @@ const organizationSchema = new mongoose.Schema({
     currentPeriodStart: Date,
     currentPeriodEnd: Date,
     cancelAtPeriodEnd: { type: Boolean, default: false },
-    status: { type: String, enum: ['active', 'cancelled', 'expired', 'trial', 'past_due', 'unpaid', 'incomplete'], default: 'trial' },
-    trialEndsAt: Date,
+    status: { type: String, enum: ['active', 'cancelled', 'expired', 'pending', 'past_due', 'unpaid', 'incomplete'], default: 'active' },
     lastPaymentDate: Date,
     lastPaymentAmount: Number,
     nextPaymentDate: Date,
@@ -2890,7 +2889,7 @@ const platformMetricsSchema = new mongoose.Schema({
       enterprise: Number
     },
     byStatus: {
-      trial: Number,
+      pending: Number,
       active: Number,
       cancelled: Number,
       expired: Number
@@ -3232,7 +3231,7 @@ const handleSubscriptionUpdate = async (subscription) => {
     // Map Stripe status to our status
     const statusMap = {
       'active': 'active',
-      'trialing': 'trial',
+      'trialing': 'active', // Treat trialing as active since we don't have trials
       'past_due': 'past_due',
       'canceled': 'cancelled',
       'unpaid': 'unpaid',
@@ -3247,10 +3246,6 @@ const handleSubscriptionUpdate = async (subscription) => {
     org.subscription.currentPeriodStart = new Date(subscription.current_period_start * 1000);
     org.subscription.currentPeriodEnd = new Date(subscription.current_period_end * 1000);
     org.subscription.cancelAtPeriodEnd = subscription.cancel_at_period_end;
-
-    if (subscription.trial_end) {
-      org.subscription.trialEndsAt = new Date(subscription.trial_end * 1000);
-    }
 
     org.updatedAt = new Date();
     await org.save();
@@ -3706,7 +3701,7 @@ app.post('/api/auth/register', async (req, res) => {
       subscription: {
         tier: 'starter',
         startDate: new Date(),
-        status: 'trial'
+        status: 'active'
       }
     });
 
@@ -4339,12 +4334,12 @@ app.get('/api/superadmin/dashboard', authenticateSuperAdmin, async (req, res) =>
     const yesterday = new Date(now - 24 * 60 * 60 * 1000);
 
     // Organization metrics
-    const [totalOrgs, activeOrgs, newOrgsMonth, newOrgsWeek, trialOrgs] = await Promise.all([
+    const [totalOrgs, activeOrgs, newOrgsMonth, newOrgsWeek, pendingOrgs] = await Promise.all([
       Organization.countDocuments(),
       Organization.countDocuments({ isActive: true }),
       Organization.countDocuments({ createdAt: { $gte: startOfMonth } }),
       Organization.countDocuments({ createdAt: { $gte: sevenDaysAgo } }),
-      Organization.countDocuments({ 'subscription.status': 'trial' })
+      Organization.countDocuments({ 'subscription.status': 'pending' })
     ]);
 
     // User metrics
@@ -4401,7 +4396,7 @@ app.get('/api/superadmin/dashboard', authenticateSuperAdmin, async (req, res) =>
         activeOrgs,
         totalUsers,
         activeUsers,
-        trialOrgs,
+        pendingOrgs,
         currentMRR,
         currentARR
       },
@@ -10227,8 +10222,7 @@ app.post('/api/billing/create-checkout-session', authenticate, authorize('admin'
         metadata: {
           organizationId: req.organization._id.toString(),
           tier: tier
-        },
-        trial_period_days: req.organization.subscription.status === 'trial' ? 14 : undefined
+        }
       },
       allow_promotion_codes: true,
       billing_address_collection: 'required',
@@ -10471,7 +10465,7 @@ app.post('/api/subscription/upgrade', authenticate, authorize('admin', 'superadm
       });
     }
 
-    // For non-Stripe orgs (trial, demo), update directly
+    // For non-Stripe orgs (demo mode), update directly
     req.organization.subscription.tier = tier;
     req.organization.subscription.status = 'active';
     req.organization.subscription.startDate = new Date();
