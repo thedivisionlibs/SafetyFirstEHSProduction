@@ -272,11 +272,42 @@ app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), async
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
+// General API rate limiter
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 1000
+  max: 1000,
+  message: { error: 'Too many requests, please try again later.' },
+  standardHeaders: true,
+  legacyHeaders: false
 });
 app.use('/api/', limiter);
+
+// Stricter rate limiter for authentication endpoints
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10, // 10 attempts per 15 minutes
+  message: { error: 'Too many login attempts, please try again after 15 minutes.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+  skipSuccessfulRequests: true
+});
+app.use('/api/auth/login', authLimiter);
+app.use('/api/auth/register', authLimiter);
+app.use('/api/auth/forgot-password', authLimiter);
+
+// Request logging for production
+if (process.env.NODE_ENV === 'production') {
+  app.use((req, res, next) => {
+    const start = Date.now();
+    res.on('finish', () => {
+      const duration = Date.now() - start;
+      if (duration > 1000 || res.statusCode >= 400) {
+        console.log(`[${new Date().toISOString()}] ${req.method} ${req.originalUrl} ${res.statusCode} ${duration}ms`);
+      }
+    });
+    next();
+  });
+}
 
 // File upload configuration
 const storage = multer.diskStorage({
@@ -3634,16 +3665,42 @@ app.post('/api/auth/register', async (req, res) => {
       return res.status(400).json({ error: 'Missing required fields: organizationName, email, password, firstName, lastName' });
     }
 
+    // Input validation and sanitization
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      return res.status(400).json({ error: 'Invalid email format' });
+    }
+    if (email.length > 254) {
+      return res.status(400).json({ error: 'Email address too long' });
+    }
+    if (password.length < 8) {
+      return res.status(400).json({ error: 'Password must be at least 8 characters' });
+    }
+    if (password.length > 128) {
+      return res.status(400).json({ error: 'Password too long' });
+    }
+    if (firstName.length > 50 || lastName.length > 50) {
+      return res.status(400).json({ error: 'Name fields must be 50 characters or less' });
+    }
+    if (organizationName.length > 100) {
+      return res.status(400).json({ error: 'Organization name must be 100 characters or less' });
+    }
+    // Sanitize inputs
+    const sanitizedEmail = email.toLowerCase().trim();
+    const sanitizedFirstName = firstName.trim().replace(/[<>]/g, '');
+    const sanitizedLastName = lastName.trim().replace(/[<>]/g, '');
+    const sanitizedOrgName = organizationName.trim().replace(/[<>]/g, '');
+
     // Check if email exists
-    const existingUser = await User.findOne({ email: email.toLowerCase() });
+    const existingUser = await User.findOne({ email: sanitizedEmail });
     if (existingUser) {
       return res.status(400).json({ error: 'Email already registered' });
     }
 
     // Create organization
-    const slug = organizationName.toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-');
+    const slug = sanitizedOrgName.toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-');
     const organization = await Organization.create({
-      name: organizationName,
+      name: sanitizedOrgName,
       slug: `${slug}-${Date.now()}`,
       industry: industry || 'other',
       subscription: {
@@ -3660,11 +3717,11 @@ app.post('/api/auth/register', async (req, res) => {
 
     const user = await User.create({
       organization: organization._id,
-      email: email.toLowerCase(),
+      email: sanitizedEmail,
       phone: phone || '',
       password: hashedPassword,
-      firstName,
-      lastName,
+      firstName: sanitizedFirstName,
+      lastName: sanitizedLastName,
       role: 'admin',
       permissions: {
         incidents: { view: true, create: true, edit: true, delete: true, approve: true },
@@ -15831,8 +15888,59 @@ const startServer = () => {
 };
 
 mongoose.connect(CONFIG.MONGODB_URI)
-  .then(() => {
+  .then(async () => {
     console.log('✅ Connected to MongoDB');
+    
+    // Create indexes for production performance
+    try {
+      console.log('📊 Creating database indexes...');
+      
+      // User indexes
+      await User.collection.createIndex({ email: 1 }, { unique: true, background: true });
+      await User.collection.createIndex({ organization: 1, role: 1 }, { background: true });
+      
+      // Incident indexes
+      await Incident.collection.createIndex({ organization: 1, status: 1 }, { background: true });
+      await Incident.collection.createIndex({ organization: 1, createdAt: -1 }, { background: true });
+      await Incident.collection.createIndex({ organization: 1, type: 1 }, { background: true });
+      await Incident.collection.createIndex({ incidentNumber: 1 }, { unique: true, sparse: true, background: true });
+      await Incident.collection.createIndex({ 'oshaRecordability.isRecordable': 1, organization: 1 }, { background: true });
+      
+      // Action items indexes
+      await ActionItem.collection.createIndex({ organization: 1, status: 1 }, { background: true });
+      await ActionItem.collection.createIndex({ assignedTo: 1, status: 1 }, { background: true });
+      await ActionItem.collection.createIndex({ dueDate: 1, status: 1 }, { background: true });
+      
+      // Inspections indexes
+      await Inspection.collection.createIndex({ organization: 1, status: 1 }, { background: true });
+      await Inspection.collection.createIndex({ scheduledDate: 1 }, { background: true });
+      
+      // Training indexes  
+      await Training.collection.createIndex({ organization: 1 }, { background: true });
+      await TrainingRecord.collection.createIndex({ user: 1, training: 1 }, { background: true });
+      await TrainingRecord.collection.createIndex({ expirationDate: 1 }, { background: true });
+      
+      // Documents indexes
+      await Document.collection.createIndex({ organization: 1, status: 1 }, { background: true });
+      await Document.collection.createIndex({ expirationDate: 1 }, { background: true });
+      
+      // Notifications indexes
+      await Notification.collection.createIndex({ user: 1, read: 1 }, { background: true });
+      await Notification.collection.createIndex({ organization: 1, createdAt: -1 }, { background: true });
+      
+      // Audit log indexes
+      await AuditLog.collection.createIndex({ organization: 1, createdAt: -1 }, { background: true });
+      await AuditLog.collection.createIndex({ user: 1, createdAt: -1 }, { background: true });
+      
+      // Claims indexes
+      await Claim.collection.createIndex({ organization: 1, status: 1 }, { background: true });
+      await Claim.collection.createIndex({ claimNumber: 1 }, { unique: true, sparse: true, background: true });
+      
+      console.log('✅ Database indexes created successfully');
+    } catch (indexErr) {
+      console.log('⚠️  Some indexes may already exist:', indexErr.message);
+    }
+    
     startServer();
   })
   .catch(err => {
