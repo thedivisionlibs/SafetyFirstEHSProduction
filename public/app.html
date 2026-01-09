@@ -821,7 +821,7 @@
             </form>
             {!isSuperAdmin && (
               <div className="mt-6 text-center">
-                <p className="text-sm text-slate-500">Don't have an account? <a href="/register" className="text-primary-600 font-semibold hover:underline">Start 14-day trial</a></p>
+                <p className="text-sm text-slate-500">Don't have an account? <a href="/register" className="text-primary-600 font-semibold hover:underline">Create Account</a></p>
               </div>
             )}
             {isSuperAdmin && (
@@ -858,8 +858,8 @@
           <div className="relative bg-white rounded-3xl shadow-2xl w-full max-w-2xl p-8 slide-up my-8">
             <div className="text-center mb-8">
               <div className="w-16 h-16 bg-gradient-to-br from-primary-500 to-primary-700 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-xl"><Icons.Shield /></div>
-              <h1 className="text-2xl font-bold text-slate-800">Start Your Free Trial</h1>
-              <p className="text-slate-500 mt-2">14 days free • No credit card required • Cancel anytime</p>
+              <h1 className="text-2xl font-bold text-slate-800">Create Your Account</h1>
+              <p className="text-slate-500 mt-2">Get started with SafetyFirst EHS Platform</p>
             </div>
             {error && <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl mb-6 text-sm font-medium">{error}</div>}
             <form onSubmit={handleSubmit} className="space-y-5">
@@ -887,7 +887,7 @@
                 <Input label="Password" type="password" value={form.password} onChange={handleChange('password')} placeholder="Min 8 characters" helper="Must be at least 8 characters" required />
                 <Input label="Confirm Password" type="password" value={form.confirmPassword} onChange={handleChange('confirmPassword')} placeholder="Confirm password" required />
               </div>
-              <Button type="submit" loading={loading} className="w-full" size="lg">Create Account & Start Trial</Button>
+              <Button type="submit" loading={loading} className="w-full" size="lg">Create Account</Button>
             </form>
             <p className="mt-6 text-center text-sm text-slate-500">Already have an account? <a href="/login" className="text-primary-600 font-semibold hover:underline">Sign in</a></p>
           </div>
@@ -6692,9 +6692,6 @@
                     <p className="text-primary-100 mt-2">
                       ${PRICING[sub.subscription?.tier]?.price || 199}/{sub.subscription?.billingCycle || 'month'} • {PRICING[sub.subscription?.tier]?.users || 25} users
                     </p>
-                    {sub.subscription?.status === 'trial' && (
-                      <p className="text-yellow-300 mt-1 text-sm">⏱️ Trial ends {sub.subscription?.trialEndsAt ? new Date(sub.subscription.trialEndsAt).toLocaleDateString() : 'soon'}</p>
-                    )}
                     {sub.subscription?.cancelAtPeriodEnd && (
                       <p className="text-yellow-300 mt-1 text-sm">⚠️ Cancels {sub.subscription?.currentPeriodEnd ? new Date(sub.subscription.currentPeriodEnd).toLocaleDateString() : 'at period end'}</p>
                     )}
@@ -6856,11 +6853,11 @@
                 </Card>
               )}
 
-              {/* Trial/Free Info */}
+              {/* Payment Info */}
               {!sub.hasPaymentMethod && (
-                <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-center">
-                  <p className="text-amber-800">
-                    <strong>You're on a trial.</strong> Select a plan above to continue using SafetyFirst EHS after your trial ends.
+                <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 text-center">
+                  <p className="text-blue-800">
+                    <strong>No payment method on file.</strong> Add a payment method above to unlock your selected plan.
                   </p>
                 </div>
               )}
@@ -8237,7 +8234,7 @@
       const [selected, setSelected] = useState(null);
       const [search, setSearch] = useState('');
       const [dashboard, setDashboard] = useState({
-        overview: { totalOrgs: 0, activeOrgs: 0, totalUsers: 0, activeUsers: 0, trialOrgs: 0, currentMRR: 0, currentARR: 0 },
+        overview: { totalOrgs: 0, activeOrgs: 0, totalUsers: 0, activeUsers: 0, pendingOrgs: 0, currentMRR: 0, currentARR: 0 },
         growth: { newOrgsMonth: 0, newOrgsWeek: 0, newUsersMonth: 0, orgGrowthRate: 0 },
         tiers: { starter: 0, professional: 0, enterprise: 0 },
         activity: { incidentsMonth: 0, inspectionsMonth: 0, trainingsMonth: 0 },
@@ -8278,7 +8275,7 @@
           // Demo data fallback
           if (tab === 'dashboard') {
             setDashboard({
-              overview: { totalOrgs: 156, activeOrgs: 142, totalUsers: 2847, activeUsers: 1923, trialOrgs: 23, currentMRR: 87500, currentARR: 1050000 },
+              overview: { totalOrgs: 156, activeOrgs: 142, totalUsers: 2847, activeUsers: 1923, pendingOrgs: 8, currentMRR: 87500, currentARR: 1050000 },
               growth: { newOrgsMonth: 18, newOrgsWeek: 5, newUsersMonth: 234, orgGrowthRate: 12.5 },
               tiers: { starter: 89, professional: 52, enterprise: 15 },
               activity: { incidentsMonth: 342, inspectionsMonth: 1205, trainingsMonth: 567 },
@@ -8513,8 +8510,8 @@
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <Select label="Status" value={form.subscription?.status || 'active'} onChange={e => setForm(p => ({ ...p, subscription: { ...p.subscription, status: e.target.value } }))} options={[
-                  { value: 'trial', label: 'Trial' },
                   { value: 'active', label: 'Active' },
+                  { value: 'pending', label: 'Pending Setup' },
                   { value: 'cancelled', label: 'Cancelled' },
                   { value: 'expired', label: 'Expired' }
                 ]} />
@@ -8746,8 +8743,8 @@
                     <p className="text-sm text-slate-500">Active (30d)</p>
                   </div>
                   <div className="bg-white p-4 rounded-xl shadow-sm">
-                    <p className="text-2xl font-bold text-amber-600">{dashboard.overview?.trialOrgs || 0}</p>
-                    <p className="text-sm text-slate-500">Trials</p>
+                    <p className="text-2xl font-bold text-amber-600">{dashboard.overview?.pendingOrgs || 0}</p>
+                    <p className="text-sm text-slate-500">Pending</p>
                   </div>
                   <div className="bg-white p-4 rounded-xl shadow-sm">
                     <p className="text-2xl font-bold text-primary-600">${((dashboard.overview?.currentMRR || 0) / 1000).toFixed(1)}k</p>
