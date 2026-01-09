@@ -219,8 +219,9 @@
       </div>
     );
 
-    const Checkbox = ({ label, checked, onChange, className = '' }) => (
-      <label className={'flex items-center gap-3 cursor-pointer group ' + className}>
+    const Checkbox = ({ label, checked, onChange, className = '', disabled = false }) => (
+      <label className={'flex items-center gap-3 cursor-pointer group ' + className + (disabled ? ' opacity-50 cursor-not-allowed' : '')}>
+        <input type="checkbox" checked={checked || false} onChange={onChange} disabled={disabled} className="sr-only" />
         <div className={'w-5 h-5 rounded-md border-2 flex items-center justify-center transition-all ' + (checked ? 'bg-primary-500 border-primary-500' : 'border-slate-300 group-hover:border-primary-400')}>
           {checked && <Icons.Check />}
         </div>
@@ -2060,7 +2061,7 @@
       const [customForm, setCustomForm] = useState(null);
       const [availableForms, setAvailableForms] = useState([]);
       const [loadingForm, setLoadingForm] = useState(false);
-      const toast = useContext(ToastContext);
+      const { addToast } = useContext(ToastContext) || {};
 
       // Load available custom forms for the incident type
       useEffect(() => {
@@ -2220,7 +2221,7 @@
       
       const handleSubmit = async () => { 
         if (!form.title || !form.dateOccurred) {
-          toast?.('Please fill in required fields', 'error');
+          addToast?.('Please fill in required fields', 'error');
           return;
         }
         // Validate custom form required fields
@@ -2228,7 +2229,7 @@
           for (const section of customForm.sections || []) {
             for (const field of section.fields || []) {
               if (field.required && !form.customFormData?.[field.fieldId]) {
-                toast?.(`Please fill in required field: ${field.label}`, 'error');
+                addToast?.(`Please fill in required field: ${field.label}`, 'error');
                 setTab('custom');
                 return;
               }
@@ -2238,10 +2239,10 @@
         setLoading(true); 
         try { 
           item?._id ? await api.put('/incidents/' + item._id, form) : await api.post('/incidents', form); 
-          toast?.('Incident saved successfully', 'success');
+          addToast?.('Incident saved successfully', 'success');
           onSave(); 
         } catch (e) { 
-          toast?.(e.message || 'Failed to save incident', 'error');
+          addToast?.(e.message || 'Failed to save incident', 'error');
         } 
         finally { setLoading(false); } 
       };
@@ -3577,7 +3578,7 @@
       const [approving, setApproving] = useState(false);
       const [reviewModal, setReviewModal] = useState(false);
       const [reviewers, setReviewers] = useState('');
-      const toast = useContext(ToastContext);
+      const { addToast } = useContext(ToastContext) || {};
 
       useEffect(() => {
         if (item) {
@@ -3605,7 +3606,7 @@
           item?._id ? await api.put('/documents/' + item._id, form) : await api.post('/documents', form);
           onSave();
           onClose();
-        } catch (e) { console.error(e); toast?.('Failed to save document', 'error'); }
+        } catch (e) { console.error(e); addToast?.('Failed to save document', 'error'); }
         setSaving(false);
       };
 
@@ -3614,9 +3615,9 @@
         setApproving(true);
         try {
           await api.post('/documents/' + item._id + '/approve');
-          toast?.('Document approved', 'success');
+          addToast?.('Document approved', 'success');
           onSave();
-        } catch (e) { toast?.('Failed to approve', 'error'); }
+        } catch (e) { addToast?.('Failed to approve', 'error'); }
         setApproving(false);
       };
 
@@ -3626,9 +3627,9 @@
         setApproving(true);
         try {
           await api.post('/documents/' + item._id + '/reject', { reason });
-          toast?.('Document rejected', 'info');
+          addToast?.('Document rejected', 'info');
           onSave();
-        } catch (e) { toast?.('Failed to reject', 'error'); }
+        } catch (e) { addToast?.('Failed to reject', 'error'); }
         setApproving(false);
       };
 
@@ -3639,11 +3640,11 @@
             reviewers: reviewers.split(',').map(r => r.trim()),
             dueDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
           });
-          toast?.('Review requested', 'success');
+          addToast?.('Review requested', 'success');
           setReviewModal(false);
           setReviewers('');
           onSave();
-        } catch (e) { toast?.('Failed to request review', 'error'); }
+        } catch (e) { addToast?.('Failed to request review', 'error'); }
       };
 
       const tabs = [
@@ -3962,7 +3963,7 @@
       const [newPayment, setNewPayment] = useState({ costType: 'medical', amount: 0, payee: '', description: '' });
       const [newReserve, setNewReserve] = useState({ costType: 'medical', newTotal: 0, reason: '' });
       const [newNote, setNewNote] = useState({ content: '', type: 'general', isPrivate: false });
-      const toast = useContext(ToastContext);
+      const { addToast } = useContext(ToastContext) || {};
 
       useEffect(() => {
         if (item) {
@@ -4004,7 +4005,7 @@
           item?._id ? await api.put('/claims/' + item._id, form) : await api.post('/claims', form);
           onSave();
           onClose();
-        } catch (e) { console.error(e); toast?.('Failed to save claim', 'error'); }
+        } catch (e) { console.error(e); addToast?.('Failed to save claim', 'error'); }
         setSaving(false);
       };
 
@@ -4012,33 +4013,33 @@
         if (!newPayment.amount || newPayment.amount <= 0) return;
         try {
           await api.post('/claims/' + item._id + '/payments', { costType: newPayment.costType, payment: newPayment });
-          toast?.('Payment added successfully', 'success');
+          addToast?.('Payment added successfully', 'success');
           setPaymentModal(false);
           setNewPayment({ costType: 'medical', amount: 0, payee: '', description: '' });
           onSave();
-        } catch (e) { toast?.('Failed to add payment', 'error'); }
+        } catch (e) { addToast?.('Failed to add payment', 'error'); }
       };
 
       const handleAdjustReserve = async () => {
         if (!newReserve.reason) return;
         try {
           await api.post('/claims/' + item._id + '/adjust-reserves', newReserve);
-          toast?.('Reserves adjusted successfully', 'success');
+          addToast?.('Reserves adjusted successfully', 'success');
           setReserveModal(false);
           setNewReserve({ costType: 'medical', newTotal: 0, reason: '' });
           onSave();
-        } catch (e) { toast?.('Failed to adjust reserves', 'error'); }
+        } catch (e) { addToast?.('Failed to adjust reserves', 'error'); }
       };
 
       const handleAddNote = async () => {
         if (!newNote.content) return;
         try {
           await api.post('/claims/' + item._id + '/notes', newNote);
-          toast?.('Note added successfully', 'success');
+          addToast?.('Note added successfully', 'success');
           setNoteModal(false);
           setNewNote({ content: '', type: 'general', isPrivate: false });
           onSave();
-        } catch (e) { toast?.('Failed to add note', 'error'); }
+        } catch (e) { addToast?.('Failed to add note', 'error'); }
       };
 
       const updateNested = (path, value) => {
