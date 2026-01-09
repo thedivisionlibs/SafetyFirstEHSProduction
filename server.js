@@ -32,6 +32,17 @@ const app = express();
 // CONFIGURATION
 // =============================================================================
 
+// MongoDB connection options for better stability
+const MONGO_OPTIONS = {
+  maxPoolSize: 10,
+  minPoolSize: 2,
+  serverSelectionTimeoutMS: 5000,
+  socketTimeoutMS: 45000,
+  family: 4, // Use IPv4
+  retryWrites: true,
+  retryReads: true
+};
+
 const CONFIG = {
   PORT: process.env.PORT || 3000,
   MONGODB_URI: process.env.MONGODB_URI || 'mongodb://localhost:27017/ehs_management',
@@ -272,20 +283,25 @@ app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), async
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
-// General API rate limiter
+// General API rate limiter - generous for normal use
 const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 1000,
-  message: { error: 'Too many requests, please try again later.' },
+  windowMs: 1 * 60 * 1000, // 1 minute window (shorter window, more responsive)
+  max: 200, // 200 requests per minute per IP
+  message: { error: 'Too many requests, please try again in a moment.' },
   standardHeaders: true,
-  legacyHeaders: false
+  legacyHeaders: false,
+  skip: (req) => {
+    // Skip rate limiting for health checks
+    if (req.path === '/api/health') return true;
+    return false;
+  }
 });
 app.use('/api/', limiter);
 
 // Stricter rate limiter for authentication endpoints
 const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 10, // 10 attempts per 15 minutes
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 15, // 15 attempts per 15 minutes (was 10)
   message: { error: 'Too many login attempts, please try again after 15 minutes.' },
   standardHeaders: true,
   legacyHeaders: false,
@@ -3372,8 +3388,8 @@ const authenticate = async (req, res, next) => {
 
     const decoded = jwt.verify(token, CONFIG.JWT_SECRET);
     
-    // Handle demo mode
-    if (decoded.demo || mongoose.connection.readyState !== 1) {
+    // Handle demo mode - ONLY for users who logged in with demo credentials
+    if (decoded.demo) {
       req.user = {
         _id: 'demo-user-1',
         email: 'demo@safetyfirst.com',
@@ -3398,7 +3414,17 @@ const authenticate = async (req, res, next) => {
         subscription: { tier: 'enterprise', status: 'active' },
         settings: { timezone: 'America/New_York', dateFormat: 'MM/DD/YYYY' }
       };
+      req.isDemo = true; // Flag to identify demo requests
       return next();
+    }
+    
+    // For real users, check if MongoDB is connected
+    if (mongoose.connection.readyState !== 1) {
+      return res.status(503).json({ 
+        error: 'Service temporarily unavailable',
+        message: 'Database connection issue. Please try again in a moment.',
+        retryAfter: 5
+      });
     }
     
     const user = await User.findById(decoded.userId).populate('organization');
@@ -3502,8 +3528,9 @@ const checkLimit = (limitType) => {
 // API ROUTES
 // =============================================================================
 
-// Helper to check if in demo mode
-const isDemoMode = () => mongoose.connection.readyState !== 1;
+// Helper to check if request is from a demo user (set by authenticate middleware)
+// Note: Use req.isDemo directly in route handlers instead of this function
+const isDemoRequest = (req) => req.isDemo === true;
 
 // Comprehensive Demo Data for Live Demo
 const DEMO_DATA = {
@@ -3634,7 +3661,7 @@ app.get('/api/health', (req, res) => {
     status: 'healthy', 
     timestamp: new Date().toISOString(),
     database: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected',
-    demoMode: isDemoMode()
+    demoAvailable: true // Demo mode is always available via demo@safetyfirst.com
   });
 });
 
@@ -4005,6 +4032,23 @@ app.get('/api/auth/me', authenticate, async (req, res) => {
 // Update user profile
 app.put('/api/auth/profile', authenticate, async (req, res) => {
   try {
+    // Handle demo mode
+    if (req.isDemo) {
+      return res.json({
+        user: {
+          id: 'demo-user-1',
+          email: 'demo@safetyfirst.com',
+          firstName: req.body.firstName || 'Demo',
+          lastName: req.body.lastName || 'User',
+          phone: req.body.phone || '',
+          jobTitle: req.body.jobTitle || 'Safety Manager',
+          department: req.body.department || 'Safety',
+          role: 'admin',
+          emergencyContact: req.body.emergencyContact || {}
+        }
+      });
+    }
+
     const allowedFields = [
       'firstName', 'lastName', 'phone', 'jobTitle', 'department', 'location',
       'emergencyContact', 'preferences', 'avatar', 'timezone', 'language'
@@ -4069,6 +4113,11 @@ app.put('/api/auth/profile', authenticate, async (req, res) => {
 // Change password
 app.put('/api/auth/password', authenticate, async (req, res) => {
   try {
+    // Handle demo mode
+    if (req.isDemo) {
+      return res.json({ success: true, message: 'Password changed (demo mode)' });
+    }
+
     const { currentPassword, newPassword } = req.body;
 
     if (!currentPassword || !newPassword) {
@@ -4179,6 +4228,15 @@ app.delete('/api/auth/sessions/:sessionId', authenticate, async (req, res) => {
 // Enable two-factor authentication setup
 app.post('/api/auth/2fa/setup', authenticate, async (req, res) => {
   try {
+    // Handle demo mode
+    if (req.isDemo) {
+      const secret = 'DEMO2FASECRETKEY';
+      return res.json({
+        secret,
+        qrCode: `otpauth://totp/SafetyFirst:demo@safetyfirst.com?secret=${secret}&issuer=SafetyFirst`
+      });
+    }
+
     // Generate a secret (in production, use speakeasy or similar)
     const secret = require('crypto').randomBytes(20).toString('hex');
     
@@ -5164,7 +5222,7 @@ app.get('/api/superadmin/export/organizations', authenticateSuperAdmin, async (r
 // Get all incidents
 app.get('/api/incidents', authenticate, async (req, res) => {
   try {
-    if (isDemoMode()) return res.json(getDemoData('incidents', req.query));
+    if (req.isDemo) return res.json(getDemoData('incidents', req.query));
     
     const { status, type, severity, startDate, endDate, search, page = 1, limit = 20 } = req.query;
     
@@ -5488,7 +5546,7 @@ app.delete('/api/incidents/:id', authenticate, authorize('admin', 'superadmin'),
 // Get all action items
 app.get('/api/action-items', authenticate, async (req, res) => {
   try {
-    if (isDemoMode()) return res.json(getDemoData('actionItems', req.query));
+    if (req.isDemo) return res.json(getDemoData('actionItems', req.query));
     
     const { status, priority, assignedTo, dueDate, overdue, category, sourceType, page = 1, limit = 20 } = req.query;
     
@@ -5997,7 +6055,7 @@ app.delete('/api/action-items/:id', authenticate, authorize('admin', 'superadmin
 // Get all inspections
 app.get('/api/inspections', authenticate, requireFeature('auditModule'), async (req, res) => {
   try {
-    if (isDemoMode()) return res.json(getDemoData('inspections', req.query));
+    if (req.isDemo) return res.json(getDemoData('inspections', req.query));
     
     const { status, type, startDate, endDate, page = 1, limit = 20 } = req.query;
     
@@ -6457,7 +6515,7 @@ app.delete('/api/inspection-templates/:id', authenticate, authorize('admin', 'su
 // Get all training courses
 app.get('/api/training', authenticate, requireFeature('trainingModule'), async (req, res) => {
   try {
-    if (isDemoMode()) {
+    if (req.isDemo) {
       const data = getDemoData('training', req.query);
       return res.json({ trainings: data.training, pagination: data.pagination });
     }
@@ -7000,7 +7058,7 @@ app.get('/api/training-records/compliance', authenticate, requireFeature('traini
 
 app.get('/api/documents', authenticate, async (req, res) => {
   try {
-    if (isDemoMode()) return res.json(getDemoData('documents', req.query));
+    if (req.isDemo) return res.json(getDemoData('documents', req.query));
     
     const { category, status, search, page = 1, limit = 20 } = req.query;
     
@@ -7785,7 +7843,7 @@ app.get('/api/osha-logs/:year/export/:form', authenticate, requireFeature('oshaL
 
 app.get('/api/users', authenticate, authorize('admin', 'superadmin', 'manager'), async (req, res) => {
   try {
-    if (isDemoMode()) return res.json(getDemoData('users', req.query));
+    if (req.isDemo) return res.json(getDemoData('users', req.query));
     
     const { role, department, isActive, page = 1, limit = 20 } = req.query;
     
@@ -8003,6 +8061,44 @@ function getDefaultPermissions(role) {
 
 app.get('/api/organization', authenticate, async (req, res) => {
   try {
+    // Handle demo mode
+    if (req.isDemo) {
+      return res.json({
+        organization: {
+          _id: 'demo-org-1',
+          name: 'Demo Safety Corp',
+          slug: 'demo-safety-corp',
+          industry: 'manufacturing',
+          size: '100-500',
+          address: {
+            street: '123 Safety Lane',
+            city: 'Demo City',
+            state: 'CA',
+            zip: '90210',
+            country: 'USA'
+          },
+          phone: '555-DEMO',
+          email: 'admin@demo-safety.com',
+          website: 'https://demo-safety.com',
+          isActive: true,
+          subscription: { tier: 'enterprise', status: 'active', billingCycle: 'monthly' },
+          settings: {
+            timezone: 'America/New_York',
+            dateFormat: 'MM/DD/YYYY',
+            notifications: { email: true, sms: false },
+            branding: { primaryColor: '#2563eb', logo: null }
+          },
+          locations: [
+            { name: 'Main Facility', address: '123 Safety Lane, Demo City, CA', type: 'industrial' },
+            { name: 'Warehouse B', address: '456 Storage Blvd, Demo City, CA', type: 'warehouse' }
+          ],
+          departments: ['Operations', 'Maintenance', 'Safety', 'HR', 'Production'],
+          createdAt: new Date(Date.now() - 365*24*60*60*1000),
+          updatedAt: new Date()
+        }
+      });
+    }
+
     const organization = await Organization.findById(req.organization._id);
     res.json({ organization });
   } catch (error) {
@@ -8012,6 +8108,18 @@ app.get('/api/organization', authenticate, async (req, res) => {
 
 app.put('/api/organization', authenticate, authorize('admin', 'superadmin'), async (req, res) => {
   try {
+    // Handle demo mode
+    if (req.isDemo) {
+      return res.json({
+        organization: {
+          _id: 'demo-org-1',
+          name: req.body.name || 'Demo Safety Corp',
+          ...req.body,
+          updatedAt: new Date()
+        }
+      });
+    }
+
     const before = req.organization.toObject();
     Object.assign(req.organization, req.body);
     req.organization.updatedAt = new Date();
@@ -8160,7 +8268,7 @@ app.get('/api/audit-logs/export', authenticate, authorize('admin', 'superadmin')
 app.get('/api/dashboard', authenticate, async (req, res) => {
   try {
     // Demo mode - return comprehensive sample dashboard data
-    if (isDemoMode()) {
+    if (req.isDemo) {
       return res.json({
         incidents: { total: 12, open: 3, ytd: 12, mtd: 2, recordable: 1, daysSinceLastRecordable: 45, daysSinceLastLostTime: 120 },
         actionItems: { total: 25, open: 5, overdue: 2, completionRate: 76, avgDaysToClose: 8.5 },
@@ -8761,7 +8869,7 @@ app.post('/api/custom-forms/:id/submit', authenticate, requireFeature('customFor
 // Get all incident forms for organization
 app.get('/api/incident-forms', authenticate, authorize('admin', 'superadmin'), async (req, res) => {
   try {
-    if (isDemoMode()) {
+    if (req.isDemo) {
       return res.json({ forms: [
         { _id: 'demo-form-1', name: 'Standard Incident Report', description: 'Default incident reporting form', status: 'active', isDefault: true, incidentTypes: ['injury', 'illness', 'near_miss'], sections: [{ name: 'Basic Information', fields: [] }], createdAt: new Date() },
         { _id: 'demo-form-2', name: 'Vehicle Incident Form', description: 'For vehicle-related incidents', status: 'active', isDefault: false, incidentTypes: ['vehicle'], sections: [{ name: 'Vehicle Details', fields: [] }], createdAt: new Date() },
@@ -9334,7 +9442,7 @@ app.get('/api/search', authenticate, async (req, res) => {
 
 app.get('/api/risk-assessments', authenticate, requireFeature('riskAssessment'), async (req, res) => {
   try {
-    if (isDemoMode()) {
+    if (req.isDemo) {
       const data = getDemoData('riskAssessments', req.query);
       return res.json({ assessments: data.riskAssessments, pagination: data.pagination });
     }
@@ -9419,7 +9527,7 @@ app.delete('/api/risk-assessments/:id', authenticate, requireFeature('riskAssess
 
 app.get('/api/jsa', authenticate, requireFeature('jsaModule'), async (req, res) => {
   try {
-    if (isDemoMode()) return res.json(getDemoData('jsas', req.query));
+    if (req.isDemo) return res.json(getDemoData('jsas', req.query));
     
     const { status, department, page = 1, limit = 20 } = req.query;
     const query = { organization: req.organization._id };
@@ -9501,7 +9609,7 @@ app.delete('/api/jsa/:id', authenticate, requireFeature('jsaModule'), authorize(
 
 app.get('/api/permits', authenticate, requireFeature('permitToWork'), async (req, res) => {
   try {
-    if (isDemoMode()) return res.json(getDemoData('permits', req.query));
+    if (req.isDemo) return res.json(getDemoData('permits', req.query));
     
     const { status, type, page = 1, limit = 20 } = req.query;
     const query = { organization: req.organization._id };
@@ -9625,7 +9733,7 @@ app.post('/api/permits/:id/close', authenticate, requireFeature('permitToWork'),
 
 app.get('/api/contractors', authenticate, requireFeature('contractorManagement'), async (req, res) => {
   try {
-    if (isDemoMode()) return res.json(getDemoData('contractors', req.query));
+    if (req.isDemo) return res.json(getDemoData('contractors', req.query));
     
     const { status, type, page = 1, limit = 20 } = req.query;
     const query = { organization: req.organization._id };
@@ -9715,7 +9823,7 @@ app.post('/api/contractors/:id/rate', authenticate, requireFeature('contractorMa
 
 app.get('/api/chemicals', authenticate, requireFeature('chemicalManagement'), async (req, res) => {
   try {
-    if (isDemoMode()) return res.json(getDemoData('chemicals', req.query));
+    if (req.isDemo) return res.json(getDemoData('chemicals', req.query));
     
     const { status, location, search, page = 1, limit = 20 } = req.query;
     const query = { organization: req.organization._id };
@@ -10099,6 +10207,27 @@ app.delete('/api/action-item-templates/:id', authenticate, authorize('admin'), a
 // Get subscription details
 app.get('/api/subscription', authenticate, async (req, res) => {
   try {
+    // Handle demo mode
+    if (req.isDemo) {
+      const tierConfig = SUBSCRIPTION_TIERS['enterprise'];
+      return res.json({
+        subscription: { tier: 'enterprise', status: 'active', billingCycle: 'monthly', startDate: new Date(Date.now() - 180*24*60*60*1000) },
+        billing: { name: 'Demo Safety Corp', email: 'billing@demo-safety.com' },
+        tier: tierConfig,
+        usage: {
+          users: { current: 25, limit: tierConfig.maxUsers },
+          incidents: { current: 156, limit: tierConfig.maxIncidents },
+          actionItems: { current: 89, limit: tierConfig.maxActionItems },
+          inspections: { current: 234, limit: tierConfig.maxInspections },
+          documents: { current: 67, limit: tierConfig.maxDocuments }
+        },
+        availableTiers: SUBSCRIPTION_TIERS,
+        stripePublishableKey: null,
+        hasPaymentMethod: true,
+        stripeSubscription: null
+      });
+    }
+
     const tier = req.organization.subscription.tier;
     const tierConfig = SUBSCRIPTION_TIERS[tier];
 
@@ -10170,6 +10299,11 @@ app.get('/api/billing/config', authenticate, async (req, res) => {
 // Create checkout session for new subscription
 app.post('/api/billing/create-checkout-session', authenticate, authorize('admin', 'superadmin'), async (req, res) => {
   try {
+    // Handle demo mode
+    if (req.isDemo) {
+      return res.status(400).json({ error: 'Payment processing is not available in demo mode. Please create an account to subscribe.' });
+    }
+
     const { tier, billingCycle = 'monthly' } = req.body;
 
     if (!SUBSCRIPTION_TIERS[tier]) {
@@ -10247,6 +10381,11 @@ app.post('/api/billing/create-checkout-session', authenticate, authorize('admin'
 // Create customer portal session for managing subscription
 app.post('/api/billing/create-portal-session', authenticate, authorize('admin', 'superadmin'), async (req, res) => {
   try {
+    // Handle demo mode
+    if (req.isDemo) {
+      return res.status(400).json({ error: 'Billing management is not available in demo mode. Please create an account to access billing features.' });
+    }
+
     if (!req.organization.stripeCustomerId) {
       return res.status(400).json({ error: 'No billing account found. Please subscribe first.' });
     }
@@ -10355,6 +10494,11 @@ app.post('/api/billing/cancel-subscription', authenticate, authorize('admin', 's
 // Resume cancelled subscription
 app.post('/api/billing/resume-subscription', authenticate, authorize('admin', 'superadmin'), async (req, res) => {
   try {
+    // Handle demo mode
+    if (req.isDemo) {
+      return res.status(400).json({ error: 'Subscription management is not available in demo mode.' });
+    }
+
     if (!req.organization.stripeSubscriptionId) {
       return res.status(400).json({ error: 'No subscription to resume' });
     }
@@ -10985,7 +11129,7 @@ app.post('/api/users/:id/reset-password', authenticate, authorize('admin', 'supe
 
 app.get('/api/observations', authenticate, async (req, res) => {
   try {
-    if (isDemoMode()) return res.json(getDemoData('observations', req.query));
+    if (req.isDemo) return res.json(getDemoData('observations', req.query));
     
     const { page = 1, limit = 15, search } = req.query;
     const query = { organization: req.organization._id };
@@ -11379,7 +11523,7 @@ app.delete('/api/capa/:id', authenticate, requireFeature('capa'), async (req, re
 // Get all claims
 app.get('/api/claims', authenticate, async (req, res) => {
   try {
-    if (isDemoMode()) {
+    if (req.isDemo) {
       return res.json({
         claims: [
           { _id: 'demo-claim-1', claimNumber: 'CLM-2024-0001', claimType: 'workers_comp', claimant: { firstName: 'Mike', lastName: 'Davis', department: 'Warehouse' }, status: 'under_review', dateOfClaim: new Date('2024-01-15'), costs: { totalIncurred: 15000, totalPaid: 8500, totalReserved: 6500 }, returnToWork: { status: 'light_duty' } },
@@ -12095,7 +12239,7 @@ app.post('/api/claims/:id/adjust-reserves', authenticate, authorize('admin', 'ma
 // Get claims summary/dashboard
 app.get('/api/claims/summary/dashboard', authenticate, async (req, res) => {
   try {
-    if (isDemoMode()) {
+    if (req.isDemo) {
       return res.json({
         summary: {
           totalClaims: 12,
@@ -12598,7 +12742,7 @@ app.get('/api/sso/check/:email', async (req, res) => {
 
 app.get('/api/meetings', authenticate, async (req, res) => {
   try {
-    if (isDemoMode()) return res.json(getDemoData('meetings', req.query));
+    if (req.isDemo) return res.json(getDemoData('meetings', req.query));
     
     const { page = 1, limit = 15, search } = req.query;
     const query = { organization: req.organization._id };
@@ -12677,12 +12821,6 @@ app.use((err, req, res, next) => {
   console.error('Server error:', err);
   res.status(500).json({ error: 'Internal server error', message: err.message });
 });
-
-// =============================================================================
-// DEMO MODE DATA (when MongoDB not available)
-// =============================================================================
-
-let DEMO_MODE = false;
 
 // =============================================================================
 // ENHANCED FEATURES - HIERARCHY, ICARE, AUDITS, DASHBOARDS, REPORTS
@@ -13860,7 +13998,7 @@ const notifyIncidentStatusChange = async (incident, oldStatus, newStatus, change
 app.get('/api/notifications', authenticate, async (req, res) => {
   try {
     // Handle demo mode
-    if (isDemoMode()) {
+    if (req.isDemo) {
       return res.json({
         notifications: [],
         unreadCount: 0,
@@ -13973,7 +14111,7 @@ app.get('/api/notifications/digest', authenticate, async (req, res) => {
 app.get('/api/notifications/preferences', authenticate, async (req, res) => {
   try {
     // Handle demo mode - return default preferences
-    if (isDemoMode()) {
+    if (req.isDemo) {
       return res.json({
         preferences: {
           email: {
@@ -14044,7 +14182,7 @@ app.get('/api/notifications/preferences', authenticate, async (req, res) => {
 app.put('/api/notifications/preferences', authenticate, async (req, res) => {
   try {
     // Handle demo mode
-    if (isDemoMode()) {
+    if (req.isDemo) {
       return res.json({ preferences: req.body, message: 'Preferences updated (demo mode)' });
     }
 
@@ -14068,7 +14206,7 @@ app.put('/api/notifications/preferences', authenticate, async (req, res) => {
 app.put('/api/notifications/:id/read', authenticate, async (req, res) => {
   try {
     // Handle demo mode
-    if (isDemoMode()) {
+    if (req.isDemo) {
       return res.json({ notification: { _id: req.params.id, isRead: true, readAt: new Date() } });
     }
 
@@ -14087,7 +14225,7 @@ app.put('/api/notifications/:id/read', authenticate, async (req, res) => {
 app.put('/api/notifications/read-all', authenticate, async (req, res) => {
   try {
     // Handle demo mode
-    if (isDemoMode()) {
+    if (req.isDemo) {
       return res.json({ success: true, modifiedCount: 0 });
     }
 
@@ -14178,7 +14316,7 @@ app.post('/api/notifications/push/unsubscribe', authenticate, async (req, res) =
 
 app.get('/api/inbox', authenticate, async (req, res) => {
   try {
-    if (isDemoMode()) {
+    if (req.isDemo) {
       return res.json({
         tasks: DEMO_DATA.inbox,
         summary: { total: 4, overdue: 1, dueToday: 1, dueThisWeek: 2, unread: 3 }
@@ -14582,7 +14720,7 @@ app.get('/api/hierarchy/assignable-users', authenticate, async (req, res) => {
 
 app.get('/api/icare', authenticate, async (req, res) => {
   try {
-    if (isDemoMode()) {
+    if (req.isDemo) {
       const data = getDemoData('icareNotes', req.query);
       return res.json({ notes: data.icareNotes, pagination: data.pagination });
     }
@@ -14788,7 +14926,7 @@ app.delete('/api/scheduled-audits/:id', authenticate, requireRole(['admin']), as
 app.get('/api/dashboards', authenticate, async (req, res) => {
   try {
     // Handle demo mode
-    if (isDemoMode()) {
+    if (req.isDemo) {
       return res.json({ dashboards: [] });
     }
 
@@ -14849,7 +14987,7 @@ app.delete('/api/dashboards/:id', authenticate, async (req, res) => {
 app.get('/api/widgets', authenticate, async (req, res) => {
   try {
     // Handle demo mode
-    if (isDemoMode()) {
+    if (req.isDemo) {
       return res.json({ widgets: [] });
     }
 
@@ -15447,7 +15585,7 @@ app.put('/api/preferences', authenticate, async (req, res) => {
 // Get comprehensive safety analytics
 app.get('/api/analytics/safety', authenticate, async (req, res) => {
   try {
-    if (isDemoMode()) {
+    if (req.isDemo) {
       return res.json({
         summary: {
           safetyScore: 87,
@@ -15941,14 +16079,32 @@ const startServer = () => {
     console.log(`EHS Management Server running on port ${CONFIG.PORT}`);
     console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
     if (mongoose.connection.readyState !== 1) {
-      console.log('⚠️  Running in DEMO MODE - MongoDB not connected');
+      console.log('⚠️  MongoDB not connected - only demo login available');
       console.log('   Demo login: demo@safetyfirst.com / demo123');
-      console.log('   Super Admin: admin@safetyfirst.com / SuperAdmin123!');
+    } else {
+      console.log('✅ Database connected - full functionality available');
     }
   });
 };
 
-mongoose.connect(CONFIG.MONGODB_URI)
+// MongoDB connection event handlers for logging
+mongoose.connection.on('connected', () => {
+  console.log('📡 MongoDB connection established');
+});
+
+mongoose.connection.on('disconnected', () => {
+  console.log('⚠️  MongoDB disconnected - real users will see service unavailable until reconnected');
+});
+
+mongoose.connection.on('reconnected', () => {
+  console.log('✅ MongoDB reconnected - service restored');
+});
+
+mongoose.connection.on('error', (err) => {
+  console.error('❌ MongoDB connection error:', err.message);
+});
+
+mongoose.connect(CONFIG.MONGODB_URI, MONGO_OPTIONS)
   .then(async () => {
     console.log('✅ Connected to MongoDB');
     
@@ -16006,8 +16162,7 @@ mongoose.connect(CONFIG.MONGODB_URI)
   })
   .catch(err => {
     console.error('⚠️  MongoDB connection failed:', err.message);
-    console.log('Starting server anyway - demo mode available via login...');
-    DEMO_MODE = true;
+    console.log('Starting server anyway - demo mode available via demo@safetyfirst.com / demo123');
     startServer();
   });
 
