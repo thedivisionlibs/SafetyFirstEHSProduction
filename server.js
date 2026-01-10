@@ -28,6 +28,10 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || 'sk_test_placeholder'
 
 const app = express();
 
+// Trust proxy - required for Railway, Heroku, etc. behind load balancers
+// This allows express-rate-limit to correctly identify clients via X-Forwarded-For
+app.set('trust proxy', 1);
+
 // =============================================================================
 // CONFIGURATION
 // =============================================================================
@@ -3888,39 +3892,40 @@ app.post('/api/auth/login', async (req, res) => {
   try {
     const { email, password } = req.body;
 
-    // Check MongoDB connection
+    // Demo mode login - always works regardless of DB state
+    if (email === 'demo@safetyfirst.com' && password === 'demo123') {
+      const token = jwt.sign({ userId: 'demo-user-1', demo: true }, CONFIG.JWT_SECRET, { expiresIn: '24h' });
+      return res.json({
+        success: true,
+        token,
+        user: {
+          id: 'demo-user-1',
+          email: 'demo@safetyfirst.com',
+          firstName: 'Demo',
+          lastName: 'User',
+          role: 'admin',
+          permissions: {
+            incidents: { view: true, create: true, edit: true, delete: true, approve: true },
+            actionItems: { view: true, create: true, edit: true, delete: true, approve: true },
+            inspections: { view: true, create: true, edit: true, delete: true, approve: true },
+            training: { view: true, create: true, edit: true, delete: true, approve: true },
+            documents: { view: true, create: true, edit: true, delete: true, approve: true },
+            reports: { view: true, create: true, export: true },
+            admin: { users: true, settings: true, billing: true }
+          },
+          organization: {
+            id: 'demo-org-1',
+            name: 'Demo Safety Corp',
+            subscription: { tier: 'enterprise', status: 'active' },
+            settings: { timezone: 'America/New_York', dateFormat: 'MM/DD/YYYY' }
+          },
+          verification: { emailVerified: true, phoneVerified: true }
+        }
+      });
+    }
+
+    // Check MongoDB connection for real users
     if (mongoose.connection.readyState !== 1) {
-      // Demo mode login
-      if (email === 'demo@safetyfirst.com' && password === 'demo123') {
-        const token = jwt.sign({ userId: 'demo-user-1', demo: true }, CONFIG.JWT_SECRET, { expiresIn: '24h' });
-        return res.json({
-          success: true,
-          token,
-          user: {
-            id: 'demo-user-1',
-            email: 'demo@safetyfirst.com',
-            firstName: 'Demo',
-            lastName: 'User',
-            role: 'admin',
-            permissions: {
-              incidents: { view: true, create: true, edit: true, delete: true, approve: true },
-              actionItems: { view: true, create: true, edit: true, delete: true, approve: true },
-              inspections: { view: true, create: true, edit: true, delete: true, approve: true },
-              training: { view: true, create: true, edit: true, delete: true, approve: true },
-              documents: { view: true, create: true, edit: true, delete: true, approve: true },
-              reports: { view: true, create: true, export: true },
-              admin: { users: true, settings: true, billing: true }
-            },
-            organization: {
-              id: 'demo-org-1',
-              name: 'Demo Safety Corp',
-              subscription: { tier: 'enterprise', status: 'active' },
-              settings: { timezone: 'America/New_York', dateFormat: 'MM/DD/YYYY' }
-            },
-            verification: { emailVerified: true, phoneVerified: true }
-          }
-        });
-      }
       return res.status(503).json({ 
         error: 'Database not connected',
         message: 'Please use demo@safetyfirst.com / demo123 to test, or try again later.'
@@ -3993,6 +3998,40 @@ app.post('/api/auth/login', async (req, res) => {
 // Get current user
 app.get('/api/auth/me', authenticate, async (req, res) => {
   try {
+    // Handle demo mode
+    if (req.isDemo) {
+      return res.json({
+        user: {
+          id: 'demo-user-1',
+          email: 'demo@safetyfirst.com',
+          firstName: 'Demo',
+          lastName: 'User',
+          role: 'admin',
+          department: 'Safety',
+          location: 'Main Office',
+          jobTitle: 'Safety Manager',
+          permissions: req.user.permissions,
+          phone: '',
+          emergencyContact: {},
+          preferences: {},
+          avatar: null,
+          lastLogin: new Date(),
+          organization: {
+            id: 'demo-org-1',
+            name: 'Demo Safety Corp',
+            subscription: req.organization.subscription,
+            settings: req.organization.settings,
+            locations: ['Main Office', 'Warehouse A', 'Warehouse B'],
+            departments: ['Safety', 'Operations', 'Maintenance', 'HR']
+          },
+          verification: {
+            emailVerified: true,
+            phoneVerified: true
+          }
+        }
+      });
+    }
+    
     const user = await User.findById(req.user._id).populate('organization');
     res.json({
       user: {
